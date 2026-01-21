@@ -1,8 +1,0 @@
-titanlink/node_modules/
-titanlink/dist/
-titanlink/dist-electron/
-titanlink/release/
-*.log
-.DS_Store
-Thumbs.db
-*.local
