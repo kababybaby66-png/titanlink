@@ -16,7 +16,7 @@
     flex-direction: column;
     gap: 60px;
     align-items: center;
-    transform: translateY(-20px);
+    margin-top: 60px;
 }
 
 /* --- HERO SECTION --- */

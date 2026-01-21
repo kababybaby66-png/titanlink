@@ -129,6 +129,7 @@ function App() {
                 connectionState: 'waiting-for-peer',
             });
 
+            console.log('[App] Session created:', sessionCode);
             return sessionCode;
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Failed to start hosting';

@@ -97,6 +97,7 @@ body {
     linear-gradient(rgba(0, 0, 0, 0.2) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0, 0, 0, 0.2) 1px, transparent 1px);
   background-size: 100% 100%, 40px 40px, 40px 40px;
+  user-select: none;
 }
 
 /* --- TYPOGRAPHY UTILITIES --- */
@@ -160,6 +161,7 @@ input[type="password"] {
   outline: none;
   transition: all 0.2s ease;
   width: 100%;
+  user-select: text;
 }
 
 input:focus {

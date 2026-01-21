@@ -15,12 +15,27 @@ const { Server } = require('socket.io');
 
 const app = express();
 const httpServer = createServer(app);
+
+// Enable CORS for WebSocket connections
 const io = new Server(httpServer, {
     cors: {
         origin: '*',
         methods: ['GET', 'POST'],
+        credentials: false,
     },
     transports: ['websocket', 'polling'],
+    allowUpgrades: true,
+    pingTimeout: 60000,
+    pingInterval: 25000,
+});
+
+// Enable WebSocket upgrade handling
+httpServer.on('upgrade', (request, socket, head) => {
+    if (request.url === '/socket.io/') {
+        io.engine.handleUpgrade(request, socket, head);
+    } else {
+        socket.destroy();
+    }
 });
 
 // Store active sessions

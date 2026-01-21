@@ -50,6 +50,14 @@ const electronAPI = {
         maximize: () => ipcRenderer.send('window:maximize'),
         close: () => ipcRenderer.send('window:close'),
     },
+
+    // ============================================
+    // Signaling Server APIs (Embedded P2P)
+    // ============================================
+    signaling: {
+        start: (): Promise<string> => ipcRenderer.invoke('signaling:start'),
+        getUrl: (): Promise<string | null> => ipcRenderer.invoke('signaling:get-url'),
+    },
 };
 
 // Type-safe API exposure

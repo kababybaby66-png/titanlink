@@ -115,7 +115,6 @@
     text-shadow: 0 0 10px var(--accent-cyan-dim);
     cursor: pointer;
     transition: all 0.2s;
-    user-select: text;
 }
 
 .session-code-glitch:hover {

@@ -50,16 +50,19 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
         loadDisplays();
     }, []);
 
-    // Watch session state for logs
+    // Watch session state for logs and debug
     useEffect(() => {
+
+
         if (sessionState.connectionState === 'waiting-for-peer') {
             addLog('STATUS: BROADCASTING_BEACON');
+            addLog(`CODE: ${sessionState.sessionCode || 'MISSING'}`);
         } else if (sessionState.connectionState === 'connecting') {
             addLog('STATUS: PEER_NEGOTIATION');
         } else if (sessionState.connectionState === 'streaming') {
             addLog('STATUS: UPLINK_ESTABLISHED');
         }
-    }, [sessionState.connectionState]);
+    }, [sessionState.connectionState, sessionState.sessionCode]);
 
     const handleStartHosting = async () => {
         if (!selectedDisplay) return;
