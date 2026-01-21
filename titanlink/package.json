@@ -78,12 +78,13 @@
         },
         "mac": {
             "target": [
-                "dmg",
                 "zip"
             ],
             "category": "public.app-category.games",
             "identity": null,
-            "icon": "build/icon.png"
+            "icon": "build/icon.png",
+            "gatekeeperAssess": false,
+            "hardenedRuntime": false
         }
     },
     "optionalDependencies": {
