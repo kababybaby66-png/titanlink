@@ -82,7 +82,8 @@
                 "zip"
             ],
             "category": "public.app-category.games",
-            "identity": null
+            "identity": null,
+            "icon": "build/icon.png"
         }
     },
     "optionalDependencies": {
