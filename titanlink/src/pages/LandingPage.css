@@ -1,0 +1,200 @@
+.landing-page {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 10;
+}
+
+.landing-content {
+    width: 100%;
+    max-width: 900px;
+    padding: 0 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 60px;
+    align-items: center;
+    transform: translateY(-20px);
+}
+
+/* --- HERO SECTION --- */
+.landing-header {
+    text-align: center;
+}
+
+.hero-title {
+    font-size: 80px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    margin-bottom: 16px;
+    text-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    background: linear-gradient(180deg, #fff 0%, #aaa 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.hero-title .text-cyan {
+    background: linear-gradient(180deg, var(--accent-cyan) 0%, #00a0aa 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 30px var(--accent-cyan-dim);
+}
+
+.hero-subtitle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    color: var(--accent-success);
+    font-size: 14px;
+    letter-spacing: 0.1em;
+    padding: 6px 16px;
+    background: rgba(0, 255, 157, 0.05);
+    border: 1px solid rgba(0, 255, 157, 0.2);
+    border-radius: 99px;
+}
+
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    background: var(--accent-success);
+    border-radius: 50%;
+    box-shadow: 0 0 10px var(--accent-success);
+    animation: pulse 2s infinite;
+}
+
+/* --- ACTION CARDS --- */
+.action-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    width: 100%;
+}
+
+.action-card {
+    background: rgba(20, 20, 25, 0.4);
+    border: 1px solid var(--metal-mid);
+    padding: 40px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    backdrop-filter: blur(10px);
+}
+
+.action-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: var(--accent-cyan);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.4s ease;
+}
+
+.action-card:hover {
+    background: rgba(30, 30, 35, 0.6);
+    border-color: var(--accent-cyan);
+    transform: translateY(-5px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 30px var(--accent-cyan-dim);
+}
+
+.action-card:hover::before {
+    transform: scaleX(1);
+}
+
+.connect-card:hover::before {
+    background: var(--accent-amber);
+}
+
+.connect-card:hover {
+    border-color: var(--accent-amber);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 30px var(--accent-amber-dim);
+}
+
+.card-icon {
+    font-size: 32px;
+    margin-bottom: 20px;
+    color: var(--metal-light);
+    transition: color 0.3s;
+}
+
+.action-card:hover .card-icon {
+    color: #fff;
+    text-shadow: 0 0 15px currentColor;
+}
+
+.action-card h2 {
+    font-size: 24px;
+    margin-bottom: 12px;
+    letter-spacing: 0.05em;
+}
+
+.action-card p {
+    color: var(--metal-light);
+    font-size: 14px;
+    line-height: 1.6;
+    margin-bottom: 30px;
+}
+
+.card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.cmd-text {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--metal-mid);
+    transition: color 0.3s;
+}
+
+.arrow {
+    color: var(--metal-mid);
+    transition: transform 0.3s, color 0.3s;
+}
+
+.action-card:hover .cmd-text {
+    color: var(--accent-cyan);
+}
+
+.connect-card:hover .cmd-text {
+    color: var(--accent-amber);
+}
+
+.action-card:hover .arrow {
+    color: #fff;
+    transform: translateX(5px);
+}
+
+/* --- FOOTER --- */
+.landing-footer {
+    margin-top: 20px;
+    opacity: 0.6;
+    transition: opacity 0.3s;
+}
+
+.landing-footer:hover {
+    opacity: 1;
+}
+
+.settings-btn {
+    letter-spacing: 0.2em;
+    font-size: 12px;
+    color: var(--metal-light);
+}
+
+.settings-btn:hover {
+    color: var(--accent-cyan);
+}

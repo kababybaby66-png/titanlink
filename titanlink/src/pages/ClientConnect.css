@@ -1,0 +1,109 @@
+.client-connect-page {
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.connect-module {
+    width: 450px;
+    background: rgba(10, 10, 11, 0.95);
+    border: 1px solid var(--metal-mid);
+    padding: 30px;
+    position: relative;
+    clip-path: polygon(0 0, 100% 0,
+            100% calc(100% - 30px), calc(100% - 30px) 100%,
+            0 100%);
+}
+
+.module-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 40px;
+    border-bottom: 2px solid var(--metal-dark);
+    padding-bottom: 15px;
+}
+
+.target-reticle {
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--accent-danger);
+    border-radius: 50%;
+    position: relative;
+}
+
+.target-reticle::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 4px;
+    height: 4px;
+    background: var(--accent-danger);
+    transform: translate(-50%, -50%);
+}
+
+.input-group {
+    position: relative;
+    margin-bottom: 30px;
+}
+
+.cyber-input {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--metal-mid);
+    padding: 15px 20px;
+    font-size: 24px;
+    letter-spacing: 0.1em;
+    color: #fff;
+    text-align: center;
+}
+
+.cyber-input:focus {
+    border-color: var(--accent-cyan);
+    box-shadow: 0 0 20px var(--accent-cyan-dim);
+}
+
+.input-decoration {
+    position: absolute;
+    bottom: -5px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.cyber-input:focus+.input-decoration {
+    opacity: 1;
+}
+
+.telemetry-readout {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 30px;
+    border: 1px dashed var(--metal-mid);
+    padding: 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+}
+
+.readout-item {
+    display: flex;
+    gap: 10px;
+}
+
+.readout-item .label {
+    color: var(--metal-light);
+}
+
+.error-message {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    margin-bottom: 20px;
+    text-align: center;
+    padding: 8px;
+    background: rgba(255, 0, 0, 0.1);
+}

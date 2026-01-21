@@ -1,0 +1,57 @@
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(5px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 999;
+}
+
+.driver-warning-panel {
+    width: 500px;
+    background: rgba(20, 10, 10, 0.95);
+    border: 1px solid var(--accent-danger);
+    box-shadow: 0 0 40px rgba(255, 0, 0, 0.2);
+}
+
+.warning-header {
+    border-color: var(--accent-danger) !important;
+}
+
+.danger-deco {
+    background: repeating-linear-gradient(45deg,
+            var(--accent-danger),
+            var(--accent-danger) 4px,
+            transparent 4px,
+            transparent 8px) !important;
+}
+
+.warning-content {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 30px;
+    align-items: flex-start;
+}
+
+.warning-icon {
+    font-size: 40px;
+    color: var(--accent-danger);
+}
+
+.primary-msg {
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #fff;
+}
+
+.warning-details {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 15px;
+    margin-bottom: 25px;
+    border-left: 2px solid var(--metal-mid);
+}

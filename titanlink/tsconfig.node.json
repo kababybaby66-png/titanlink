@@ -1,0 +1,23 @@
+{
+    "compilerOptions": {
+        "skipLibCheck": true,
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "allowSyntheticDefaultImports": true,
+        "strict": true,
+        "esModuleInterop": true,
+        "target": "ESNext",
+        "noEmit": true,
+        "baseUrl": ".",
+        "paths": {
+            "@shared/*": [
+                "shared/*"
+            ]
+        }
+    },
+    "include": [
+        "vite.config.ts",
+        "electron/**/*",
+        "shared/**/*"
+    ]
+}

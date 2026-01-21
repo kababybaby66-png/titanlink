@@ -1,0 +1,113 @@
+.cyber-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    clip-path: polygon(10px 0, 100% 0,
+            100% calc(100% - 10px), calc(100% - 10px) 100%,
+            0 100%, 0 10px);
+    overflow: hidden;
+}
+
+/* --- VARIANTS --- */
+.cyber-btn--primary {
+    background: var(--accent-cyan);
+    color: var(--void-black);
+    box-shadow: 0 0 10px var(--accent-cyan-dim);
+}
+
+.cyber-btn--primary:hover:not(:disabled) {
+    background: #fff;
+    box-shadow: 0 0 20px var(--accent-cyan);
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+}
+
+.cyber-btn--secondary {
+    background: var(--metal-dark);
+    color: var(--metal-chrome);
+    border: 1px solid var(--metal-mid);
+}
+
+.cyber-btn--secondary:hover:not(:disabled) {
+    background: var(--metal-mid);
+    color: white;
+    border-color: var(--accent-cyan);
+}
+
+.cyber-btn--danger {
+    background: rgba(255, 42, 42, 0.1);
+    color: var(--accent-danger);
+    border: 1px solid var(--accent-danger);
+}
+
+.cyber-btn--danger:hover:not(:disabled) {
+    background: var(--accent-danger);
+    color: var(--void-black);
+    box-shadow: 0 0 15px var(--accent-danger-dim);
+}
+
+/* --- SIZES --- */
+.cyber-btn--sm {
+    padding: 8px 16px;
+    font-size: 11px;
+}
+
+.cyber-btn--md {
+    padding: 12px 24px;
+    font-size: 13px;
+}
+
+.cyber-btn--lg {
+    padding: 16px 32px;
+    font-size: 15px;
+}
+
+/* --- INTERNALS --- */
+.cyber-btn__content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cyber-btn__glare {
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transform: skewX(-20deg);
+    transition: left 0.5s;
+    z-index: 1;
+}
+
+.cyber-btn:hover .cyber-btn__glare {
+    left: 200%;
+}
+
+.cyber-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: grayscale(1);
+}
+
+/* Decoration Tag */
+.cyber-btn__tag {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 10px;
+    height: 10px;
+    background: rgba(255, 255, 255, 0.3);
+    clip-path: polygon(100% 0, 0 100%, 100% 100%);
+}

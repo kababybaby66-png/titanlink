@@ -1,0 +1,140 @@
+.settings-page {
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.settings-panel {
+    width: 700px;
+    max-height: 90vh;
+    overflow-y: auto;
+    background: rgba(10, 10, 11, 0.95);
+    border: 1px solid var(--metal-mid);
+    padding: 30px;
+}
+
+.settings-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+    margin-bottom: 30px;
+}
+
+/* PRESETS */
+.presets-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+}
+
+.preset-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--metal-dark);
+    padding: 15px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.preset-card:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--accent-cyan);
+    transform: translateY(-2px);
+}
+
+.p-icon {
+    font-size: 20px;
+    margin-bottom: 8px;
+}
+
+.p-name {
+    display: block;
+    font-weight: 700;
+    color: #fff;
+    font-size: 13px;
+}
+
+.p-detail {
+    display: block;
+    font-size: 10px;
+    color: var(--metal-light);
+    margin-top: 4px;
+}
+
+/* CONTROLS */
+.config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.config-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.config-group.wide {
+    grid-column: span 2;
+}
+
+.cyber-select {
+    background: var(--void-deep);
+    border: 1px solid var(--metal-dark);
+    color: #fff;
+    padding: 10px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+}
+
+.cyber-select:hover {
+    border-color: var(--metal-light);
+}
+
+.cyber-select:focus {
+    border-color: var(--accent-cyan);
+}
+
+/* Range Slider */
+.cyber-range {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: var(--metal-dark);
+    outline: none;
+    margin: 10px 0;
+}
+
+.cyber-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--accent-cyan);
+    cursor: pointer;
+    border: 2px solid var(--void-black);
+    transform: rotate(45deg);
+    /* Diamond shape */
+}
+
+.cyber-range::-webkit-slider-thumb:hover {
+    background: #fff;
+    box-shadow: 0 0 10px var(--accent-cyan);
+}
+
+.settings-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--metal-dark);
+    padding-top: 20px;
+}
+
+.action-group-right {
+    display: flex;
+    gap: 15px;
+}

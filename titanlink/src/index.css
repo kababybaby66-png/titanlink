@@ -1,0 +1,242 @@
+/**
+ * TitanLink - "Orbital Command" Theme
+ * Aesthetic: Dark Industrial, Sci-Fi, Vital Telemetry
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;800&family=Orbitron:wght@500;700;900&display=swap');
+
+:root {
+  /* --- PALETTE: THE VOID --- */
+  --void-black: #050505;
+  --void-deep: #0A0A0B;
+  --void-surface: #111113;
+  --void-elevated: #1A1A1D;
+  --void-overlay: rgba(5, 5, 5, 0.85);
+
+  /* --- PALETTE: INDUSTRIAL METALS --- */
+  --metal-dark: #2A2A2E;
+  --metal-mid: #45454A;
+  --metal-light: #71717A;
+  --metal-chrome: #E4E4E7;
+
+  /* --- ACCENTS: SYSTEM STATE --- */
+  /* Primary: Electric Cyan (Data/Connection) */
+  --accent-cyan: #00F0FF;
+  --accent-cyan-dim: rgba(0, 240, 255, 0.1);
+  --accent-cyan-glow: rgba(0, 240, 255, 0.6);
+
+  /* Secondary: Plasma Amber (Warning/Processing) */
+  --accent-amber: #FFB000;
+  --accent-amber-dim: rgba(255, 176, 0, 0.1);
+
+  /* Danger: Reactor Core Red (Error/Critical) */
+  --accent-danger: #FF2A2A;
+  --accent-danger-dim: rgba(255, 42, 42, 0.15);
+
+  /* Success: Bio Green (Stable) */
+  --accent-success: #00FF9D;
+  --accent-success-dim: rgba(0, 255, 157, 0.1);
+
+  /* --- TYPOGRAPHY --- */
+  --font-display: 'Orbitron', 'Inter', sans-serif;
+  --font-ui: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* --- SPACING (Industrial Grid) --- */
+  --space-unit: 4px;
+  --space-xs: calc(var(--space-unit) * 1);
+  /* 4px */
+  --space-sm: calc(var(--space-unit) * 2);
+  /* 8px */
+  --space-md: calc(var(--space-unit) * 4);
+  /* 16px */
+  --space-lg: calc(var(--space-unit) * 6);
+  /* 24px */
+  --space-xl: calc(var(--space-unit) * 10);
+  /* 40px */
+  --space-xxl: calc(var(--space-unit) * 16);
+  /* 64px */
+
+  /* --- BORDERS & EFFECTS --- */
+  --border-thin: 1px solid var(--metal-dark);
+  --border-glow: 1px solid var(--metal-mid);
+  --glass-panel: rgba(26, 26, 29, 0.7);
+  --glass-blur: blur(12px);
+
+  --shadow-flat: 0 0 0 1px var(--metal-dark);
+  --shadow-depth: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --shadow-glow-cyan: 0 0 20px var(--accent-cyan-dim);
+}
+
+/* --- RESET & BASE --- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  /* App-like feel */
+}
+
+body {
+  background-color: var(--void-black);
+  color: var(--metal-chrome);
+  font-family: var(--font-ui);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(circle at 50% 0%, var(--void-surface) 0%, transparent 60%),
+    linear-gradient(rgba(0, 0, 0, 0.2) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.2) 1px, transparent 1px);
+  background-size: 100% 100%, 40px 40px, 40px 40px;
+}
+
+/* --- TYPOGRAPHY UTILITIES --- */
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  color: #FFFFFF;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+
+.text-mono {
+  font-family: var(--font-mono);
+}
+
+.text-cyan {
+  color: var(--accent-cyan);
+}
+
+.text-amber {
+  color: var(--accent-amber);
+}
+
+.text-danger {
+  color: var(--accent-danger);
+}
+
+/* --- COMPONENT CLASSES --- */
+
+/* Tech Panel */
+.panel {
+  background: var(--glass-panel);
+  backdrop-filter: var(--glass-blur);
+  border: var(--border-thin);
+  border-left: 2px solid var(--metal-mid);
+  padding: var(--space-md);
+  position: relative;
+}
+
+.panel::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 8px;
+  background: linear-gradient(45deg, transparent 50%, var(--metal-mid) 50%);
+}
+
+/* Cyber Inputs */
+input[type="text"],
+input[type="password"] {
+  background: var(--void-deep);
+  border: 1px solid var(--metal-dark);
+  color: var(--accent-cyan);
+  font-family: var(--font-mono);
+  padding: var(--space-sm) var(--space-md);
+  outline: none;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+input:focus {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 15px var(--accent-cyan-dim);
+  background: var(--void-elevated);
+}
+
+/* --- ANIMATIONS --- */
+@keyframes scanline {
+  0% {
+    transform: translateY(-100%);
+  }
+
+  100% {
+    transform: translateY(100vh);
+  }
+}
+
+.scanline-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent 50%, rgba(0, 0, 0, 0.1) 51%);
+  background-size: 100% 4px;
+  z-index: 9999;
+  opacity: 0.3;
+}
+
+@keyframes glitch-skew {
+  0% {
+    transform: skew(0deg);
+  }
+
+  20% {
+    transform: skew(-2deg);
+  }
+
+  40% {
+    transform: skew(2deg);
+  }
+
+  60% {
+    transform: skew(-1deg);
+  }
+
+  80% {
+    transform: skew(1deg);
+  }
+
+  100% {
+    transform: skew(0deg);
+  }
+}
+
+.animate-glitch {
+  animation: glitch-skew 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+/* --- SCROLLBARS --- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--void-black);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--metal-mid);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-cyan);
+}

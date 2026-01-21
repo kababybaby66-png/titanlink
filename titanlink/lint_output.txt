@@ -1,0 +1,6 @@
+
+C:\Users\yoavl\Desktop\Parsec clone\titanlink\src\pages\ClientConnect.tsx
+  2:15  error  'SessionState' is defined but never used  @typescript-eslint/no-unused-vars
+
+Γ£û 1 problem (1 error, 0 warnings)
+
