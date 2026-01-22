@@ -1,118 +1,103 @@
 /**
  * VirtualControllerService - Xbox 360 controller emulation
- * Uses ViGEmBus via vigemclient npm package to create a virtual Xbox controller and process input
+ * Uses a helper executable (vigem-feeder.exe) to inject controller input via ViGEmBus
+ * This approach avoids native Node.js module compilation issues
  */
 
+import { spawn, ChildProcess } from 'child_process';
+import path from 'path';
+import { app } from 'electron';
 import type { GamepadInputState } from '../../shared/types/ipc';
 import { isButtonPressed } from '../../shared/types/ipc';
 
-// ViGEmClient types from the vigemclient npm package
-interface ViGEmClient {
-    connect(): Error | null;
-    createX360Controller(): X360Controller;
-}
-
-interface InputButton {
-    setValue(pressed: boolean): void;
-}
-
-interface InputAxis {
-    setValue(value: number): void;
-}
-
-interface X360Controller {
-    connect(opts?: object): Error | null;
-    disconnect(): Error | null;
-    updateMode: 'auto' | 'manual';
-    button: {
-        A: InputButton;
-        B: InputButton;
-        X: InputButton;
-        Y: InputButton;
-        START: InputButton;
-        BACK: InputButton;
-        LEFT_THUMB: InputButton;
-        RIGHT_THUMB: InputButton;
-        LEFT_SHOULDER: InputButton;
-        RIGHT_SHOULDER: InputButton;
-        GUIDE: InputButton;
-    };
-    axis: {
-        leftX: InputAxis;
-        leftY: InputAxis;
-        rightX: InputAxis;
-        rightY: InputAxis;
-        leftTrigger: InputAxis;
-        rightTrigger: InputAxis;
-        dpadHorz: InputAxis;
-        dpadVert: InputAxis;
-    };
-    update(): void;
-}
-
 export class VirtualControllerService {
-    private client: ViGEmClient | null = null;
-    private controller: X360Controller | null = null;
+    private feederProcess: ChildProcess | null = null;
     private isConnected: boolean = false;
     private lastInputTimestamp: number = 0;
+
+    /**
+     * Get the path to the vigem-feeder executable
+     */
+    private getFeederPath(): string {
+        // In development, look in resources/bin
+        // In production, look in the app's resources folder
+        const isDev = !app.isPackaged;
+
+        if (isDev) {
+            return path.join(process.cwd(), 'resources', 'bin', 'vigem-feeder.exe');
+        } else {
+            return path.join(process.resourcesPath, 'bin', 'vigem-feeder.exe');
+        }
+    }
 
     /**
      * Create and connect a virtual Xbox 360 controller
      */
     async createController(): Promise<{ success: boolean; error?: string }> {
         try {
-            // Dynamically import vigemclient to handle missing native module gracefully
-            let ViGEmClientClass: new () => ViGEmClient;
+            const feederPath = this.getFeederPath();
 
-            try {
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
-                const ViGEm = require('vigemclient');
-                ViGEmClientClass = ViGEm;
-            } catch (err) {
-                console.warn('ViGEmClient native module not available:', err);
-                // Return error for missing module
+            console.log('[VirtualController] isDev:', !app.isPackaged);
+            console.log('[VirtualController] process.cwd():', process.cwd());
+            console.log('[VirtualController] Feeder path:', feederPath);
+
+            // Check if the feeder executable exists
+            const fs = await import('fs');
+            if (!fs.existsSync(feederPath)) {
+                console.error('[VirtualController] Vigem feeder NOT FOUND at:', feederPath);
                 return {
                     success: false,
-                    error: 'ViGEmClient module not installed. Run: npm install vigemclient'
+                    error: `Virtual controller helper not found at: ${feederPath}`
                 };
             }
 
-            // Create client instance
-            const vigemClient = new ViGEmClientClass();
+            console.log('[VirtualController] Feeder executable found, starting...');
 
-            // Connect to ViGEmBus driver
-            const connectError = vigemClient.connect();
-            if (connectError !== null) {
-                return {
-                    success: false,
-                    error: `Failed to connect to ViGEmBus: ${connectError.message}. Is the driver installed?`
-                };
+            // Spawn the feeder process
+            this.feederProcess = spawn(feederPath, [], {
+                stdio: ['pipe', 'pipe', 'pipe'],
+                windowsHide: true,
+            });
+
+            // Handle stdout (success/error messages from feeder)
+            this.feederProcess.stdout?.on('data', (data: Buffer) => {
+                const message = data.toString().trim();
+                console.log('[Feeder]', message);
+
+                if (message.includes('CONNECTED')) {
+                    this.isConnected = true;
+                }
+            });
+
+            // Handle stderr
+            this.feederProcess.stderr?.on('data', (data: Buffer) => {
+                console.error('[Feeder Error]', data.toString().trim());
+            });
+
+            // Handle process exit
+            this.feederProcess.on('exit', (code) => {
+                console.log('[Feeder] Process exited with code:', code);
+                this.isConnected = false;
+                this.feederProcess = null;
+            });
+
+            this.feederProcess.on('error', (err: Error) => {
+                console.error('[Feeder] Process error:', err);
+                this.isConnected = false;
+            });
+
+            // Wait a bit for the process to initialize
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            if (this.feederProcess && !this.feederProcess.killed) {
+                console.log('[VirtualController] Virtual Xbox 360 controller helper started');
+                this.isConnected = true;
+                return { success: true };
+            } else {
+                return { success: false, error: 'Feeder process failed to start' };
             }
-
-            this.client = vigemClient;
-
-            // Create virtual Xbox 360 controller
-            const controller = vigemClient.createX360Controller();
-            if (!controller) {
-                return { success: false, error: 'Failed to create virtual controller' };
-            }
-
-            // Connect the virtual controller (this makes it appear in Windows)
-            const controllerConnectError = controller.connect();
-            if (controllerConnectError !== null) {
-                return { success: false, error: `Failed to connect virtual controller: ${controllerConnectError.message}` };
-            }
-
-            // Set to manual update mode for better performance when updating multiple values at once
-            controller.updateMode = 'manual';
-
-            this.controller = controller;
-            this.isConnected = true;
-
-            console.log('Virtual Xbox 360 controller created successfully');
-            return { success: true };
         } catch (error) {
-            console.error('Error creating virtual controller:', error);
+            console.error('[VirtualController] Error creating virtual controller:', error);
             return {
                 success: false,
                 error: error instanceof Error ? error.message : 'Unknown error'
@@ -125,18 +110,25 @@ export class VirtualControllerService {
      */
     async destroyController(): Promise<void> {
         try {
-            if (this.controller) {
-                this.controller.disconnect();
-                this.controller = null;
+            if (this.feederProcess) {
+                // Send quit command
+                this.feederProcess.stdin?.write('QUIT\n');
+
+                // Give it a moment to clean up
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                // Force kill if still running
+                if (!this.feederProcess.killed) {
+                    this.feederProcess.kill();
+                }
+
+                this.feederProcess = null;
             }
 
-            // Note: vigemclient doesn't have a disconnect method on the client itself
-            this.client = null;
-
             this.isConnected = false;
-            console.log('Virtual controller destroyed');
+            console.log('[VirtualController] Virtual controller destroyed');
         } catch (error) {
-            console.error('Error destroying virtual controller:', error);
+            console.error('[VirtualController] Error destroying virtual controller:', error);
         }
     }
 
@@ -145,7 +137,7 @@ export class VirtualControllerService {
      * Called for each received input packet
      */
     updateInput(input: GamepadInputState): void {
-        if (!this.controller || !this.isConnected) {
+        if (!this.feederProcess || !this.isConnected) {
             return;
         }
 
@@ -156,50 +148,38 @@ export class VirtualControllerService {
         this.lastInputTimestamp = input.timestamp;
 
         try {
-            const ctrl = this.controller;
+            // Build button flags
+            let buttons = 0;
+            if (isButtonPressed(input.buttons, 'DPAD_UP')) buttons |= 0x0001;
+            if (isButtonPressed(input.buttons, 'DPAD_DOWN')) buttons |= 0x0002;
+            if (isButtonPressed(input.buttons, 'DPAD_LEFT')) buttons |= 0x0004;
+            if (isButtonPressed(input.buttons, 'DPAD_RIGHT')) buttons |= 0x0008;
+            if (isButtonPressed(input.buttons, 'START')) buttons |= 0x0010;
+            if (isButtonPressed(input.buttons, 'BACK')) buttons |= 0x0020;
+            if (isButtonPressed(input.buttons, 'LEFT_STICK')) buttons |= 0x0040;
+            if (isButtonPressed(input.buttons, 'RIGHT_STICK')) buttons |= 0x0080;
+            if (isButtonPressed(input.buttons, 'LB')) buttons |= 0x0100;
+            if (isButtonPressed(input.buttons, 'RB')) buttons |= 0x0200;
+            if (isButtonPressed(input.buttons, 'GUIDE')) buttons |= 0x0400;
+            if (isButtonPressed(input.buttons, 'A')) buttons |= 0x1000;
+            if (isButtonPressed(input.buttons, 'B')) buttons |= 0x2000;
+            if (isButtonPressed(input.buttons, 'X')) buttons |= 0x4000;
+            if (isButtonPressed(input.buttons, 'Y')) buttons |= 0x8000;
 
-            // Update buttons using the correct vigemclient API
-            ctrl.button.A.setValue(isButtonPressed(input.buttons, 'A'));
-            ctrl.button.B.setValue(isButtonPressed(input.buttons, 'B'));
-            ctrl.button.X.setValue(isButtonPressed(input.buttons, 'X'));
-            ctrl.button.Y.setValue(isButtonPressed(input.buttons, 'Y'));
-            ctrl.button.LEFT_SHOULDER.setValue(isButtonPressed(input.buttons, 'LB'));
-            ctrl.button.RIGHT_SHOULDER.setValue(isButtonPressed(input.buttons, 'RB'));
-            ctrl.button.BACK.setValue(isButtonPressed(input.buttons, 'BACK'));
-            ctrl.button.START.setValue(isButtonPressed(input.buttons, 'START'));
-            ctrl.button.LEFT_THUMB.setValue(isButtonPressed(input.buttons, 'LEFT_STICK'));
-            ctrl.button.RIGHT_THUMB.setValue(isButtonPressed(input.buttons, 'RIGHT_STICK'));
-            ctrl.button.GUIDE.setValue(isButtonPressed(input.buttons, 'GUIDE'));
+            // Convert analog values to Xbox 360 format
+            const leftTrigger = Math.round(input.leftTrigger * 255);
+            const rightTrigger = Math.round(input.rightTrigger * 255);
+            const thumbLX = Math.round(input.leftStickX * 32767);
+            const thumbLY = Math.round(-input.leftStickY * 32767); // Invert Y axis
+            const thumbRX = Math.round(input.rightStickX * 32767);
+            const thumbRY = Math.round(-input.rightStickY * 32767); // Invert Y axis
 
-            // Update axes (vigemclient uses -1 to 1 range for sticks)
-            ctrl.axis.leftX.setValue(input.leftStickX);
-            ctrl.axis.leftY.setValue(input.leftStickY);
-            ctrl.axis.rightX.setValue(input.rightStickX);
-            ctrl.axis.rightY.setValue(input.rightStickY);
+            // Send input line to feeder: buttons,LT,RT,LX,LY,RX,RY
+            const inputLine = `${buttons},${leftTrigger},${rightTrigger},${thumbLX},${thumbLY},${thumbRX},${thumbRY}\n`;
 
-            // Update triggers (vigemclient uses 0 to 1 range for triggers)
-            ctrl.axis.leftTrigger.setValue(input.leftTrigger);
-            ctrl.axis.rightTrigger.setValue(input.rightTrigger);
-
-            // Handle D-Pad via axis values
-            // dpadHorz: -1 = left, 0 = neutral, 1 = right
-            // dpadVert: -1 = up, 0 = neutral, 1 = down
-            let dpadHorz = 0;
-            let dpadVert = 0;
-
-            if (isButtonPressed(input.buttons, 'DPAD_LEFT')) dpadHorz = -1;
-            else if (isButtonPressed(input.buttons, 'DPAD_RIGHT')) dpadHorz = 1;
-
-            if (isButtonPressed(input.buttons, 'DPAD_UP')) dpadVert = -1;
-            else if (isButtonPressed(input.buttons, 'DPAD_DOWN')) dpadVert = 1;
-
-            ctrl.axis.dpadHorz.setValue(dpadHorz);
-            ctrl.axis.dpadVert.setValue(dpadVert);
-
-            // Submit all updates to the driver (since we're in manual mode)
-            ctrl.update();
+            this.feederProcess.stdin?.write(inputLine);
         } catch (error) {
-            console.error('Error updating virtual controller:', error);
+            console.error('[VirtualController] Error updating virtual controller:', error);
         }
     }
 
@@ -207,6 +187,6 @@ export class VirtualControllerService {
      * Check if controller is currently active
      */
     isActive(): boolean {
-        return this.isConnected && this.controller !== null;
+        return this.isConnected && this.feederProcess !== null;
     }
 }
