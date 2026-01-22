@@ -1,55 +1,54 @@
 /**
  * VirtualControllerService - Xbox 360 controller emulation
- * Uses ViGEmBus to create a virtual Xbox controller and process input
+ * Uses ViGEmBus via vigemclient npm package to create a virtual Xbox controller and process input
  */
 
-import type { GamepadInputState, decodeGamepadInput } from '../../shared/types/ipc';
-import { XBOX_BUTTONS, isButtonPressed } from '../../shared/types/ipc';
+import type { GamepadInputState } from '../../shared/types/ipc';
+import { isButtonPressed } from '../../shared/types/ipc';
 
-// ViGEmClient types (these will come from the native module)
+// ViGEmClient types from the vigemclient npm package
 interface ViGEmClient {
-    connect(): boolean;
-    disconnect(): void;
-    createX360Controller(): X360Controller | null;
+    connect(): Error | null;
+    createX360Controller(): X360Controller;
+}
+
+interface InputButton {
+    setValue(pressed: boolean): void;
+}
+
+interface InputAxis {
+    setValue(value: number): void;
 }
 
 interface X360Controller {
-    connect(): boolean;
-    disconnect(): void;
-    updateButton(button: number, pressed: boolean): void;
-    updateAxis(axis: number, value: number): void;
-    updateTrigger(trigger: 'left' | 'right', value: number): void;
-    update(report: X360Report): void;
+    connect(opts?: object): Error | null;
+    disconnect(): Error | null;
+    updateMode: 'auto' | 'manual';
+    button: {
+        A: InputButton;
+        B: InputButton;
+        X: InputButton;
+        Y: InputButton;
+        START: InputButton;
+        BACK: InputButton;
+        LEFT_THUMB: InputButton;
+        RIGHT_THUMB: InputButton;
+        LEFT_SHOULDER: InputButton;
+        RIGHT_SHOULDER: InputButton;
+        GUIDE: InputButton;
+    };
+    axis: {
+        leftX: InputAxis;
+        leftY: InputAxis;
+        rightX: InputAxis;
+        rightY: InputAxis;
+        leftTrigger: InputAxis;
+        rightTrigger: InputAxis;
+        dpadHorz: InputAxis;
+        dpadVert: InputAxis;
+    };
+    update(): void;
 }
-
-interface X360Report {
-    wButtons: number;
-    bLeftTrigger: number;
-    bRightTrigger: number;
-    sThumbLX: number;
-    sThumbLY: number;
-    sThumbRX: number;
-    sThumbRY: number;
-}
-
-// ViGEmBus button constants (Xbox 360 controller)
-const VIGEM_BUTTONS = {
-    DPAD_UP: 0x0001,
-    DPAD_DOWN: 0x0002,
-    DPAD_LEFT: 0x0004,
-    DPAD_RIGHT: 0x0008,
-    START: 0x0010,
-    BACK: 0x0020,
-    LEFT_THUMB: 0x0040,
-    RIGHT_THUMB: 0x0080,
-    LEFT_SHOULDER: 0x0100,
-    RIGHT_SHOULDER: 0x0200,
-    GUIDE: 0x0400,
-    A: 0x1000,
-    B: 0x2000,
-    X: 0x4000,
-    Y: 0x8000,
-} as const;
 
 export class VirtualControllerService {
     private client: ViGEmClient | null = null;
@@ -63,26 +62,30 @@ export class VirtualControllerService {
     async createController(): Promise<{ success: boolean; error?: string }> {
         try {
             // Dynamically import vigemclient to handle missing native module gracefully
-            let vigemClient: ViGEmClient;
+            let ViGEmClientClass: new () => ViGEmClient;
 
             try {
                 // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const ViGEm = require('vigemclient');
-                vigemClient = new ViGEm.ViGEmClient();
+                ViGEmClientClass = ViGEm;
             } catch (err) {
                 console.warn('ViGEmClient native module not available:', err);
-                // Return success for development without the driver
+                // Return error for missing module
                 return {
                     success: false,
                     error: 'ViGEmClient module not installed. Run: npm install vigemclient'
                 };
             }
 
+            // Create client instance
+            const vigemClient = new ViGEmClientClass();
+
             // Connect to ViGEmBus driver
-            if (!vigemClient.connect()) {
+            const connectError = vigemClient.connect();
+            if (connectError !== null) {
                 return {
                     success: false,
-                    error: 'Failed to connect to ViGEmBus. Is the driver installed?'
+                    error: `Failed to connect to ViGEmBus: ${connectError.message}. Is the driver installed?`
                 };
             }
 
@@ -95,9 +98,13 @@ export class VirtualControllerService {
             }
 
             // Connect the virtual controller (this makes it appear in Windows)
-            if (!controller.connect()) {
-                return { success: false, error: 'Failed to connect virtual controller' };
+            const controllerConnectError = controller.connect();
+            if (controllerConnectError !== null) {
+                return { success: false, error: `Failed to connect virtual controller: ${controllerConnectError.message}` };
             }
+
+            // Set to manual update mode for better performance when updating multiple values at once
+            controller.updateMode = 'manual';
 
             this.controller = controller;
             this.isConnected = true;
@@ -123,10 +130,8 @@ export class VirtualControllerService {
                 this.controller = null;
             }
 
-            if (this.client) {
-                this.client.disconnect();
-                this.client = null;
-            }
+            // Note: vigemclient doesn't have a disconnect method on the client itself
+            this.client = null;
 
             this.isConnected = false;
             console.log('Virtual controller destroyed');
@@ -151,38 +156,48 @@ export class VirtualControllerService {
         this.lastInputTimestamp = input.timestamp;
 
         try {
-            // Convert our button bitfield to ViGEm format
-            let vigemButtons = 0;
+            const ctrl = this.controller;
 
-            if (isButtonPressed(input.buttons, 'A')) vigemButtons |= VIGEM_BUTTONS.A;
-            if (isButtonPressed(input.buttons, 'B')) vigemButtons |= VIGEM_BUTTONS.B;
-            if (isButtonPressed(input.buttons, 'X')) vigemButtons |= VIGEM_BUTTONS.X;
-            if (isButtonPressed(input.buttons, 'Y')) vigemButtons |= VIGEM_BUTTONS.Y;
-            if (isButtonPressed(input.buttons, 'LB')) vigemButtons |= VIGEM_BUTTONS.LEFT_SHOULDER;
-            if (isButtonPressed(input.buttons, 'RB')) vigemButtons |= VIGEM_BUTTONS.RIGHT_SHOULDER;
-            if (isButtonPressed(input.buttons, 'BACK')) vigemButtons |= VIGEM_BUTTONS.BACK;
-            if (isButtonPressed(input.buttons, 'START')) vigemButtons |= VIGEM_BUTTONS.START;
-            if (isButtonPressed(input.buttons, 'LEFT_STICK')) vigemButtons |= VIGEM_BUTTONS.LEFT_THUMB;
-            if (isButtonPressed(input.buttons, 'RIGHT_STICK')) vigemButtons |= VIGEM_BUTTONS.RIGHT_THUMB;
-            if (isButtonPressed(input.buttons, 'DPAD_UP')) vigemButtons |= VIGEM_BUTTONS.DPAD_UP;
-            if (isButtonPressed(input.buttons, 'DPAD_DOWN')) vigemButtons |= VIGEM_BUTTONS.DPAD_DOWN;
-            if (isButtonPressed(input.buttons, 'DPAD_LEFT')) vigemButtons |= VIGEM_BUTTONS.DPAD_LEFT;
-            if (isButtonPressed(input.buttons, 'DPAD_RIGHT')) vigemButtons |= VIGEM_BUTTONS.DPAD_RIGHT;
-            if (isButtonPressed(input.buttons, 'GUIDE')) vigemButtons |= VIGEM_BUTTONS.GUIDE;
+            // Update buttons using the correct vigemclient API
+            ctrl.button.A.setValue(isButtonPressed(input.buttons, 'A'));
+            ctrl.button.B.setValue(isButtonPressed(input.buttons, 'B'));
+            ctrl.button.X.setValue(isButtonPressed(input.buttons, 'X'));
+            ctrl.button.Y.setValue(isButtonPressed(input.buttons, 'Y'));
+            ctrl.button.LEFT_SHOULDER.setValue(isButtonPressed(input.buttons, 'LB'));
+            ctrl.button.RIGHT_SHOULDER.setValue(isButtonPressed(input.buttons, 'RB'));
+            ctrl.button.BACK.setValue(isButtonPressed(input.buttons, 'BACK'));
+            ctrl.button.START.setValue(isButtonPressed(input.buttons, 'START'));
+            ctrl.button.LEFT_THUMB.setValue(isButtonPressed(input.buttons, 'LEFT_STICK'));
+            ctrl.button.RIGHT_THUMB.setValue(isButtonPressed(input.buttons, 'RIGHT_STICK'));
+            ctrl.button.GUIDE.setValue(isButtonPressed(input.buttons, 'GUIDE'));
 
-            // Build the input report
-            const report: X360Report = {
-                wButtons: vigemButtons,
-                bLeftTrigger: Math.round(input.leftTrigger * 255),
-                bRightTrigger: Math.round(input.rightTrigger * 255),
-                sThumbLX: Math.round(input.leftStickX * 32767),
-                sThumbLY: Math.round(input.leftStickY * 32767),
-                sThumbRX: Math.round(input.rightStickX * 32767),
-                sThumbRY: Math.round(input.rightStickY * 32767),
-            };
+            // Update axes (vigemclient uses -1 to 1 range for sticks)
+            ctrl.axis.leftX.setValue(input.leftStickX);
+            ctrl.axis.leftY.setValue(input.leftStickY);
+            ctrl.axis.rightX.setValue(input.rightStickX);
+            ctrl.axis.rightY.setValue(input.rightStickY);
 
-            // Send the input report to the virtual controller
-            this.controller.update(report);
+            // Update triggers (vigemclient uses 0 to 1 range for triggers)
+            ctrl.axis.leftTrigger.setValue(input.leftTrigger);
+            ctrl.axis.rightTrigger.setValue(input.rightTrigger);
+
+            // Handle D-Pad via axis values
+            // dpadHorz: -1 = left, 0 = neutral, 1 = right
+            // dpadVert: -1 = up, 0 = neutral, 1 = down
+            let dpadHorz = 0;
+            let dpadVert = 0;
+
+            if (isButtonPressed(input.buttons, 'DPAD_LEFT')) dpadHorz = -1;
+            else if (isButtonPressed(input.buttons, 'DPAD_RIGHT')) dpadHorz = 1;
+
+            if (isButtonPressed(input.buttons, 'DPAD_UP')) dpadVert = -1;
+            else if (isButtonPressed(input.buttons, 'DPAD_DOWN')) dpadVert = 1;
+
+            ctrl.axis.dpadHorz.setValue(dpadHorz);
+            ctrl.axis.dpadVert.setValue(dpadVert);
+
+            // Submit all updates to the driver (since we're in manual mode)
+            ctrl.update();
         } catch (error) {
             console.error('Error updating virtual controller:', error);
         }

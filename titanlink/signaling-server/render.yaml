@@ -4,7 +4,7 @@
 services:
   - type: web
     name: titanlink-signaling
-    env: node
+    runtime: node
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /

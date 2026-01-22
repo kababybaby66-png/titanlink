@@ -121,6 +121,7 @@ class WebRTCService {
             await this.connectToSignalingServer();
             await this.createSession();
             this.initializePeerConnection();
+            this.createInputChannel();
 
             callbacks.onStateChange('waiting-for-peer');
             return this.sessionCode;
@@ -466,31 +467,31 @@ class WebRTCService {
     private createInputChannel(): void {
         if (!this.peerConnection) return;
 
+        console.log('[WebRTC] Creating negotiated input channel (id: 0)');
         this.inputChannel = this.peerConnection.createDataChannel('input', {
             ordered: false,
             maxRetransmits: 0,
+            negotiated: true,
+            id: 0,
         });
 
-        this.inputChannel.binaryType = 'arraybuffer';
-
-        this.inputChannel.onopen = () => {
-            console.log('Input channel opened');
-        };
-
-        this.inputChannel.onclose = () => {
-            console.log('Input channel closed');
-        };
+        this.setupInputChannel(this.inputChannel);
     }
 
     private setupInputChannel(channel: RTCDataChannel): void {
+        console.log('[WebRTC] Setting up input channel (Host side)');
         this.inputChannel = channel;
         channel.binaryType = 'arraybuffer';
 
         channel.onmessage = (event) => {
+            // console.log('[WebRTC] Data channel msg:', event.data.byteLength);
             if (event.data instanceof ArrayBuffer && event.data.byteLength === GAMEPAD_PACKET_SIZE) {
                 const input = decodeGamepadInput(event.data);
+                // console.log('[WebRTC] Input decoded:', input.buttons);
                 this.callbacks?.onInputReceived?.(input);
                 window.electronAPI?.controller.sendInput(input);
+            } else {
+                console.warn('[WebRTC] Invalid input packet size:', event.data.byteLength, 'Expected:', GAMEPAD_PACKET_SIZE);
             }
         };
 

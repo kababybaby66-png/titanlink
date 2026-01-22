@@ -91,8 +91,15 @@ function App() {
             setVideoStream(stream);
         },
         onInputReceived: (input: any) => {
+            // console.log('[App] Input received', input.timestamp);
             // Forward input to StreamView for visualization
             window.dispatchEvent(new CustomEvent('titanlink:input', { detail: input }));
+
+            // CRITICAL: Forward input to the main process for virtual controller injection
+            // This is what actually makes the controller work in games!
+            if (window.electronAPI?.controller) {
+                window.electronAPI.controller.sendInput(input);
+            }
         },
     }), []);
 
