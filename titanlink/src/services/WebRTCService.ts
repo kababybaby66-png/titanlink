@@ -32,13 +32,34 @@ interface IncomingSignal {
     data?: any;
 }
 
-// Public signaling server URL - deployed for remote access
-// This server handles WebRTC signaling for all platforms (Windows, Mac, Linux)
+// Signaling server configuration
+// Supports both public server and direct IP connection modes
 const PUBLIC_SIGNALING_SERVER = 'wss://titanlink-signaling.onrender.com';
 
+// Connection mode types
+export type SignalingMode = 'public' | 'direct';
+
+// Store the current signaling URL (can be changed at runtime)
+let currentSignalingUrl: string = PUBLIC_SIGNALING_SERVER;
+let currentMode: SignalingMode = 'public';
+
+// Set the signaling server URL (called when hosting with direct mode)
+export const setSignalingUrl = (url: string, mode: SignalingMode = 'public') => {
+    currentSignalingUrl = url;
+    currentMode = mode;
+};
+
+// Get the current signaling mode
+export const getSignalingMode = (): SignalingMode => currentMode;
+
+// Get signaling server URL based on mode
 const getSignalingServerUrl = async (): Promise<string> => {
-    // Always use the public signaling server for remote access
-    return PUBLIC_SIGNALING_SERVER;
+    // If using embedded/direct mode, try to get URL from electron
+    if (currentMode === 'direct' && window.electronAPI?.signaling?.getUrl) {
+        const url = await window.electronAPI.signaling.getUrl();
+        if (url) return url;
+    }
+    return currentSignalingUrl;
 };
 
 const ICE_SERVERS: RTCIceServer[] = [
@@ -79,13 +100,22 @@ class WebRTCService {
         }
     }
 
-    async startHosting(displayId: string, callbacks: WebRTCServiceCallbacks): Promise<string> {
+    async startHosting(displayId: string, callbacks: WebRTCServiceCallbacks, useDirect: boolean = false): Promise<string> {
         this.callbacks = callbacks;
         this.role = 'host';
         this.sessionCode = this.generateSessionCode();
 
         try {
             callbacks.onStateChange('connecting');
+
+            // If using direct mode, start the embedded signaling server
+            if (useDirect && window.electronAPI?.signaling?.start) {
+                const url = await window.electronAPI.signaling.start();
+                setSignalingUrl(url, 'direct');
+            } else {
+                // Use the public signaling server
+                setSignalingUrl(PUBLIC_SIGNALING_SERVER, 'public');
+            }
 
             await this.startScreenCapture(displayId);
             await this.connectToSignalingServer();

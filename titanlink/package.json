@@ -13,7 +13,7 @@
         "preview": "vite preview",
         "start:signaling": "cd signaling-server && npm start",
         "dev:all": "concurrently -k \"npm run start:signaling\" \"npm run electron:dev\"",
-        "electron:dev": "concurrently -k \"cross-env BROWSER=none npm run dev\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+        "electron:dev": "npm run dev",
         "electron:build": "npm run build && electron-builder",
         "typecheck": "tsc --noEmit",
         "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
