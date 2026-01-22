@@ -90,8 +90,9 @@ function App() {
         onStreamReceived: (stream: MediaStream) => {
             setVideoStream(stream);
         },
-        onInputReceived: () => {
-            // Input is automatically forwarded to main process by WebRTCService
+        onInputReceived: (input: any) => {
+            // Forward input to StreamView for visualization
+            window.dispatchEvent(new CustomEvent('titanlink:input', { detail: input }));
         },
     }), []);
 

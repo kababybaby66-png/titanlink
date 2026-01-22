@@ -1,8 +1,10 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import type { SessionState } from '../App';
 import { webrtcService } from '../services/WebRTCService';
-import { setButton, XBOX_BUTTONS } from '../../shared/types/ipc';
+import { setButton, XBOX_BUTTONS, isButtonPressed } from '../../shared/types/ipc';
 import type { GamepadInputState } from '../../shared/types/ipc';
+import { ControllerOverlay } from '../components/ControllerOverlay';
+import { QuickMenu } from '../components/QuickMenu';
 import './StreamView.css';
 import { CyberButton } from '../components/CyberButton';
 
@@ -17,7 +19,11 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [showOverlay, setShowOverlay] = useState(true);
     const [controllerConnected, setControllerConnected] = useState(false);
+    const [showControllerOverlay, setShowControllerOverlay] = useState(false);
+    const [showQuickMenu, setShowQuickMenu] = useState(false);
+    const [currentInput, setCurrentInput] = useState<GamepadInputState | null>(null);
     const overlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastGuidePress = useRef<number>(0);
 
     // Attach video stream to video element
     useEffect(() => {
@@ -25,6 +31,31 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
             videoRef.current.srcObject = videoStream;
         }
     }, [videoStream]);
+
+    // Keyboard hotkeys
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // ESC - Toggle quick menu
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                setShowQuickMenu(prev => !prev);
+            }
+            // F11 - Toggle fullscreen
+            else if (e.key === 'F11') {
+                e.preventDefault();
+                toggleFullscreen();
+            }
+            // C - Toggle controller overlay
+            else if (e.key === 'c' || e.key === 'C') {
+                if (!showQuickMenu) {
+                    setShowControllerOverlay(prev => !prev);
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [showQuickMenu]);
 
     // Gamepad polling loop (client only)
     useEffect(() => {
@@ -49,6 +80,20 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
                     timestamp: Date.now(),
                 };
 
+                // Update current input for controller overlay
+                setCurrentInput(input);
+
+                // Check for Guide button double-tap to toggle quick menu
+                if (isButtonPressed(input.buttons, 'GUIDE')) {
+                    const now = Date.now();
+                    if (now - lastGuidePress.current < 500 && now - lastGuidePress.current > 50) {
+                        setShowQuickMenu(prev => !prev);
+                        lastGuidePress.current = 0; // Reset to prevent triple-tap
+                    } else {
+                        lastGuidePress.current = now;
+                    }
+                }
+
                 const stateKey = JSON.stringify({
                     buttons: input.buttons,
                     lx: Math.round(input.leftStickX * 100),
@@ -65,6 +110,7 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
                 }
             } else {
                 setControllerConnected(false);
+                setCurrentInput(null);
             }
             animationFrame = requestAnimationFrame(pollGamepad);
         };
@@ -79,6 +125,26 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
             cancelAnimationFrame(animationFrame);
             window.removeEventListener('gamepadconnected', handleConnect);
             window.removeEventListener('gamepaddisconnected', handleDisconnect);
+        };
+    }, [sessionState.role]);
+
+    // Host receives input and can display it
+    useEffect(() => {
+        if (sessionState.role !== 'host') return;
+
+        const handleInputReceived = (input: GamepadInputState) => {
+            setCurrentInput(input);
+            setControllerConnected(true);
+        };
+
+        // Subscribe to input events from WebRTC service
+        // This is handled through the callbacks in App.tsx
+        // We'll use a custom event for this
+        const handler = (e: CustomEvent<GamepadInputState>) => handleInputReceived(e.detail);
+        window.addEventListener('titanlink:input' as any, handler);
+
+        return () => {
+            window.removeEventListener('titanlink:input' as any, handler);
         };
     }, [sessionState.role]);
 
@@ -104,11 +170,11 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
         setShowOverlay(true);
         if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
         overlayTimeoutRef.current = setTimeout(() => {
-            if (isFullscreen || sessionState.connectionState === 'streaming') {
+            if ((isFullscreen || sessionState.connectionState === 'streaming') && !showQuickMenu) {
                 setShowOverlay(false);
             }
         }, 3000);
-    }, [isFullscreen, sessionState.connectionState]);
+    }, [isFullscreen, sessionState.connectionState, showQuickMenu]);
 
     const toggleFullscreen = async () => {
         if (!document.fullscreenElement) {
@@ -163,24 +229,70 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
                                 {controllerConnected ? 'ENGAGED' : 'NO_SIGNAL'}
                             </span>
                         </div>
+                        {sessionState.role === 'host' && sessionState.sessionCode && (
+                            <div className="telemetry-item session-code-display">
+                                <span className="t-label">CODE</span>
+                                <span className="t-val text-cyan session-code-value">{sessionState.sessionCode}</span>
+                            </div>
+                        )}
                     </div>
                 </div>
+
+                {/* Controller Overlay (bottom-right) */}
+                {showControllerOverlay && (
+                    <div className="controller-overlay-container">
+                        <ControllerOverlay input={currentInput} connected={controllerConnected} />
+                    </div>
+                )}
 
                 {/* CONTROLS BOTTOM BAR */}
                 <div className="hud-bottom-bar">
+                    <CyberButton variant="ghost" size="sm" onClick={() => setShowQuickMenu(true)}>
+                        [MENU]
+                    </CyberButton>
+
                     <CyberButton variant="ghost" size="sm" onClick={toggleFullscreen}>
-                        [{isFullscreen ? 'MINIMIZE_VIEW' : 'MAXIMIZE_VIEW'}]
+                        [{isFullscreen ? 'EXIT_FS' : 'FULLSCREEN'}]
                     </CyberButton>
 
                     <div className="peer-tag">
-                        Connected to: <span className="text-cyan">{sessionState.peerInfo?.username || 'REMOTE_TARGET'}</span>
+                        {sessionState.role === 'host' ? 'Hosting' : 'Connected to'}: <span className="text-cyan">{sessionState.peerInfo?.username || 'REMOTE_TARGET'}</span>
                     </div>
 
-                    <CyberButton variant="danger" size="sm" onClick={onDisconnect}>
-                        TERMINATE_LINK
+                    <CyberButton
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowControllerOverlay(prev => !prev)}
+                        className={showControllerOverlay ? 'active' : ''}
+                    >
+                        [🎮]
+                    </CyberButton>
+
+                    <CyberButton variant="danger" size="sm" onClick={() => setShowQuickMenu(true)}>
+                        DISCONNECT
                     </CyberButton>
                 </div>
+
+                {/* ESC hint */}
+                <div className="esc-hint">
+                    Press <span className="key">ESC</span> for menu
+                </div>
             </div>
+
+            {/* Quick Menu Overlay */}
+            <QuickMenu
+                isOpen={showQuickMenu}
+                onClose={() => setShowQuickMenu(false)}
+                onDisconnect={onDisconnect}
+                onToggleFullscreen={toggleFullscreen}
+                onToggleControllerOverlay={() => setShowControllerOverlay(prev => !prev)}
+                showControllerOverlay={showControllerOverlay}
+                isFullscreen={isFullscreen}
+                sessionCode={sessionState.sessionCode}
+                role={sessionState.role}
+                latency={sessionState.latency}
+                peerName={sessionState.peerInfo?.username}
+            />
         </div>
     );
 }

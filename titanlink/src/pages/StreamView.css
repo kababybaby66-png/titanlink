@@ -165,3 +165,68 @@
     font-size: 11px;
     color: #888;
 }
+
+/* Update: Added Session Code Style */
+.session-code-display .t-val {
+    font-size: 14px;
+    letter-spacing: 1px;
+}
+
+/* Controller Overlay Container */
+.controller-overlay-container {
+    position: absolute;
+    bottom: 100px;
+    right: 40px;
+    z-index: 50;
+    pointer-events: none;
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Bottom Bar Updates */
+.hud-bottom-bar .cyber-button.active {
+    box-shadow: 0 0 10px var(--accent-cyan-dim);
+    border-color: var(--accent-cyan);
+    color: var(--accent-cyan);
+}
+
+/* ESC Hint */
+.esc-hint {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.5);
+    padding: 4px 12px;
+    border-radius: 99px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: #666;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.overlay-active .esc-hint {
+    opacity: 1;
+    transition-delay: 0.5s;
+}
+
+.esc-hint .key {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: #aaa;
+    margin: 0 2px;
+}
