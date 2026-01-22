@@ -65,7 +65,14 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
 
         const pollGamepad = () => {
             const gamepads = navigator.getGamepads();
-            const gamepad = gamepads[0];
+            let gamepad = null;
+            // Find first active gamepad
+            for (const g of gamepads) {
+                if (g && g.connected) {
+                    gamepad = g;
+                    break;
+                }
+            }
 
             if (gamepad) {
                 setControllerConnected(true);
@@ -169,11 +176,16 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
     const handleMouseMove = useCallback(() => {
         setShowOverlay(true);
         if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
+
+        // User requested overlay to show always ("it should show always")
+        // We only hide the cursor if needed, but for now we keep the overlay active
+        /* 
         overlayTimeoutRef.current = setTimeout(() => {
             if ((isFullscreen || sessionState.connectionState === 'streaming') && !showQuickMenu) {
                 setShowOverlay(false);
             }
         }, 3000);
+        */
     }, [isFullscreen, sessionState.connectionState, showQuickMenu]);
 
     const toggleFullscreen = async () => {

@@ -125,9 +125,12 @@ export class DriverManager {
             try {
                 await fs.promises.access(this.vigemInstallerPath, fs.constants.F_OK);
             } catch {
+                // Fallback: Open download page if installer is included
+                const { shell } = await import('electron');
+                await shell.openExternal('https://github.com/nefarius/ViGEmBus/releases/latest');
                 return {
                     success: false,
-                    error: 'ViGEmBus installer not found. Please download it from https://github.com/ViGEm/ViGEmBus/releases'
+                    error: 'Installer not found locally. Opened download page in browser.'
                 };
             }
 

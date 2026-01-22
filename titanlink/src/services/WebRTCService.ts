@@ -318,9 +318,9 @@ class WebRTCService {
                         this.callbacks?.onPeerDisconnected();
                         this.disconnect();
                     } else if (message.type === 'peer-left') {
-                        console.log('Peer left');
+                        console.log('Peer left - Closing session');
                         this.callbacks?.onPeerDisconnected();
-                        this.callbacks?.onStateChange('waiting-for-peer');
+                        this.disconnect();
                     } else if (message.type === 'signal' && message.data) {
                         await this.handleSignalMessage(message.data);
                     }
