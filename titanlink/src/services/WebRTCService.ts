@@ -32,12 +32,13 @@ interface IncomingSignal {
     data?: any;
 }
 
+// Public signaling server URL - deployed for remote access
+// This server handles WebRTC signaling for all platforms (Windows, Mac, Linux)
+const PUBLIC_SIGNALING_SERVER = 'wss://titanlink-signaling.onrender.com';
+
 const getSignalingServerUrl = async (): Promise<string> => {
-    if (window.electronAPI?.signaling?.getUrl) {
-        const url = await window.electronAPI.signaling.getUrl();
-        if (url) return url;
-    }
-    return 'ws://localhost:3001';
+    // Always use the public signaling server for remote access
+    return PUBLIC_SIGNALING_SERVER;
 };
 
 const ICE_SERVERS: RTCIceServer[] = [
@@ -85,10 +86,6 @@ class WebRTCService {
 
         try {
             callbacks.onStateChange('connecting');
-
-            if (window.electronAPI?.signaling?.start) {
-                await window.electronAPI.signaling.start();
-            }
 
             await this.startScreenCapture(displayId);
             await this.connectToSignalingServer();

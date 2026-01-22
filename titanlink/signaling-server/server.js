@@ -1,45 +1,29 @@
 /**
  * TitanLink Signaling Server
- * A lightweight Socket.IO server for WebRTC signaling
+ * A lightweight WebSocket server for WebRTC signaling
  * 
- * Deploy this to Glitch, Heroku, Railway, or any Node.js hosting
+ * Deploy this to Glitch, Heroku, Railway, Render, or any Node.js hosting
  * 
  * Usage:
  *   npm install
  *   npm start
+ * 
+ * Environment Variables:
+ *   PORT - Server port (default: 3001)
  */
 
 const express = require('express');
 const { createServer } = require('http');
-const { Server } = require('socket.io');
+const { WebSocketServer } = require('ws');
+const crypto = require('crypto');
 
 const app = express();
 const httpServer = createServer(app);
 
-// Enable CORS for WebSocket connections
-const io = new Server(httpServer, {
-    cors: {
-        origin: '*',
-        methods: ['GET', 'POST'],
-        credentials: false,
-    },
-    transports: ['websocket', 'polling'],
-    allowUpgrades: true,
-    pingTimeout: 60000,
-    pingInterval: 25000,
-});
-
-// Enable WebSocket upgrade handling
-httpServer.on('upgrade', (request, socket, head) => {
-    if (request.url === '/socket.io/') {
-        io.engine.handleUpgrade(request, socket, head);
-    } else {
-        socket.destroy();
-    }
-});
-
 // Store active sessions
 const sessions = new Map();
+// Store WebSocket connections
+const connections = new Map();
 
 // Health check endpoint
 app.get('/', (req, res) => {
@@ -47,134 +31,175 @@ app.get('/', (req, res) => {
         status: 'ok',
         name: 'TitanLink Signaling Server',
         activeSessions: sessions.size,
+        activeConnections: connections.size,
     });
 });
 
-io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
-    let currentSession = null;
-    let currentRole = null;
+// Create WebSocket server
+const wss = new WebSocketServer({ server: httpServer });
 
-    // Host creates a session
-    socket.on('create-session', ({ sessionCode, hostId }) => {
-        console.log('Creating session:', sessionCode, 'by host:', hostId);
+wss.on('connection', (ws) => {
+    const connId = crypto.randomUUID().substring(0, 8);
+    console.log('Client connected:', connId);
 
-        // Check if session already exists
-        if (sessions.has(sessionCode)) {
-            socket.emit('error', 'Session code already in use');
-            return;
-        }
-
-        // Create session
-        sessions.set(sessionCode, {
-            hostId,
-            hostSocketId: socket.id,
-            clients: new Map(),
-            createdAt: Date.now(),
-        });
-
-        currentSession = sessionCode;
-        currentRole = 'host';
-
-        socket.join(sessionCode);
-        socket.emit('session-created');
+    connections.set(connId, {
+        ws,
+        session: null,
+        role: null,
+        peerId: '',
     });
 
-    // Client joins a session
-    socket.on('join-session', ({ sessionCode, clientId }) => {
-        console.log('Joining session:', sessionCode, 'by client:', clientId);
+    ws.on('message', (data) => {
+        try {
+            const message = JSON.parse(data.toString());
+            console.log('[WS] Message from', connId, ':', message.type);
 
-        const session = sessions.get(sessionCode);
+            const conn = connections.get(connId);
+            if (!conn) return;
 
-        if (!session) {
-            socket.emit('session-not-found');
-            return;
+            if (message.type === 'create-session') {
+                const sessionCode = message.sessionCode;
+                const hostId = message.hostId;
+
+                if (!sessionCode || !hostId) {
+                    ws.send(JSON.stringify({ type: 'error', data: 'Missing sessionCode or hostId' }));
+                    return;
+                }
+
+                if (sessions.has(sessionCode)) {
+                    ws.send(JSON.stringify({ type: 'error', data: 'Session code already in use' }));
+                    return;
+                }
+
+                sessions.set(sessionCode, {
+                    hostId,
+                    hostConnId: connId,
+                    clients: new Map(),
+                    createdAt: Date.now(),
+                });
+
+                conn.session = sessionCode;
+                conn.role = 'host';
+                conn.peerId = hostId;
+
+                console.log('Session created:', sessionCode, 'by host:', hostId);
+                ws.send(JSON.stringify({ type: 'session-created' }));
+            }
+            else if (message.type === 'join-session') {
+                const sessionCode = message.sessionCode;
+                const clientId = message.clientId;
+
+                if (!sessionCode || !clientId) return;
+
+                const session = sessions.get(sessionCode);
+                if (!session) {
+                    ws.send(JSON.stringify({ type: 'session-not-found' }));
+                    return;
+                }
+
+                session.clients.set(clientId, {
+                    connId: connId,
+                    joinedAt: Date.now(),
+                });
+
+                conn.session = sessionCode;
+                conn.role = 'client';
+                conn.peerId = clientId;
+
+                console.log('Client', clientId, 'joined session:', sessionCode);
+                ws.send(JSON.stringify({ type: 'session-joined', data: { hostId: session.hostId } }));
+
+                // Notify host
+                const hostConn = connections.get(session.hostConnId);
+                if (hostConn && hostConn.ws.readyState === 1) {
+                    hostConn.ws.send(JSON.stringify({ type: 'peer-joined', data: { peerId: clientId } }));
+                }
+            }
+            else if (message.type === 'signal') {
+                const sessionCode = message.sessionCode;
+                if (!sessionCode) return;
+
+                const session = sessions.get(sessionCode);
+                if (!session) return;
+
+                const response = JSON.stringify({
+                    type: 'signal',
+                    data: { from: conn.peerId, to: message.to, payload: message.payload }
+                });
+
+                if (message.to) {
+                    // Send to specific peer
+                    if (message.to === session.hostId) {
+                        const hostConn = connections.get(session.hostConnId);
+                        if (hostConn && hostConn.ws.readyState === 1) {
+                            hostConn.ws.send(response);
+                        }
+                    } else {
+                        const client = session.clients.get(message.to);
+                        if (client) {
+                            const targetConn = connections.get(client.connId);
+                            if (targetConn && targetConn.ws.readyState === 1) {
+                                targetConn.ws.send(response);
+                            }
+                        }
+                    }
+                } else {
+                    // Broadcast to all in session
+                    connections.forEach((c) => {
+                        if (c.session === sessionCode && c.ws.readyState === 1 && c.peerId !== conn.peerId) {
+                            c.ws.send(response);
+                        }
+                    });
+                }
+            }
+            else if (message.type === 'leave-session') {
+                handleDisconnect(connId);
+            }
+        } catch (e) {
+            console.error('Error parsing message:', e);
         }
-
-        // Add client to session
-        session.clients.set(clientId, {
-            socketId: socket.id,
-            joinedAt: Date.now(),
-        });
-
-        currentSession = sessionCode;
-        currentRole = 'client';
-
-        socket.join(sessionCode);
-        socket.emit('session-joined', { hostId: session.hostId });
-
-        // Notify host that a peer joined
-        io.to(session.hostSocketId).emit('peer-joined', {
-            peerId: clientId,
-        });
     });
 
-    // WebRTC signaling
-    socket.on('signal', (message) => {
-        const session = sessions.get(message.sessionCode);
-        if (!session) return;
+    ws.on('close', () => {
+        console.log('Client disconnected:', connId);
+        handleDisconnect(connId);
+    });
 
-        // Forward signal to the target peer
-        if (message.to) {
-            // Find target socket
-            let targetSocket = null;
+    ws.on('error', (err) => {
+        console.error('WebSocket error for', connId, ':', err.message);
+        handleDisconnect(connId);
+    });
+});
 
-            if (message.to === session.hostId) {
-                targetSocket = session.hostSocketId;
+function handleDisconnect(connId) {
+    const conn = connections.get(connId);
+    if (!conn) return;
+
+    if (conn.session) {
+        const session = sessions.get(conn.session);
+        if (session) {
+            if (conn.role === 'host') {
+                // Notify all clients that host left
+                connections.forEach((c) => {
+                    if (c.session === conn.session && c.ws.readyState === 1) {
+                        c.ws.send(JSON.stringify({ type: 'host-left' }));
+                    }
+                });
+                sessions.delete(conn.session);
+                console.log('Session destroyed:', conn.session);
             } else {
-                const client = session.clients.get(message.to);
-                if (client) {
-                    targetSocket = client.socketId;
+                // Client left - notify host
+                session.clients.delete(conn.peerId);
+                const hostConn = connections.get(session.hostConnId);
+                if (hostConn && hostConn.ws.readyState === 1) {
+                    hostConn.ws.send(JSON.stringify({ type: 'peer-left', data: { peerId: conn.peerId } }));
                 }
             }
-
-            if (targetSocket) {
-                io.to(targetSocket).emit('signal', message);
-            }
-        } else {
-            // Broadcast to all other peers in session
-            socket.to(message.sessionCode).emit('signal', message);
         }
-    });
-
-    // Leave session
-    socket.on('leave-session', ({ sessionCode }) => {
-        handleLeave(socket, sessionCode);
-    });
-
-    // Handle disconnect
-    socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
-
-        if (currentSession) {
-            handleLeave(socket, currentSession);
-        }
-    });
-
-    function handleLeave(socket, sessionCode) {
-        const session = sessions.get(sessionCode);
-        if (!session) return;
-
-        if (currentRole === 'host') {
-            // Host left - notify all clients and destroy session
-            socket.to(sessionCode).emit('host-left');
-            sessions.delete(sessionCode);
-            console.log('Session destroyed:', sessionCode);
-        } else {
-            // Client left - notify host and remove from session
-            session.clients.forEach((client, clientId) => {
-                if (client.socketId === socket.id) {
-                    session.clients.delete(clientId);
-                    io.to(session.hostSocketId).emit('peer-left', { peerId: clientId });
-                }
-            });
-        }
-
-        socket.leave(sessionCode);
-        currentSession = null;
-        currentRole = null;
     }
-});
+
+    connections.delete(connId);
+}
 
 // Cleanup stale sessions (older than 2 hours)
 setInterval(() => {
@@ -193,4 +218,5 @@ const PORT = process.env.PORT || 3001;
 
 httpServer.listen(PORT, () => {
     console.log(`TitanLink Signaling Server running on port ${PORT}`);
+    console.log(`WebSocket endpoint: ws://localhost:${PORT}`);
 });

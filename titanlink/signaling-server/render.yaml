@@ -1,0 +1,13 @@
+# Render.com deployment configuration
+# This file tells Render how to build and run the signaling server
+
+services:
+  - type: web
+    name: titanlink-signaling
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production

@@ -1,56 +1,108 @@
 # TitanLink Signaling Server
 
-A lightweight WebRTC signaling server for TitanLink P2P connections.
+A lightweight WebSocket server for WebRTC signaling, designed to facilitate peer-to-peer connections for TitanLink remote desktop streaming.
 
 ## Deployment
 
-### Glitch
+### Deploy to Render.com (Recommended - Free Tier)
 
-1. Create a new project on [Glitch](https://glitch.com)
-2. Import from GitHub or upload these files
-3. The server will automatically start
-4. Copy your Glitch URL (e.g., `https://your-project.glitch.me`)
+1. Create a [Render.com](https://render.com) account
+2. Click "New" → "Web Service"
+3. Connect your GitHub repository or use "Deploy from Git URL"
+4. Configure:
+   - **Name**: `titanlink-signaling`
+   - **Environment**: `Node`
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+   - **Plan**: Free
+5. Click "Create Web Service"
 
-### Railway
+Your server will be deployed at `wss://titanlink-signaling.onrender.com`
 
-1. Create a new project on [Railway](https://railway.app)
-2. Connect your GitHub repo or deploy directly
-3. Railway will auto-detect Node.js and run `npm start`
+### Deploy to Railway.app
 
-### Heroku
+1. Create a [Railway.app](https://railway.app) account
+2. Click "New Project" → "Deploy from GitHub repo"
+3. Select your repository
+4. Railway will auto-detect Node.js and deploy
 
-```bash
-heroku create titanlink-signaling
-git push heroku main
-```
+### Deploy to Glitch
 
-### Self-hosted
+1. Go to [glitch.com](https://glitch.com)
+2. Click "New Project" → "Import from GitHub"
+3. Enter your repository URL
+4. Glitch will automatically deploy
+
+### Local Development
 
 ```bash
 npm install
 npm start
 ```
 
-## Environment Variables
-
-- `PORT` - Server port (default: 3001)
+Server runs on port 3001 by default (or `PORT` environment variable).
 
 ## API
 
-### WebSocket Events
+### Health Check
+```
+GET /
+```
+Returns server status and active session count.
 
-**Client → Server:**
-- `create-session` - Host creates a new session
-- `join-session` - Client joins an existing session
-- `signal` - Forward WebRTC signaling data
-- `leave-session` - Leave current session
+### WebSocket Protocol
 
-**Server → Client:**
-- `session-created` - Session successfully created
-- `session-joined` - Successfully joined session
-- `session-not-found` - Session code not found
-- `peer-joined` - A peer joined the session
+Connect to `ws://[host]:[port]` for WebSocket signaling.
+
+#### Messages (Client → Server)
+
+**Create Session (Host)**
+```json
+{
+  "type": "create-session",
+  "sessionCode": "ABC123",
+  "hostId": "unique-host-id"
+}
+```
+
+**Join Session (Client)**
+```json
+{
+  "type": "join-session",
+  "sessionCode": "ABC123",
+  "clientId": "unique-client-id"
+}
+```
+
+**Signal (WebRTC signaling)**
+```json
+{
+  "type": "signal",
+  "sessionCode": "ABC123",
+  "to": "target-peer-id",
+  "payload": { /* SDP offer/answer or ICE candidate */ }
+}
+```
+
+**Leave Session**
+```json
+{
+  "type": "leave-session",
+  "sessionCode": "ABC123"
+}
+```
+
+#### Messages (Server → Client)
+
+- `session-created` - Session was created successfully
+- `session-joined` - Successfully joined a session
+- `session-not-found` - The requested session doesn't exist
+- `peer-joined` - A new peer joined the session (sent to host)
 - `peer-left` - A peer left the session
-- `host-left` - Host disconnected
-- `signal` - Forwarded signaling data
-- `error` - Error message
+- `host-left` - The host disconnected
+- `signal` - A WebRTC signaling message from another peer
+- `error` - An error occurred
+
+## Environment Variables
+
+- `PORT` - Server port (default: 3001)
