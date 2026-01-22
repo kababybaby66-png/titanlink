@@ -243,14 +243,26 @@ class WebRTCService {
         }
     }
 
-    private async connectToSignalingServer(): Promise<void> {
+    private async connectToSignalingServer(retryCount: number = 0): Promise<void> {
         const serverUrl = await getSignalingServerUrl();
+        const maxRetries = 3;
+        // Render.com free tier can take 30-90s to wake from sleep, use 60s timeout
+        const connectionTimeout = 60000;
 
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
-                reject(new Error('Connection timeout'));
-            }, 15000);
+                if (this.ws) {
+                    this.ws.close();
+                }
+                if (retryCount < maxRetries) {
+                    console.log(`Connection attempt ${retryCount + 1} timed out, retrying...`);
+                    this.connectToSignalingServer(retryCount + 1).then(resolve).catch(reject);
+                } else {
+                    reject(new Error('Connection timeout - signaling server may be unavailable. Please try again in a moment.'));
+                }
+            }, connectionTimeout);
 
+            console.log(`Connecting to signaling server (attempt ${retryCount + 1}/${maxRetries + 1})...`);
             this.ws = new WebSocket(serverUrl);
 
             this.ws.onopen = () => {
@@ -262,7 +274,14 @@ class WebRTCService {
             this.ws.onerror = (error) => {
                 clearTimeout(timeout);
                 console.error('Signaling connection error:', error);
-                reject(new Error('Failed to connect to signaling server'));
+                if (retryCount < maxRetries) {
+                    console.log(`Retrying connection (${retryCount + 2}/${maxRetries + 1})...`);
+                    setTimeout(() => {
+                        this.connectToSignalingServer(retryCount + 1).then(resolve).catch(reject);
+                    }, 2000 * (retryCount + 1)); // Exponential backoff: 2s, 4s, 6s
+                } else {
+                    reject(new Error('Failed to connect to signaling server after multiple attempts'));
+                }
             };
 
             this.ws.onmessage = async (event) => {
@@ -516,10 +535,27 @@ class WebRTCService {
     private async handleSignalMessage(message: any): Promise<void> {
         if (!this.peerConnection) return;
 
+        const payload = message.payload;
+        if (!payload) {
+            console.warn('Received signal message without payload:', message);
+            return;
+        }
+
+        console.log('[WebRTC] handleSignalMessage - payload type:', payload.type, 'has candidate:', !!payload.candidate);
+
         try {
-            if (message.type === 'offer' && message.payload) {
+            // Check if this is an ICE candidate (has 'candidate' property)
+            if (payload.candidate !== undefined) {
+                console.log('[WebRTC] Adding ICE candidate');
+                await this.peerConnection.addIceCandidate(
+                    new RTCIceCandidate(payload)
+                );
+            }
+            // Check if this is an offer (SDP with type 'offer')
+            else if (payload.type === 'offer' && payload.sdp) {
+                console.log('[WebRTC] Received offer, creating answer');
                 await this.peerConnection.setRemoteDescription(
-                    new RTCSessionDescription(message.payload)
+                    new RTCSessionDescription(payload)
                 );
 
                 const answer = await this.peerConnection.createAnswer();
@@ -540,14 +576,16 @@ class WebRTCService {
                         connectedAt: Date.now(),
                     });
                 }
-            } else if (message.type === 'answer' && message.payload) {
+            }
+            // Check if this is an answer (SDP with type 'answer')  
+            else if (payload.type === 'answer' && payload.sdp) {
+                console.log('[WebRTC] Received answer, setting remote description');
                 await this.peerConnection.setRemoteDescription(
-                    new RTCSessionDescription(message.payload)
+                    new RTCSessionDescription(payload)
                 );
-            } else if (message.type === 'ice-candidate' && message.payload) {
-                await this.peerConnection.addIceCandidate(
-                    new RTCIceCandidate(message.payload)
-                );
+            }
+            else {
+                console.warn('[WebRTC] Unknown signal payload:', payload);
             }
         } catch (error) {
             console.error('Error handling signal:', error);
