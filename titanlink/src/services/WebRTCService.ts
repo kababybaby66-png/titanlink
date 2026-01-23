@@ -67,23 +67,29 @@ const ICE_SERVERS: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun.relay.metered.ca:80' },
 
-    // Free TURN servers for NAT traversal (relay when direct connection fails)
-    // OpenRelay Project - free community TURN servers
+    // Metered Free TURN servers (more reliable than OpenRelay)
+    // These have higher availability and verified credentials
     {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
+        urls: 'turn:global.relay.metered.ca:80',
+        username: 'e8dd65c92eb8e6d8e6c66847',
+        credential: 'uWdWNmkhvyqTW1QP',
     },
     {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
+        urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+        username: 'e8dd65c92eb8e6d8e6c66847',
+        credential: 'uWdWNmkhvyqTW1QP',
     },
     {
-        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
+        urls: 'turn:global.relay.metered.ca:443',
+        username: 'e8dd65c92eb8e6d8e6c66847',
+        credential: 'uWdWNmkhvyqTW1QP',
+    },
+    {
+        urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+        username: 'e8dd65c92eb8e6d8e6c66847',
+        credential: 'uWdWNmkhvyqTW1QP',
     },
 ];
 
@@ -430,12 +436,31 @@ class WebRTCService {
     }
 
     private initializePeerConnection(): void {
+        console.log('[WebRTC] Initializing peer connection with ICE servers:', ICE_SERVERS.length);
+
         this.peerConnection = new RTCPeerConnection({
             iceServers: ICE_SERVERS,
+            iceCandidatePoolSize: 10, // Pre-gather candidates for faster connection
         });
+
+        // Log ICE gathering state changes
+        this.peerConnection.onicegatheringstatechange = () => {
+            console.log('[WebRTC] ICE gathering state:', this.peerConnection?.iceGatheringState);
+        };
+
+        // Log ICE connection state changes  
+        this.peerConnection.oniceconnectionstatechange = () => {
+            console.log('[WebRTC] ICE connection state:', this.peerConnection?.iceConnectionState);
+        };
 
         this.peerConnection.onicecandidate = (event) => {
             if (event.candidate) {
+                // Log candidate type for debugging (host, srflx, relay)
+                const candidateStr = event.candidate.candidate;
+                const typeMatch = candidateStr.match(/typ (\w+)/);
+                const candidateType = typeMatch ? typeMatch[1] : 'unknown';
+                console.log(`[WebRTC] ICE candidate: ${candidateType} - ${event.candidate.address || 'no-address'}`);
+
                 this.sendSignal({
                     type: 'signal',
                     sessionCode: this.sessionCode,
