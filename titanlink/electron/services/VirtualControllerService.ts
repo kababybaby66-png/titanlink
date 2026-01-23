@@ -14,6 +14,7 @@ export class VirtualControllerService {
     private feederProcess: ChildProcess | null = null;
     private isConnected: boolean = false;
     private lastInputTimestamp: number = 0;
+    private inputCount: number = 0;
 
     /**
      * Get the path to the vigem-feeder executable
@@ -178,6 +179,12 @@ export class VirtualControllerService {
             const inputLine = `${buttons},${leftTrigger},${rightTrigger},${thumbLX},${thumbLY},${thumbRX},${thumbRY}\n`;
 
             this.feederProcess.stdin?.write(inputLine);
+
+            // Log every 100 inputs to confirm data is being sent
+            this.inputCount++;
+            if (this.inputCount % 100 === 0) {
+                console.log(`[VirtualController] Sent ${this.inputCount} inputs. Last: buttons=${buttons}, LX=${thumbLX}, LY=${thumbLY}`);
+            }
         } catch (error) {
             console.error('[VirtualController] Error updating virtual controller:', error);
         }

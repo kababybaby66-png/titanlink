@@ -31,8 +31,37 @@ class Program
         
         try
         {
+            Console.Error.WriteLine("DEBUG: Attempting to connect to ViGEmBus...");
+            Console.Error.Flush();
+            
             // Connect to ViGEmBus driver
-            client = new ViGEmClient();
+            try
+            {
+                client = new ViGEmClient();
+                Console.Error.WriteLine("DEBUG: ViGEmClient created successfully");
+                Console.Error.Flush();
+            }
+            catch (Nefarius.ViGEm.Client.Exceptions.VigemBusNotFoundException ex)
+            {
+                Console.Error.WriteLine($"ERROR: ViGEmBus driver not found. Please install ViGEmBus.");
+                Console.Error.WriteLine($"Details: {ex.Message}");
+                Environment.Exit(2);
+                return;
+            }
+            catch (Nefarius.ViGEm.Client.Exceptions.VigemBusAccessFailedException ex)
+            {
+                Console.Error.WriteLine($"ERROR: Access to ViGEmBus denied. Try running as administrator.");
+                Console.Error.WriteLine($"Details: {ex.Message}");
+                Environment.Exit(3);
+                return;
+            }
+            catch (Nefarius.ViGEm.Client.Exceptions.VigemBusVersionMismatchException ex)
+            {
+                Console.Error.WriteLine($"ERROR: ViGEmBus version mismatch. Please update ViGEmBus driver.");
+                Console.Error.WriteLine($"Details: {ex.Message}");
+                Environment.Exit(4);
+                return;
+            }
             
             // Create virtual Xbox 360 controller
             controller = client.CreateXbox360Controller();
@@ -105,7 +134,12 @@ class Program
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"ERROR: {ex.Message}");
+            Console.Error.WriteLine($"ERROR: {ex.GetType().Name}: {ex.Message}");
+            if (ex.InnerException != null)
+            {
+                Console.Error.WriteLine($"INNER: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
+            }
+            Console.Error.WriteLine($"Stack: {ex.StackTrace}");
             Console.Error.WriteLine("Make sure ViGEmBus driver is installed.");
             Environment.Exit(1);
         }
