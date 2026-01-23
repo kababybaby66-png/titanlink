@@ -9,6 +9,7 @@ import { createServer, Server as HttpServer } from 'http';
 import { Duplex } from 'stream';
 import { DriverManager } from './services/DriverManager';
 import { VirtualControllerService } from './services/VirtualControllerService';
+import { twilioTurnService } from './services/TwilioTurnService';
 import type { DisplayInfo, GamepadInputState } from '../shared/types/ipc';
 
 // Keep a global reference of the window object
@@ -525,6 +526,20 @@ function registerIpcHandlers() {
         }
     });
     ipcMain.on('window:close', () => mainWindow?.close());
+
+    // Twilio TURN handlers
+    ipcMain.handle('turn:get-ice-servers', async () => {
+        return await twilioTurnService.getIceServers();
+    });
+
+    ipcMain.handle('turn:is-configured', () => {
+        return twilioTurnService.isConfigured();
+    });
+
+    ipcMain.handle('turn:configure', (_event, accountSid: string, authToken: string) => {
+        twilioTurnService.setCredentials(accountSid, authToken);
+        return { success: true };
+    });
 }
 
 // ============================================

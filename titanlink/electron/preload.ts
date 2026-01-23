@@ -58,6 +58,18 @@ const electronAPI = {
         start: (): Promise<string> => ipcRenderer.invoke('signaling:start'),
         getUrl: (): Promise<string | null> => ipcRenderer.invoke('signaling:get-url'),
     },
+
+    // ============================================
+    // TURN Server APIs (Twilio)
+    // ============================================
+    turn: {
+        getIceServers: (): Promise<Array<{ urls: string | string[]; username?: string; credential?: string }>> =>
+            ipcRenderer.invoke('turn:get-ice-servers'),
+        isConfigured: (): Promise<boolean> =>
+            ipcRenderer.invoke('turn:is-configured'),
+        configure: (accountSid: string, authToken: string): Promise<{ success: boolean }> =>
+            ipcRenderer.invoke('turn:configure', accountSid, authToken),
+    },
 };
 
 // Type-safe API exposure
