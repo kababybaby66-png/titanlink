@@ -7,12 +7,13 @@
 }
 
 .settings-panel {
-    width: 700px;
-    max-height: 90vh;
+    width: 720px;
+    max-height: 95vh;
     overflow-y: auto;
-    background: rgba(10, 10, 11, 0.95);
+    background: rgba(10, 10, 12, 0.98);
     border: 1px solid var(--metal-mid);
-    padding: 30px;
+    padding: 40px;
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 .settings-layout {
@@ -30,12 +31,14 @@
 }
 
 .preset-card {
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--metal-dark);
-    padding: 15px;
+    padding: 20px;
     text-align: left;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
 }
 
 .preset-card:hover {
@@ -81,14 +84,15 @@
 }
 
 .cyber-select {
-    background: var(--void-deep);
-    border: 1px solid var(--metal-dark);
-    color: #fff;
-    padding: 10px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--metal-mid);
+    color: var(--metal-chrome);
+    padding: 12px;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: 13px;
     outline: none;
     cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .cyber-select:hover {
@@ -97,6 +101,7 @@
 
 .cyber-select:focus {
     border-color: var(--accent-cyan);
+    box-shadow: 0 0 15px var(--accent-cyan-dim);
 }
 
 /* Range Slider */
@@ -104,10 +109,11 @@
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    height: 6px;
-    background: var(--metal-dark);
+    height: 4px;
+    background: var(--metal-mid);
+    border-radius: 2px;
     outline: none;
-    margin: 10px 0;
+    margin: 15px 0;
 }
 
 .cyber-range::-webkit-slider-thumb {

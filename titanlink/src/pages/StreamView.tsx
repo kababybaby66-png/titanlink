@@ -211,6 +211,13 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
                     playsInline
                     muted={sessionState.role === 'host'}
                 />
+                {sessionState.role === 'host' && (
+                    <div className="host-broadcast-indicator">
+                        <div className="broadcast-icon">📡</div>
+                        <div className="broadcast-text">UPLINK ESTABLISHED</div>
+                        <div className="broadcast-sub">Transmitting Data to Client</div>
+                    </div>
+                )}
             </div>
 
             {/* HUD OVERLAY */}

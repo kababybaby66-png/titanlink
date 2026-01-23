@@ -21,7 +21,7 @@
 .cyber-btn--primary {
     background: var(--accent-cyan);
     color: var(--void-black);
-    box-shadow: 0 0 10px var(--accent-cyan-dim);
+    box-shadow: 0 0 10px var(--accent-cyan-dim), inset 0 0 0 1px rgba(255, 255, 255, 0.2);
 }
 
 .cyber-btn--primary:hover:not(:disabled) {
@@ -31,15 +31,32 @@
 }
 
 .cyber-btn--secondary {
-    background: var(--metal-dark);
+    background: rgba(255, 255, 255, 0.03);
     color: var(--metal-chrome);
     border: 1px solid var(--metal-mid);
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+    outline: 1px solid rgba(255, 255, 255, 0.05);
+    outline-offset: -3px;
 }
 
 .cyber-btn--secondary:hover:not(:disabled) {
-    background: var(--metal-mid);
+    background: rgba(255, 255, 255, 0.08);
     color: white;
     border-color: var(--accent-cyan);
+    box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+}
+
+.cyber-btn--ghost {
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--metal-light);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cyber-btn--ghost:hover:not(:disabled) {
+    color: var(--metal-chrome);
+    border-color: var(--metal-light);
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.05);
 }
 
 .cyber-btn--danger {

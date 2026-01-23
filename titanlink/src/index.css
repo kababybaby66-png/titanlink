@@ -14,10 +14,10 @@
   --void-overlay: rgba(5, 5, 5, 0.85);
 
   /* --- PALETTE: INDUSTRIAL METALS --- */
-  --metal-dark: #2A2A2E;
-  --metal-mid: #45454A;
-  --metal-light: #71717A;
-  --metal-chrome: #E4E4E7;
+  --metal-dark: #333338;
+  --metal-mid: #52525B;
+  --metal-light: #A1A1AA;
+  --metal-chrome: #F4F4F5;
 
   /* --- ACCENTS: SYSTEM STATE --- */
   /* Primary: Electric Cyan (Data/Connection) */

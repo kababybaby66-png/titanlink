@@ -1,237 +1,362 @@
+/* Controller Overlay - Premium Redesign */
+
 .controller-overlay {
-    background: rgba(0, 0, 0, 0.85);
-    border: 1px solid rgba(0, 255, 255, 0.3);
-    border-radius: 8px;
-    padding: 12px 16px;
-    backdrop-filter: blur(8px);
-    min-width: 200px;
+    background: rgba(10, 10, 12, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    padding: 20px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    width: 340px;
+    height: 220px;
+    position: relative;
+    user-select: none;
+    transition: all 0.3s ease;
 }
 
 .controller-overlay.disconnected {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 10px;
-    padding: 8px 16px;
-    opacity: 0.6;
+    justify-content: center;
+    height: 120px;
+    width: 200px;
+    gap: 12px;
 }
 
-.controller-icon {
-    font-size: 20px;
-    filter: grayscale(1);
+.controller-overlay.disconnected .controller-icon {
+    font-size: 32px;
+    opacity: 0.3;
 }
 
-.controller-status {
+.controller-overlay.disconnected .controller-status {
     font-family: var(--font-mono);
-    font-size: 11px;
-    color: #666;
-    letter-spacing: 1px;
+    font-size: 10px;
+    color: var(--metal-light);
+    letter-spacing: 0.1em;
 }
 
+/* --- CONTROLLER BODY --- */
 .controller-visual {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    align-items: center;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    /* Optional: background image or shape of a controller */
 }
 
-/* Button clusters */
-.button-cluster {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
+/* We will use absolute positioning for a realistic layout */
+
+/* --- FACE BUTTONS (ABXY) --- */
+.face-buttons {
+    position: absolute;
+    right: 20px;
+    top: 50px;
+    width: 80px;
+    height: 80px;
 }
 
-.btn-row {
-    display: flex;
-    gap: 20px;
-}
-
-.btn {
+.face-btn {
+    position: absolute;
     width: 24px;
     height: 24px;
     border-radius: 50%;
-    background: rgba(60, 60, 60, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(30, 30, 35, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
-    font-weight: bold;
     font-family: var(--font-mono);
-    color: rgba(255, 255, 255, 0.5);
-    transition: all 0.1s ease;
+    font-size: 10px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.3);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+    transition: all 0.05s ease;
 }
 
-.btn.active {
-    background: var(--accent-cyan);
-    border-color: var(--accent-cyan);
+.face-btn.active {
+    transform: scale(0.95);
     color: #000;
-    box-shadow: 0 0 12px var(--accent-cyan);
+    box-shadow: 0 0 15px currentColor;
+    border-color: transparent;
+}
+
+.btn-y {
+    top: 0;
+    left: 28px;
+}
+
+.btn-x {
+    top: 28px;
+    left: 0;
+}
+
+.btn-b {
+    top: 28px;
+    left: 56px;
+}
+
+.btn-a {
+    top: 56px;
+    left: 28px;
 }
 
 .btn-a.active {
-    background: #4CAF50;
-    border-color: #4CAF50;
-    box-shadow: 0 0 12px #4CAF50;
-}
-
-.btn-b.active {
-    background: #f44336;
-    border-color: #f44336;
-    box-shadow: 0 0 12px #f44336;
-}
-
-.btn-x.active {
-    background: #2196F3;
-    border-color: #2196F3;
-    box-shadow: 0 0 12px #2196F3;
-}
-
-.btn-y.active {
-    background: #FFC107;
-    border-color: #FFC107;
-    box-shadow: 0 0 12px #FFC107;
+    background-color: #55ff55;
+    color: #55ff55;
+    box-shadow: 0 0 20px rgba(85, 255, 85, 0.6);
     color: #000;
 }
 
+.btn-b.active {
+    background-color: #ff5555;
+    color: #ff5555;
+    box-shadow: 0 0 20px rgba(255, 85, 85, 0.6);
+    color: #000;
+}
+
+.btn-x.active {
+    background-color: #5555ff;
+    color: #5555ff;
+    box-shadow: 0 0 20px rgba(85, 85, 255, 0.6);
+    color: #000;
+}
+
+.btn-y.active {
+    background-color: #ffaa00;
+    color: #ffaa00;
+    box-shadow: 0 0 20px rgba(255, 170, 0, 0.6);
+    color: #000;
+}
+
+
+/* --- D-PAD --- */
+.dpad {
+    position: absolute;
+    left: 20px;
+    top: 80px;
+    /* Moved down for Xbox styling */
+    width: 70px;
+    height: 70px;
+}
+
 .dpad-btn {
-    width: 20px;
-    height: 20px;
-    border-radius: 4px;
-    font-size: 8px;
+    position: absolute;
+    background: rgba(30, 30, 35, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+    transition: all 0.05s ease;
 }
 
-/* Sticks */
-.sticks-row {
-    display: flex;
-    gap: 30px;
-    margin: 6px 0;
+.dpad-btn.active {
+    background: var(--accent-cyan);
+    box-shadow: 0 0 15px var(--accent-cyan-glow);
+    border-color: var(--accent-cyan);
+    z-index: 2;
 }
 
-.stick-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
+.dpad-u {
+    top: 0;
+    left: 24px;
+    width: 22px;
+    height: 26px;
+    border-radius: 4px 4px 0 0;
 }
 
-.stick-bg {
-    width: 36px;
-    height: 36px;
+.dpad-d {
+    bottom: 0;
+    left: 24px;
+    width: 22px;
+    height: 26px;
+    border-radius: 0 0 4px 4px;
+}
+
+.dpad-l {
+    top: 24px;
+    left: 0;
+    width: 26px;
+    height: 22px;
+    border-radius: 4px 0 0 4px;
+}
+
+.dpad-r {
+    top: 24px;
+    right: 0;
+    width: 26px;
+    height: 22px;
+    border-radius: 0 4px 4px 0;
+}
+
+.dpad-c {
+    top: 24px;
+    left: 24px;
+    width: 22px;
+    height: 22px;
+    background: rgba(30, 30, 35, 0.8);
+    z-index: 1;
+}
+
+/* Center filler */
+
+
+/* --- STICKS --- */
+.stick-area {
+    width: 60px;
+    height: 60px;
     border-radius: 50%;
-    background: rgba(40, 40, 40, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    position: relative;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    position: absolute;
     display: flex;
     align-items: center;
     justify-content: center;
+    box-shadow: inset 0 5px 10px rgba(0, 0, 0, 0.5);
 }
 
-.stick-dot {
-    width: 12px;
-    height: 12px;
+.stick-l {
+    left: 20px;
+    top: 20px;
+}
+
+/* Xbox style: Left stick high */
+.stick-r {
+    right: 80px;
+    top: 100px;
+}
+
+/* Xbox style: Right stick low */
+
+.stick-head {
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
-    background: rgba(0, 255, 255, 0.7);
-    transition: transform 0.05s ease;
-    box-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
+    background: radial-gradient(circle at 30% 30%, #444, #222);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+    position: relative;
+    z-index: 2;
+    transition: background 0.2s;
 }
 
-.stick-dot.pressed {
-    background: var(--accent-pink);
-    box-shadow: 0 0 10px var(--accent-pink);
+.stick-head.clicked {
+    background: radial-gradient(circle at 30% 30%, var(--accent-cyan), #0088aa);
+    box-shadow: 0 0 15px var(--accent-cyan-glow);
 }
 
-.stick-label {
-    font-size: 9px;
-    color: #666;
-    font-family: var(--font-mono);
-}
-
-/* Triggers & Bumpers */
-.triggers-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 15px;
+/* --- TRIGGERS & BUMPERS --- */
+.shoulders {
+    position: absolute;
+    top: 5px;
     width: 100%;
-    justify-content: space-between;
-}
-
-.trigger-group {
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
+    justify-content: space-between;
+    padding: 0 40px;
 }
 
 .bumper {
-    padding: 3px 10px;
-    background: rgba(60, 60, 60, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    width: 80px;
+    height: 16px;
+    background: rgba(40, 40, 45, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 4px;
     font-size: 9px;
+    color: rgba(255, 255, 255, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-family: var(--font-mono);
-    color: rgba(255, 255, 255, 0.5);
-    transition: all 0.1s ease;
+    position: absolute;
+}
+
+.bumper-l {
+    left: 20px;
+    top: -10px;
+    border-radius: 4px 4px 0 20px;
+}
+
+.bumper-r {
+    right: 20px;
+    top: -10px;
+    border-radius: 4px 4px 20px 0;
 }
 
 .bumper.active {
     background: var(--accent-cyan);
-    border-color: var(--accent-cyan);
+    box-shadow: 0 0 10px var(--accent-cyan-glow);
     color: #000;
-    box-shadow: 0 0 10px var(--accent-cyan);
+    border-color: transparent;
 }
 
-.trigger {
-    width: 24px;
-    height: 40px;
-    background: rgba(40, 40, 40, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+.trigger-bar {
+    position: absolute;
+    top: -25px;
+    /* Above bumpers visually in 2D or behind */
+    width: 60px;
+    height: 8px;
+    background: #111;
     border-radius: 4px;
-    position: relative;
     overflow: hidden;
+}
+
+.trigger-l {
+    left: 30px;
+}
+
+.trigger-r {
+    right: 30px;
+}
+
+.trigger-val {
+    height: 100%;
+    background: var(--accent-cyan);
+    box-shadow: 0 0 8px var(--accent-cyan);
+    width: 0%;
+    transition: width 0.05s linear;
+}
+
+/* --- CENTER BUTTONS --- */
+.center-stack {
+    position: absolute;
+    top: 40px;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
-    align-items: flex-end;
+    gap: 12px;
+}
+
+.center-btn {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #333;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 8px;
+    display: flex;
+    align-items: center;
     justify-content: center;
 }
 
-.trigger span {
-    position: relative;
-    z-index: 1;
-    font-size: 8px;
-    font-family: var(--font-mono);
-    color: rgba(255, 255, 255, 0.6);
-    margin-bottom: 2px;
+.center-btn.active {
+    background: #fff;
+    color: #000;
+    box-shadow: 0 0 10px #fff;
 }
 
-.trigger-fill {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: linear-gradient(to top, var(--accent-cyan), rgba(0, 255, 255, 0.4));
-    transition: height 0.05s ease;
-}
-
-.center-btns {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-}
-
-.small-btn {
-    width: 20px;
-    height: 20px;
-    font-size: 10px;
-}
-
-.small-btn.guide {
-    width: 26px;
-    height: 26px;
+.guide-btn {
+    width: 28px;
+    height: 28px;
     font-size: 14px;
+    margin-top: -5px;
+    /* Slightly higher */
+    background: radial-gradient(circle, #444, #222);
+    box-shadow: 0 0 0 2px #111, 0 0 0 3px #555;
+    border: none;
 }
 
-.small-btn.guide.active {
-    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-pink));
-    box-shadow: 0 0 15px var(--accent-pink);
+.guide-btn.active {
+    background: var(--accent-cyan);
+    box-shadow: 0 0 0 2px #111, 0 0 0 3px #fff, 0 0 20px var(--accent-cyan);
+    color: #000;
 }
