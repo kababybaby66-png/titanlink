@@ -10,6 +10,7 @@ import { Duplex } from 'stream';
 import { DriverManager } from './services/DriverManager';
 import { VirtualControllerService } from './services/VirtualControllerService';
 import { twilioTurnService } from './services/TwilioTurnService';
+import { selfHostedTurnService } from './services/SelfHostedTurnService';
 import type { DisplayInfo, GamepadInputState } from '../shared/types/ipc';
 
 // Keep a global reference of the window object
@@ -527,18 +528,51 @@ function registerIpcHandlers() {
     });
     ipcMain.on('window:close', () => mainWindow?.close());
 
-    // Twilio TURN handlers
+    // TURN Server handlers (priority: Self-hosted > Twilio > Fallback STUN)
     ipcMain.handle('turn:get-ice-servers', async () => {
-        return await twilioTurnService.getIceServers();
+        // Priority 1: Self-hosted coturn server (unlimited, ~$5/month)
+        if (selfHostedTurnService.isConfigured()) {
+            console.log('[TURN] Using self-hosted coturn server');
+            return selfHostedTurnService.getIceServers();
+        }
+
+        // Priority 2: Twilio (reliable but has usage limits)
+        if (twilioTurnService.isConfigured()) {
+            console.log('[TURN] Using Twilio TURN service');
+            return await twilioTurnService.getIceServers();
+        }
+
+        // Fallback: STUN only (may not work across all NATs)
+        console.log('[TURN] No TURN configured, using STUN fallback');
+        return [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+        ];
     });
 
     ipcMain.handle('turn:is-configured', () => {
-        return twilioTurnService.isConfigured();
+        return selfHostedTurnService.isConfigured() || twilioTurnService.isConfigured();
     });
 
-    ipcMain.handle('turn:configure', (_event, accountSid: string, authToken: string) => {
+    // Configure Twilio TURN
+    ipcMain.handle('turn:configure-twilio', (_event, accountSid: string, authToken: string) => {
         twilioTurnService.setCredentials(accountSid, authToken);
         return { success: true };
+    });
+
+    // Configure self-hosted TURN (coturn)
+    ipcMain.handle('turn:configure-selfhosted', (_event, serverUrl: string, secret: string) => {
+        selfHostedTurnService.configure(serverUrl, secret);
+        return { success: true };
+    });
+
+    // Get current TURN configuration status
+    ipcMain.handle('turn:get-status', () => {
+        return {
+            selfHosted: selfHostedTurnService.isConfigured(),
+            twilio: twilioTurnService.isConfigured(),
+        };
     });
 }
 
