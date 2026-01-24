@@ -34,7 +34,7 @@ interface IncomingSignal {
 
 // Signaling server configuration
 // Supports both public server and direct IP connection modes
-const PUBLIC_SIGNALING_SERVER = 'wss://titanlink-signaling.onrender.com';
+const PUBLIC_SIGNALING_SERVER = 'ws://129.159.142.124:3001';
 
 // Connection mode types
 export type SignalingMode = 'public' | 'direct';
