@@ -32,9 +32,11 @@ export function ControllerOverlay({ input, connected }: ControllerOverlayProps) 
                 {/* --- TRIGGERS (Visual Bars) --- */}
                 <div className="trigger-bar trigger-l">
                     <div className="trigger-val" style={{ width: `${leftTrigger * 100}%` }}></div>
+                    <span className="trigger-label">LT</span>
                 </div>
                 <div className="trigger-bar trigger-r">
                     <div className="trigger-val" style={{ width: `${rightTrigger * 100}%` }}></div>
+                    <span className="trigger-label">RT</span>
                 </div>
 
                 {/* --- BUMPERS --- */}

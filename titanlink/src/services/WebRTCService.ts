@@ -442,6 +442,10 @@ class WebRTCService {
     private initializePeerConnection(): void {
         const iceServers = this.dynamicIceServers || ICE_SERVERS;
         console.log('[WebRTC] Initializing peer connection with ICE servers:', iceServers.length);
+        iceServers.forEach((s, i) => {
+            const urls = Array.isArray(s.urls) ? s.urls.join(', ') : s.urls;
+            console.log(`[WebRTC] Server [${i}]: ${urls} | Auth: ${s.username ? 'YES' : 'NO'}`);
+        });
 
         this.peerConnection = new RTCPeerConnection({
             iceServers: iceServers,
@@ -464,7 +468,7 @@ class WebRTCService {
                 const candidateStr = event.candidate.candidate;
                 const typeMatch = candidateStr.match(/typ (\w+)/);
                 const candidateType = typeMatch ? typeMatch[1] : 'unknown';
-                console.log(`[WebRTC] ICE candidate: ${candidateType} - ${event.candidate.address || 'no-address'}`);
+                console.log(`[WebRTC] ICE candidate gathered: ${candidateType} - ${event.candidate.address || 'no-address'} (${event.candidate.protocol})`);
 
                 this.sendSignal({
                     type: 'signal',
@@ -472,7 +476,15 @@ class WebRTCService {
                     from: this.peerId,
                     payload: event.candidate.toJSON(),
                 });
+            } else {
+                console.log('[WebRTC] ICE candidate gathering finished (null candidate)');
             }
+        };
+
+        // Listen for ICE gathering errors (critical for debugging TURN)
+        // @ts-ignore - event type might be missing in some TS definitions
+        this.peerConnection.onicecandidateerror = (event: any) => {
+            console.error(`[WebRTC] ICE Error ${event.errorCode}: ${event.errorText} at ${event.url || 'unknown URL'}`);
         };
 
         this.peerConnection.onconnectionstatechange = () => {

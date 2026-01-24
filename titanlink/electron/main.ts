@@ -8,7 +8,8 @@ import path from 'path';
 import dotenv from 'dotenv';
 
 // Load environment variables from .env file
-dotenv.config({ path: path.join(__dirname, '../../.env') });
+dotenv.config({ path: path.join(__dirname, '../.env') });
+console.log('[Main] Loading .env from:', path.join(__dirname, '../.env'));
 
 import { createServer, Server as HttpServer } from 'http';
 import { Duplex } from 'stream';
@@ -434,8 +435,8 @@ function createWindow() {
     });
 
     // Load the app
-    if (isDev) {
-        mainWindow.loadURL('http://127.0.0.1:5173');
+    if (process.env.VITE_DEV_SERVER_URL) {
+        mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
         mainWindow.webContents.openDevTools();
     } else {
         mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
@@ -564,6 +565,14 @@ function registerIpcHandlers() {
         return {
             selfHosted: selfHostedTurnService.isConfigured(),
         };
+    });
+
+    // Logging handler - allows renderer to log to main terminal
+    ipcMain.on('system:log', (_event, level: 'info' | 'warn' | 'error', message: string) => {
+        const prefix = `[Renderer:${level.toUpperCase()}]`;
+        if (level === 'error') console.error(prefix, message);
+        else if (level === 'warn') console.warn(prefix, message);
+        else console.log(prefix, message);
     });
 }
 

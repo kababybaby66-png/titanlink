@@ -28,7 +28,21 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
     // Attach video stream to video element
     useEffect(() => {
         if (videoRef.current && videoStream) {
+            console.log('[StreamView] Attaching video stream to element', videoStream.id);
+            const tracks = videoStream.getVideoTracks();
+            console.log(`[StreamView] Stream has ${tracks.length} video tracks`);
+            tracks.forEach(t => console.log(`[StreamView] Track ${t.id}: enabled=${t.enabled}, muted=${t.muted}, state=${t.readyState}`));
+
             videoRef.current.srcObject = videoStream;
+
+            videoRef.current.play().catch(e => {
+                console.error('[StreamView] Auto-play failed:', e);
+            });
+
+            // Monitor track unexpected ending
+            videoStream.getVideoTracks()[0].onended = () => {
+                console.warn('[StreamView] Video track ended unexpectedly');
+            };
         }
     }, [videoStream]);
 
@@ -270,12 +284,14 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
                         [MENU]
                     </CyberButton>
 
-                    <CyberButton variant="ghost" size="sm" onClick={toggleFullscreen}>
-                        [{isFullscreen ? 'EXIT_FS' : 'FULLSCREEN'}]
-                    </CyberButton>
+                    {sessionState.role === 'client' && (
+                        <CyberButton variant="ghost" size="sm" onClick={toggleFullscreen}>
+                            [{isFullscreen ? 'EXIT_FS' : 'FULLSCREEN'}]
+                        </CyberButton>
+                    )}
 
                     <div className="peer-tag">
-                        {sessionState.role === 'host' ? 'Hosting' : 'Connected to'}: <span className="text-cyan">{sessionState.peerInfo?.username || 'REMOTE_TARGET'}</span>
+                        {sessionState.role === 'host' ? 'Hosting Session' : 'Connected to'}: <span className="text-cyan">{sessionState.peerInfo?.username || 'REMOTE_TARGET'}</span>
                     </div>
 
                     <CyberButton
@@ -283,12 +299,13 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
                         size="sm"
                         onClick={() => setShowControllerOverlay(prev => !prev)}
                         className={showControllerOverlay ? 'active' : ''}
+                        title="Toggle Controller Overlay"
                     >
                         [🎮]
                     </CyberButton>
 
-                    <CyberButton variant="danger" size="sm" onClick={() => setShowQuickMenu(true)}>
-                        DISCONNECT
+                    <CyberButton variant="danger" size="sm" onClick={onDisconnect}>
+                        {sessionState.role === 'host' ? 'STOP_STREAM' : 'DISCONNECT'}
                     </CyberButton>
                 </div>
 

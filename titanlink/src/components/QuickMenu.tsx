@@ -96,14 +96,16 @@ export function QuickMenu({
                     <div className="menu-section">
                         <div className="section-title">DISPLAY</div>
                         <div className="menu-options">
-                            <button
-                                className={`option-btn ${isFullscreen ? 'active' : ''}`}
-                                onClick={onToggleFullscreen}
-                            >
-                                <span className="opt-icon">{isFullscreen ? '⊡' : '⊞'}</span>
-                                <span>{isFullscreen ? 'EXIT FULLSCREEN' : 'FULLSCREEN'}</span>
-                                <span className="hotkey">F11</span>
-                            </button>
+                            {role === 'client' && (
+                                <button
+                                    className={`option-btn ${isFullscreen ? 'active' : ''}`}
+                                    onClick={onToggleFullscreen}
+                                >
+                                    <span className="opt-icon">{isFullscreen ? '⊡' : '⊞'}</span>
+                                    <span>{isFullscreen ? 'EXIT FULLSCREEN' : 'FULLSCREEN'}</span>
+                                    <span className="hotkey">F11</span>
+                                </button>
+                            )}
                             <button
                                 className={`option-btn ${showControllerOverlay ? 'active' : ''}`}
                                 onClick={onToggleControllerOverlay}
@@ -141,7 +143,9 @@ export function QuickMenu({
                         onClick={handleDisconnect}
                         className={confirmDisconnect ? 'confirm-disconnect' : ''}
                     >
-                        {confirmDisconnect ? '⚠ CONFIRM DISCONNECT?' : 'DISCONNECT'}
+                        {confirmDisconnect
+                            ? (role === 'host' ? '⚠ STOP STREAM?' : '⚠ CONFIRM DISCONNECT?')
+                            : (role === 'host' ? 'STOP STREAM' : 'DISCONNECT')}
                     </CyberButton>
                 </div>
             </div>

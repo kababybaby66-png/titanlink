@@ -222,21 +222,22 @@
 /* Controller Overlay Container */
 .controller-overlay-container {
     position: absolute;
-    bottom: 100px;
-    right: 40px;
+    top: 100px;
+    /* Moved to top-right area */
+    right: 20px;
     z-index: 50;
     pointer-events: none;
-    animation: slideUp 0.3s ease;
+    animation: slideInRight 0.5s ease;
 }
 
-@keyframes slideUp {
+@keyframes slideInRight {
     from {
-        transform: translateY(20px);
+        transform: translateX(20px);
         opacity: 0;
     }
 
     to {
-        transform: translateY(0);
+        transform: translateX(0);
         opacity: 1;
     }
 }
@@ -277,6 +278,7 @@
     color: #aaa;
     margin: 0 2px;
 }
+
 /* Host Indicator */
 .host-broadcast-indicator {
     position: absolute;
@@ -309,7 +311,15 @@
 }
 
 @keyframes pulse-slow {
-    0%, 100% { opacity: 0.3; transform: scale(0.98); }
-    50% { opacity: 0.7; transform: scale(1.02); }
-}
 
+    0%,
+    100% {
+        opacity: 0.3;
+        transform: scale(0.98);
+    }
+
+    50% {
+        opacity: 0.7;
+        transform: scale(1.02);
+    }
+}
