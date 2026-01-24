@@ -5,11 +5,15 @@
 
 import { app, BrowserWindow, ipcMain, desktopCapturer, screen } from 'electron';
 import path from 'path';
+import dotenv from 'dotenv';
+
+// Load environment variables from .env file
+dotenv.config({ path: path.join(__dirname, '../../.env') });
+
 import { createServer, Server as HttpServer } from 'http';
 import { Duplex } from 'stream';
 import { DriverManager } from './services/DriverManager';
 import { VirtualControllerService } from './services/VirtualControllerService';
-import { twilioTurnService } from './services/TwilioTurnService';
 import { selfHostedTurnService } from './services/SelfHostedTurnService';
 import type { DisplayInfo, GamepadInputState } from '../shared/types/ipc';
 
@@ -528,18 +532,12 @@ function registerIpcHandlers() {
     });
     ipcMain.on('window:close', () => mainWindow?.close());
 
-    // TURN Server handlers (priority: Self-hosted > Twilio > Fallback STUN)
+    // TURN Server handlers (priority: Self-hosted > Fallback STUN)
     ipcMain.handle('turn:get-ice-servers', async () => {
         // Priority 1: Self-hosted coturn server (unlimited, ~$5/month)
         if (selfHostedTurnService.isConfigured()) {
             console.log('[TURN] Using self-hosted coturn server');
             return selfHostedTurnService.getIceServers();
-        }
-
-        // Priority 2: Twilio (reliable but has usage limits)
-        if (twilioTurnService.isConfigured()) {
-            console.log('[TURN] Using Twilio TURN service');
-            return await twilioTurnService.getIceServers();
         }
 
         // Fallback: STUN only (may not work across all NATs)
@@ -552,13 +550,7 @@ function registerIpcHandlers() {
     });
 
     ipcMain.handle('turn:is-configured', () => {
-        return selfHostedTurnService.isConfigured() || twilioTurnService.isConfigured();
-    });
-
-    // Configure Twilio TURN
-    ipcMain.handle('turn:configure-twilio', (_event, accountSid: string, authToken: string) => {
-        twilioTurnService.setCredentials(accountSid, authToken);
-        return { success: true };
+        return selfHostedTurnService.isConfigured();
     });
 
     // Configure self-hosted TURN (coturn)
@@ -571,7 +563,6 @@ function registerIpcHandlers() {
     ipcMain.handle('turn:get-status', () => {
         return {
             selfHosted: selfHostedTurnService.isConfigured(),
-            twilio: twilioTurnService.isConfigured(),
         };
     });
 }

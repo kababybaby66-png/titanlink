@@ -62,38 +62,11 @@ const getSignalingServerUrl = async (): Promise<string> => {
     return currentSignalingUrl;
 };
 
+// ICE servers configuration
 const ICE_SERVERS: RTCIceServer[] = [
-    // STUN servers for discovering public IP
-    { urls: 'stun:stun.l.google.com:19302' },
+    // STUN servers for discovering public IP (fallback)
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-
-    // Free TURN servers - multiple fallbacks for reliability
-    // Expressturn free tier
-    {
-        urls: 'turn:relay1.expressturn.com:3478',
-        username: 'ef4URNRJJKVV4THZMB',
-        credential: 'RdSOlkPLpVBzRw4K',
-    },
-    // Numb STUN/TURN (free, requires registration but has public test credentials)
-    {
-        urls: 'turn:numb.viagenie.ca',
-        username: 'webrtc@live.com',
-        credential: 'muazkh',
-    },
-    {
-        urls: 'turn:numb.viagenie.ca:443?transport=tcp',
-        username: 'webrtc@live.com',
-        credential: 'muazkh',
-    },
-    // Twilio TURN test (may have limited availability)
-    {
-        urls: 'turn:global.turn.twilio.com:3478?transport=udp',
-        username: 'demo',
-        credential: 'demo',
-    },
 ];
 
 export interface WebRTCServiceCallbacks {
@@ -116,7 +89,6 @@ class WebRTCService {
     private callbacks: WebRTCServiceCallbacks | null = null;
     private mediaStream: MediaStream | null = null;
     private latencyInterval: ReturnType<typeof setInterval> | null = null;
-    private pendingOffer: RTCSessionDescriptionInit | null = null;
     private dynamicIceServers: RTCIceServer[] | null = null;
 
     constructor() {
@@ -124,28 +96,19 @@ class WebRTCService {
     }
 
     /**
-     * Fetch ICE servers from Twilio or use fallback
+     * Fetch ICE servers from Electron main process
      */
     private async fetchIceServers(): Promise<RTCIceServer[]> {
-        // Try to get Twilio ICE servers if available
+        // Try to get dynamic ICE servers (e.g., self-hosted TURN)
         if (window.electronAPI?.turn?.getIceServers) {
             try {
-                console.log('[WebRTC] Fetching ICE servers from Twilio...');
                 const servers = await window.electronAPI.turn.getIceServers();
                 if (servers && servers.length > 0) {
-                    console.log(`[WebRTC] Got ${servers.length} ICE servers from Twilio`);
-                    // Check if we have TURN servers (not just STUN)
-                    const hasTurn = servers.some(s => {
-                        const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
-                        return urls.some(url => url.startsWith('turn:') || url.startsWith('turns:'));
-                    });
-                    if (hasTurn) {
-                        console.log('[WebRTC] Twilio TURN servers available');
-                    }
+                    console.log(`[WebRTC] Got ${servers.length} ICE servers from Main process`);
                     return servers as RTCIceServer[];
                 }
             } catch (error) {
-                console.error('[WebRTC] Failed to fetch Twilio ICE servers:', error);
+                console.error('[WebRTC] Failed to fetch ICE servers:', error);
             }
         }
 
@@ -178,7 +141,7 @@ class WebRTCService {
 
             await this.startScreenCapture(displayId);
 
-            // Fetch ICE servers (Twilio if configured, otherwise fallback)
+            // Fetch ICE servers
             this.dynamicIceServers = await this.fetchIceServers();
 
             await this.connectToSignalingServer();
@@ -203,7 +166,7 @@ class WebRTCService {
         try {
             callbacks.onStateChange('connecting');
 
-            // Fetch ICE servers (Twilio if configured, otherwise fallback)
+            // Fetch ICE servers
             this.dynamicIceServers = await this.fetchIceServers();
 
             await this.connectToSignalingServer();
