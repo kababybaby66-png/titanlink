@@ -90,6 +90,7 @@ class WebRTCService {
     private mediaStream: MediaStream | null = null;
     private latencyInterval: ReturnType<typeof setInterval> | null = null;
     private dynamicIceServers: RTCIceServer[] | null = null;
+    private hasLoggedConnectionStats = false;
 
     constructor() {
         this.peerId = uuidv4().substring(0, 8);
@@ -181,6 +182,8 @@ class WebRTCService {
     }
 
     async disconnect(): Promise<void> {
+        this.hasLoggedConnectionStats = false;
+
         if (this.latencyInterval) {
             clearInterval(this.latencyInterval);
             this.latencyInterval = null;
@@ -663,6 +666,19 @@ class WebRTCService {
 
                 stats.forEach((report) => {
                     if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                        // Log connection details once
+                        if (!this.hasLoggedConnectionStats) {
+                            this.hasLoggedConnectionStats = true;
+                            const localCandidate = stats.get(report.localCandidateId);
+                            const remoteCandidate = stats.get(report.remoteCandidateId);
+
+                            console.log('--- Connection Details ---');
+                            console.log(`[WebRTC] Connected via: ${localCandidate?.candidateType} <-> ${remoteCandidate?.candidateType}`);
+                            console.log(`[WebRTC] Local: ${localCandidate?.ip}:${localCandidate?.port} (${localCandidate?.protocol})`);
+                            console.log(`[WebRTC] Remote: ${remoteCandidate?.ip}:${remoteCandidate?.port} (${remoteCandidate?.protocol})`);
+                            console.log('--------------------------');
+                        }
+
                         const rtt = report.currentRoundTripTime;
                         if (rtt !== undefined) {
                             const latencyMs = Math.round((rtt * 1000) / 2);

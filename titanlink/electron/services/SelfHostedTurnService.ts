@@ -14,22 +14,31 @@ export interface IceServerConfig {
 }
 
 export class SelfHostedTurnService {
-    private serverUrl: string;
-    private secret: string;
-    private ttlSeconds: number;
+    private serverUrl: string = '';
+    private secret: string = '';
+    private ttlSeconds: number = 0;
 
     constructor() {
-        // Read from environment variables
-        this.serverUrl = process.env.TURN_SERVER_URL || '';
-        this.secret = process.env.TURN_SERVER_SECRET || '';
-        this.ttlSeconds = parseInt(process.env.TURN_CREDENTIAL_TTL || '86400'); // Default 24 hours
+        // Properties will be read dynamically from process.env or set via configure()
+    }
+
+    private get url(): string {
+        return this.serverUrl || process.env.TURN_SERVER_URL || '';
+    }
+
+    private get authSecret(): string {
+        return this.secret || process.env.TURN_SERVER_SECRET || '';
+    }
+
+    private get ttl(): number {
+        return this.ttlSeconds || parseInt(process.env.TURN_CREDENTIAL_TTL || '86400');
     }
 
     /**
      * Check if self-hosted TURN is configured
      */
     isConfigured(): boolean {
-        return Boolean(this.serverUrl && this.secret);
+        return Boolean(this.url && this.authSecret);
     }
 
     /**
@@ -50,11 +59,11 @@ export class SelfHostedTurnService {
      * The password is: HMAC-SHA1(secret, username) base64 encoded
      */
     generateCredentials(userId: string = 'titanlink'): { username: string; credential: string; expiresAt: number } {
-        const expiresAt = Math.floor(Date.now() / 1000) + this.ttlSeconds;
+        const expiresAt = Math.floor(Date.now() / 1000) + this.ttl;
         const username = `${expiresAt}:${userId}`;
 
         // Calculate HMAC-SHA1
-        const hmac = crypto.createHmac('sha1', this.secret);
+        const hmac = crypto.createHmac('sha1', this.authSecret);
         hmac.update(username);
         const credential = hmac.digest('base64');
 
@@ -79,9 +88,9 @@ export class SelfHostedTurnService {
         console.log(`[SelfHostedTurn] Generated credentials, expires: ${new Date(expiresAt).toISOString()}`);
 
         // Parse the server URL to create both STUN and TURN entries
-        const serverHost = this.serverUrl.replace(/^turns?:/, '').split(':')[0];
-        const serverPort = this.serverUrl.includes(':') ?
-            this.serverUrl.split(':').pop()?.replace(/[^0-9]/g, '') || '3478' :
+        const serverHost = this.url.replace(/^turns?:/, '').split(':')[0];
+        const serverPort = this.url.includes(':') ?
+            this.url.split(':').pop()?.replace(/[^0-9]/g, '') || '3478' :
             '3478';
 
         return [

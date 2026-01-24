@@ -113,6 +113,17 @@ no-tlsv1
 no-tlsv1_1
 EOF
 
+# Flush default Oracle Cloud iptables rules (which block everything)
+echo -e "${YELLOW}Flushing default iptables rules...${NC}"
+iptables -P INPUT ACCEPT
+iptables -P FORWARD ACCEPT
+iptables -P OUTPUT ACCEPT
+iptables -F
+
+# Install netfilter-persistent to save these changes
+apt-get install -y iptables-persistent netfilter-persistent
+netfilter-persistent save
+
 # Configure firewall (if ufw is installed)
 if command -v ufw &> /dev/null; then
     echo -e "${YELLOW}Configuring firewall...${NC}"
