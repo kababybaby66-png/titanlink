@@ -26,3 +26,11 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Agent/Process documentation
+task_plan.md
+findings.md
+progress.md
+SkillMaker.md
+ProblemSolver.md
+Design.md
