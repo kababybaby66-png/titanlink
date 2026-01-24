@@ -1,6 +1,0 @@
-  ΓÇó electron-builder  version=24.13.3 os=10.0.26200
-  ΓÇó loaded configuration  file=package.json ("build" field)
-  ΓÇó packaging       platform=win32 arch=x64 electron=28.3.3 appOutDir=release\win-unpacked
-  ΓÇó default Electron icon is used  reason=application icon is not set
-  ΓÇó building        target=nsis file=release\TitanLink Setup 1.0.0.exe archs=x64 oneClick=false perMachine=true
-  ΓÇó building block map  blockMapFile=release\TitanLink Setup 1.0.0.exe.blockmap
