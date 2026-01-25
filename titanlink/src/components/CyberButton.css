@@ -19,21 +19,21 @@
 
 /* --- VARIANTS --- */
 .cyber-btn--primary {
-    background: var(--accent-cyan);
-    color: var(--void-black);
-    box-shadow: 0 0 10px var(--accent-cyan-dim), inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+    background: var(--primary);
+    color: var(--bg-dark);
+    box-shadow: 0 0 10px rgba(0, 242, 255, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.2);
 }
 
 .cyber-btn--primary:hover:not(:disabled) {
     background: #fff;
-    box-shadow: 0 0 20px var(--accent-cyan);
+    box-shadow: 0 0 20px var(--primary);
     text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
 }
 
 .cyber-btn--secondary {
     background: rgba(255, 255, 255, 0.03);
-    color: var(--metal-chrome);
-    border: 1px solid var(--metal-mid);
+    color: var(--text-main);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
     outline: 1px solid rgba(255, 255, 255, 0.05);
     outline-offset: -3px;
@@ -42,33 +42,33 @@
 .cyber-btn--secondary:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.08);
     color: white;
-    border-color: var(--accent-cyan);
+    border-color: var(--primary);
     box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
 }
 
 .cyber-btn--ghost {
     background: rgba(255, 255, 255, 0.02);
-    color: var(--metal-light);
+    color: var(--text-muted);
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .cyber-btn--ghost:hover:not(:disabled) {
-    color: var(--metal-chrome);
-    border-color: var(--metal-light);
+    color: var(--text-main);
+    border-color: rgba(255, 255, 255, 0.3);
     background: rgba(255, 255, 255, 0.05);
     box-shadow: 0 0 10px rgba(255, 255, 255, 0.05);
 }
 
 .cyber-btn--danger {
     background: rgba(255, 42, 42, 0.1);
-    color: var(--accent-danger);
-    border: 1px solid var(--accent-danger);
+    color: var(--danger);
+    border: 1px solid var(--danger);
 }
 
 .cyber-btn--danger:hover:not(:disabled) {
-    background: var(--accent-danger);
-    color: var(--void-black);
-    box-shadow: 0 0 15px var(--accent-danger-dim);
+    background: var(--danger);
+    color: var(--bg-dark);
+    box-shadow: 0 0 15px rgba(255, 42, 42, 0.4);
 }
 
 /* --- SIZES --- */

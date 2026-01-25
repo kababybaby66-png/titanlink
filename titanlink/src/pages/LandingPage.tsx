@@ -27,28 +27,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <div className="action-grid">
                     <div className="action-card host-card" onClick={onHostClick}>
                         <div className="card-glare"></div>
-                        <div className="card-content">
-                            <div className="card-icon">◈</div>
-                            <h2>HOST SESSION</h2>
-                            <p>Initialize transmission beacon. Allow remote neural interface.</p>
-                            <div className="card-footer">
-                                <span className="cmd-text">EXECUTE BEACON_INIT</span>
-                                <span className="arrow">→</span>
-                            </div>
-                        </div>
+                        <div className="card-icon">◈</div>
+                        <h2>HOST SESSION</h2>
+                        <p>Initialize transmission beacon. Allow remote neural interface.</p>
+                        <button className="primary-action-btn">
+                            <span className="cmd-text">HOST SESSION</span>
+                            <span className="material-symbols-outlined">arrow_forward</span>
+                        </button>
                     </div>
 
                     <div className="action-card connect-card" onClick={onConnectClick}>
                         <div className="card-glare"></div>
-                        <div className="card-content">
-                            <div className="card-icon">⚡</div>
-                            <h2>CONNECT</h2>
-                            <p>Establish link to remote beacon. Low latency synchronization.</p>
-                            <div className="card-footer">
-                                <span className="cmd-text">EXECUTE UPLINK_SYNC</span>
-                                <span className="arrow">→</span>
-                            </div>
-                        </div>
+                        <div className="card-icon">⚡</div>
+                        <h2>CONNECT</h2>
+                        <p>Establish link to remote beacon. Low latency synchronization.</p>
+                        <button className="primary-action-btn">
+                            <span className="cmd-text">JOIN SESSION</span>
+                            <span className="material-symbols-outlined">arrow_forward</span>
+                        </button>
                     </div>
                 </div>
 
@@ -58,7 +54,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                         onClick={onSettingsClick}
                         className="settings-btn"
                     >
-                        [ SYSTEM CONFIGURATION ]
+                        SYSTEM CONFIGURATION
                     </CyberButton>
                 </div>
             </div>

@@ -34,7 +34,7 @@ export interface SessionInfo {
 
 export interface StreamSettings {
     resolution: '1080p' | '720p' | '1440p' | '4k';
-    fps: 30 | 60 | 120 | 144;
+    fps: 30 | 60 | 120 | 144 | 240;
     bitrate: number; // in Mbps
     codec: 'h264' | 'vp8' | 'vp9';
 }
@@ -47,8 +47,15 @@ export const DEFAULT_SETTINGS: StreamSettings = {
 };
 
 // ============================================
-// Connection & Session Types
+// System Status Types
 // ============================================
+
+export interface SystemStats {
+    cpuUsage: number; // percentage 0-100
+    memUsage: number; // percentage 0-100
+    totalMem: number; // in GB
+    freeMem: number; // in GB
+}
 
 export interface GamepadInputState {
     // Buttons (16 bits - bitfield for efficiency)
@@ -112,6 +119,7 @@ export interface IpcMainHandlers {
     'system:check-drivers': () => Promise<DriverCheckResult>;
     'system:install-vigembus': () => Promise<{ success: boolean; error?: string }>;
     'system:get-displays': () => Promise<DisplayInfo[]>;
+    'system:get-stats': () => Promise<SystemStats>;
 
     // Session management
     'session:start-hosting': (displayId: string) => Promise<{ sessionCode: string }>;

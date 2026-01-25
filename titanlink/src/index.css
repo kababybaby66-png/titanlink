@@ -1,71 +1,43 @@
 /**
  * TitanLink - "Orbital Command" Theme
- * Aesthetic: Dark Industrial, Sci-Fi, Vital Telemetry
+ * Design System Implementation based on Stitch output
  */
 
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;800&family=Orbitron:wght@500;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 
 :root {
-  /* --- PALETTE: THE VOID --- */
-  --void-black: #050505;
-  --void-deep: #0A0A0B;
-  --void-surface: #111113;
-  --void-elevated: #1A1A1D;
-  --void-overlay: rgba(5, 5, 5, 0.85);
+  /* --- PALETTE: STITCH DESIGN SYSTEM --- */
+  --primary: #00f2ff;
+  /* Electric Cyan */
+  --primary-dim: #00acc1;
+  --secondary: #ffb300;
+  /* Amber Warning */
+  --danger: #ff2a2a;
+  /* Critical Error */
 
-  /* --- PALETTE: INDUSTRIAL METALS --- */
-  --metal-dark: #333338;
-  --metal-mid: #52525B;
-  --metal-light: #A1A1AA;
-  --metal-chrome: #F4F4F5;
+  --bg-light: #f5f8f8;
+  --bg-dark: #050b0c;
+  /* Deep Void Black */
+  --surface-dark: #0f1719;
+  --surface-glass: rgba(15, 23, 25, 0.7);
 
-  /* --- ACCENTS: SYSTEM STATE --- */
-  /* Primary: Electric Cyan (Data/Connection) */
-  --accent-cyan: #00F0FF;
-  --accent-cyan-dim: rgba(0, 240, 255, 0.1);
-  --accent-cyan-glow: rgba(0, 240, 255, 0.6);
-
-  /* Secondary: Plasma Amber (Warning/Processing) */
-  --accent-amber: #FFB000;
-  --accent-amber-dim: rgba(255, 176, 0, 0.1);
-
-  /* Danger: Reactor Core Red (Error/Critical) */
-  --accent-danger: #FF2A2A;
-  --accent-danger-dim: rgba(255, 42, 42, 0.15);
-
-  /* Success: Bio Green (Stable) */
-  --accent-success: #00FF9D;
-  --accent-success-dim: rgba(0, 255, 157, 0.1);
+  --text-main: #ffffff;
+  --text-muted: #94a3b8;
+  /* Slate 400 equivalent */
 
   /* --- TYPOGRAPHY --- */
-  --font-display: 'Orbitron', 'Inter', sans-serif;
-  --font-ui: 'Inter', system-ui, sans-serif;
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  /* --- SPACING (Industrial Grid) --- */
-  --space-unit: 4px;
-  --space-xs: calc(var(--space-unit) * 1);
-  /* 4px */
-  --space-sm: calc(var(--space-unit) * 2);
-  /* 8px */
-  --space-md: calc(var(--space-unit) * 4);
-  /* 16px */
-  --space-lg: calc(var(--space-unit) * 6);
-  /* 24px */
-  --space-xl: calc(var(--space-unit) * 10);
-  /* 40px */
-  --space-xxl: calc(var(--space-unit) * 16);
-  /* 64px */
+  /* --- EFFECTS --- */
+  --shadow-neon: 0 0 10px rgba(0, 242, 255, 0.5), 0 0 20px rgba(0, 242, 255, 0.3);
+  --shadow-neon-amber: 0 0 10px rgba(255, 179, 0, 0.5), 0 0 20px rgba(255, 179, 0, 0.3);
 
-  /* --- BORDERS & EFFECTS --- */
-  --border-thin: 1px solid var(--metal-dark);
-  --border-glow: 1px solid var(--metal-mid);
-  --glass-panel: rgba(26, 26, 29, 0.7);
-  --glass-blur: blur(12px);
-
-  --shadow-flat: 0 0 0 1px var(--metal-dark);
-  --shadow-depth: 0 8px 32px rgba(0, 0, 0, 0.6);
-  --shadow-glow-cyan: 0 0 20px var(--accent-cyan-dim);
+  /* --- SPACING & BORDERS --- */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --border-color: rgba(0, 242, 255, 0.2);
 }
 
 /* --- RESET & BASE --- */
@@ -83,162 +55,137 @@ body,
   height: 100%;
   width: 100%;
   overflow: hidden;
-  /* App-like feel */
 }
 
 body {
-  background-color: var(--void-black);
-  color: var(--metal-chrome);
-  font-family: var(--font-ui);
-  text-rendering: optimizeLegibility;
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  font-family: var(--font-display);
   -webkit-font-smoothing: antialiased;
   background-image:
-    radial-gradient(circle at 50% 0%, var(--void-surface) 0%, transparent 60%),
-    linear-gradient(rgba(0, 0, 0, 0.2) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.2) 1px, transparent 1px);
+    radial-gradient(circle at 50% 50%, rgba(13, 50, 60, 0.4) 0%, transparent 60%),
+    linear-gradient(rgba(0, 242, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 242, 255, 0.05) 1px, transparent 1px);
   background-size: 100% 100%, 40px 40px, 40px 40px;
+  background-position: center center, 0 0, 0 0;
   user-select: none;
 }
 
-/* --- TYPOGRAPHY UTILITIES --- */
-h1,
-h2,
-h3,
-h4 {
-  font-family: var(--font-display);
-  color: #FFFFFF;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 700;
+/* --- UTILITY CLASSES --- */
+
+/* Text Utilities */
+.text-primary {
+  color: var(--primary);
 }
 
-.text-mono {
-  font-family: var(--font-mono);
-}
-
-.text-cyan {
-  color: var(--accent-cyan);
-}
-
-.text-amber {
-  color: var(--accent-amber);
+.text-secondary {
+  color: var(--secondary);
 }
 
 .text-danger {
-  color: var(--accent-danger);
+  color: var(--danger);
 }
 
-/* --- COMPONENT CLASSES --- */
-
-/* Tech Panel */
-.panel {
-  background: var(--glass-panel);
-  backdrop-filter: var(--glass-blur);
-  border: var(--border-thin);
-  border-left: 2px solid var(--metal-mid);
-  padding: var(--space-md);
-  position: relative;
+.text-muted {
+  color: var(--text-muted);
 }
 
-.panel::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 8px;
-  height: 8px;
-  background: linear-gradient(45deg, transparent 50%, var(--metal-mid) 50%);
-}
-
-/* Cyber Inputs */
-input[type="text"],
-input[type="password"] {
-  background: var(--void-deep);
-  border: 1px solid var(--metal-dark);
-  color: var(--accent-cyan);
+.font-mono {
   font-family: var(--font-mono);
-  padding: var(--space-sm) var(--space-md);
-  outline: none;
-  transition: all 0.2s ease;
-  width: 100%;
-  user-select: text;
 }
 
-input:focus {
-  border-color: var(--accent-cyan);
-  box-shadow: 0 0 15px var(--accent-cyan-dim);
-  background: var(--void-elevated);
+.font-bold {
+  font-weight: 700;
 }
 
-/* --- ANIMATIONS --- */
-@keyframes scanline {
-  0% {
-    transform: translateY(-100%);
-  }
-
-  100% {
-    transform: translateY(100vh);
-  }
+.uppercase {
+  text-transform: uppercase;
 }
 
-.scanline-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  background: linear-gradient(to bottom, transparent 50%, rgba(0, 0, 0, 0.1) 51%);
+.tracking-widest {
+  letter-spacing: 0.1em;
+}
+
+/* Backgrounds */
+.bg-dark {
+  background-color: var(--bg-dark);
+}
+
+.bg-surface {
+  background-color: var(--surface-dark);
+}
+
+/* Glassmorphism */
+.glass-panel {
+  background: rgba(15, 34, 35, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+}
+
+.glass-panel:hover {
+  border-color: rgba(0, 242, 255, 0.5);
+  box-shadow: 0 0 25px rgba(0, 242, 255, 0.15);
+}
+
+/* Effects */
+.glow-text {
+  text-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+}
+
+.scanlines {
+  background: linear-gradient(to bottom,
+      rgba(255, 255, 255, 0),
+      rgba(255, 255, 255, 0) 50%,
+      rgba(0, 0, 0, 0.2) 50%,
+      rgba(0, 0, 0, 0.2));
   background-size: 100% 4px;
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
   z-index: 9999;
   opacity: 0.3;
 }
 
-@keyframes glitch-skew {
-  0% {
-    transform: skew(0deg);
-  }
+.clip-bevel {
+  clip-path: polygon(10px 0, 100% 0,
+      100% calc(100% - 10px), calc(100% - 10px) 100%,
+      0 100%, 0 10px);
+}
 
-  20% {
-    transform: skew(-2deg);
-  }
+/* Animations */
+@keyframes pulse-slow {
 
-  40% {
-    transform: skew(2deg);
-  }
-
-  60% {
-    transform: skew(-1deg);
-  }
-
-  80% {
-    transform: skew(1deg);
-  }
-
+  0%,
   100% {
-    transform: skew(0deg);
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
   }
 }
 
-.animate-glitch {
-  animation: glitch-skew 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+.animate-pulse {
+  animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* --- SCROLLBARS --- */
+/* Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--void-black);
+  background: var(--bg-dark);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--metal-mid);
-  border-radius: 0;
+  background: #20494b;
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-cyan);
+  background: var(--primary);
 }

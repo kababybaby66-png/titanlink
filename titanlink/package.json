@@ -19,6 +19,8 @@
         "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
     },
     "dependencies": {
+        "@fontsource/jetbrains-mono": "^5.2.8",
+        "@fontsource/space-grotesk": "^5.2.10",
         "dotenv": "^17.2.3",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",

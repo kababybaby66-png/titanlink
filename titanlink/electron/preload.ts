@@ -25,6 +25,9 @@ const electronAPI = {
 
         getDisplays: (): Promise<DisplayInfo[]> =>
             ipcRenderer.invoke('system:get-displays'),
+
+        getStats: (): Promise<any> =>
+            ipcRenderer.invoke('system:get-stats'),
     },
 
     // ============================================

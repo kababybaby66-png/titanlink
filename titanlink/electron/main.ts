@@ -5,6 +5,7 @@
 
 import { app, BrowserWindow, ipcMain, desktopCapturer, screen } from 'electron';
 import path from 'path';
+import os from 'os';
 import dotenv from 'dotenv';
 
 // Load environment variables from .env file
@@ -472,6 +473,7 @@ function registerIpcHandlers() {
     });
 
     ipcMain.handle('system:get-displays', async (): Promise<DisplayInfo[]> => {
+        // ... (existing implementation)
         const sources = await desktopCapturer.getSources({
             types: ['screen'],
             thumbnailSize: { width: 0, height: 0 }
@@ -481,7 +483,6 @@ function registerIpcHandlers() {
 
         return sources.map((source, index) => {
             const display = displays[index] || displays[0];
-            // Use scaleFactor to get actual physical resolution
             const scaleFactor = display.scaleFactor || 1;
             return {
                 id: source.id,
@@ -491,6 +492,45 @@ function registerIpcHandlers() {
                 primary: display.id === screen.getPrimaryDisplay().id,
             };
         });
+    });
+
+    // System Stats Handler
+    let previousCpu = { idle: 0, total: 0 };
+
+    ipcMain.handle('system:get-stats', async () => {
+        // Calculate CPU usage
+        const cpus = os.cpus();
+        let idle = 0;
+        let total = 0;
+
+        cpus.forEach(cpu => {
+            for (const type in cpu.times) {
+                total += (cpu.times as any)[type];
+            }
+            idle += cpu.times.idle;
+        });
+
+        let cpuUsage = 0;
+        if (previousCpu.total > 0) {
+            const diffIdle = idle - previousCpu.idle;
+            const diffTotal = total - previousCpu.total;
+            if (diffTotal > 0) {
+                cpuUsage = Math.round((1 - diffIdle / diffTotal) * 100);
+            }
+        }
+        previousCpu = { idle, total };
+
+        // Memory Usage
+        const totalMem = os.totalmem();
+        const freeMem = os.freemem();
+        const memUsage = Math.round(((totalMem - freeMem) / totalMem) * 100);
+
+        return {
+            cpuUsage,
+            memUsage,
+            totalMem: parseFloat((totalMem / (1024 ** 3)).toFixed(1)),
+            freeMem: parseFloat((freeMem / (1024 ** 3)).toFixed(1))
+        };
     });
 
     // Controller handlers - these run in main process for native access

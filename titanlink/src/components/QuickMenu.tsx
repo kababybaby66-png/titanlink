@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { CyberButton } from './CyberButton';
+import { GlassCard } from './ui/GlassCard';
+import { StatusBadge } from './ui/StatusBadge';
 import './QuickMenu.css';
 
 interface QuickMenuProps {
@@ -26,7 +27,7 @@ export function QuickMenu({
     isFullscreen,
     sessionCode,
     role,
-    latency,
+    latency = 0,
     peerName,
 }: QuickMenuProps) {
     const [confirmDisconnect, setConfirmDisconnect] = useState(false);
@@ -42,113 +43,102 @@ export function QuickMenu({
         }
     };
 
-    const handleBackdropClick = (e: React.MouseEvent) => {
-        if (e.target === e.currentTarget) {
-            onClose();
-            setConfirmDisconnect(false);
-        }
-    };
-
     return (
-        <div className="quick-menu-backdrop" onClick={handleBackdropClick}>
-            <div className="quick-menu">
-                <div className="quick-menu-header">
-                    <div className="menu-title">
-                        <span className="menu-icon">⚡</span>
-                        TITANLINK CONTROL
+        <div className="quick-menu-overlay">
+            {/* BACKDROP */}
+            <div className="backdrop" onClick={onClose}></div>
+
+            {/* SIDEBAR DRAWER */}
+            <aside className="quick-menu-drawer glass-panel">
+                <div className="drawer-header">
+                    <div className="flex items-center gap-3">
+                        <span className="material-symbols-outlined text-primary animate-spin-slow">settings_motion_mode</span>
+                        <h2 className="text-white text-lg font-bold tracking-wide uppercase">QUICK MENU</h2>
                     </div>
-                    <button className="close-btn" onClick={onClose}>✕</button>
+                    <button className="close-btn" onClick={onClose}>
+                        <span className="material-symbols-outlined">close</span>
+                    </button>
                 </div>
 
-                <div className="quick-menu-content">
-                    {/* Session Info */}
+                <div className="drawer-content customs-scrollbar">
+                    {/* INPUT CONFIG */}
                     <div className="menu-section">
-                        <div className="section-title">SESSION</div>
-                        <div className="session-info">
-                            {role === 'host' && sessionCode && (
-                                <div className="info-row">
-                                    <span className="info-label">CODE</span>
-                                    <span className="info-value session-code">{sessionCode}</span>
-                                </div>
-                            )}
-                            <div className="info-row">
-                                <span className="info-label">ROLE</span>
-                                <span className="info-value">{role?.toUpperCase() || 'UNKNOWN'}</span>
+                        <p className="section-label">INPUT CONFIG</p>
+
+                        <button className={`menu-item ${showControllerOverlay ? 'active' : ''}`} onClick={onToggleControllerOverlay}>
+                            <div className="item-icon-box">
+                                <span className="material-symbols-outlined">gamepad</span>
                             </div>
-                            {peerName && (
-                                <div className="info-row">
-                                    <span className="info-label">{role === 'host' ? 'CLIENT' : 'HOST'}</span>
-                                    <span className="info-value">{peerName}</span>
-                                </div>
-                            )}
-                            {latency !== undefined && (
-                                <div className="info-row">
-                                    <span className="info-label">LATENCY</span>
-                                    <span className={`info-value ${latency < 50 ? 'good' : latency < 100 ? 'warn' : 'bad'}`}>
-                                        {latency}ms
-                                    </span>
-                                </div>
-                            )}
-                        </div>
+                            <div className="item-details">
+                                <p className="label">Controller Overlay</p>
+                                <p className="sub">{showControllerOverlay ? 'VISIBLE' : 'HIDDEN'}</p>
+                            </div>
+                            <span className="hotkey">C</span>
+                        </button>
+
+                        <button className={`menu-item ${isFullscreen ? 'active' : ''}`} onClick={onToggleFullscreen}>
+                            <div className="item-icon-box">
+                                <span className="material-symbols-outlined">aspect_ratio</span>
+                            </div>
+                            <div className="item-details">
+                                <p className="label">Fullscreen</p>
+                                <p className="sub">{isFullscreen ? 'ENABLED' : 'DISABLED'}</p>
+                            </div>
+                            <span className="hotkey">F11</span>
+                        </button>
                     </div>
 
-                    {/* Display Options */}
+                    {/* TELEMETRY */}
                     <div className="menu-section">
-                        <div className="section-title">DISPLAY</div>
-                        <div className="menu-options">
-                            {role === 'client' && (
-                                <button
-                                    className={`option-btn ${isFullscreen ? 'active' : ''}`}
-                                    onClick={onToggleFullscreen}
-                                >
-                                    <span className="opt-icon">{isFullscreen ? '⊡' : '⊞'}</span>
-                                    <span>{isFullscreen ? 'EXIT FULLSCREEN' : 'FULLSCREEN'}</span>
-                                    <span className="hotkey">F11</span>
-                                </button>
-                            )}
-                            <button
-                                className={`option-btn ${showControllerOverlay ? 'active' : ''}`}
-                                onClick={onToggleControllerOverlay}
-                            >
-                                <span className="opt-icon">🎮</span>
-                                <span>CONTROLLER VIEW</span>
-                                <span className="hotkey">C</span>
-                            </button>
-                        </div>
+                        <p className="section-label">TELEMETRY</p>
+                        <GlassCard className="telemetry-box">
+                            <div className="telemetry-row">
+                                <span className="label">LATENCY</span>
+                                <div className="flex items-center gap-2">
+                                    <StatusBadge status={latency < 50 ? 'online' : latency < 100 ? 'busy' : 'error'} label=" " pulse />
+                                    <span className="value-large">{latency}<span className="unit">ms</span></span>
+                                </div>
+                            </div>
+                            <div className="telemetry-details">
+                                <span>LOSS: 0.0%</span>
+                                <span>JITTER: 1.2ms</span>
+                            </div>
+                            {/* Animated Decoration */}
+                            <div className="telemetry-anim-bar">
+                                <div className="bar-fill"></div>
+                            </div>
+                        </GlassCard>
                     </div>
 
-                    {/* Hotkeys Reference */}
+                    {/* SESSION INFO */}
                     <div className="menu-section">
-                        <div className="section-title">HOTKEYS</div>
-                        <div className="hotkeys-grid">
-                            <div className="hotkey-item">
-                                <span className="key">ESC</span>
-                                <span className="desc">Toggle Menu</span>
+                        <p className="section-label">SESSION INFO</p>
+                        <div className="session-info-grid">
+                            <div className="info-item">
+                                <span className="label">ROLE</span>
+                                <span className="value">{role?.toUpperCase()}</span>
                             </div>
-                            <div className="hotkey-item">
-                                <span className="key">F11</span>
-                                <span className="desc">Fullscreen</span>
-                            </div>
-                            <div className="hotkey-item">
-                                <span className="key">C</span>
-                                <span className="desc">Controller View</span>
-                            </div>
+                            {sessionCode && (
+                                <div className="info-item">
+                                    <span className="label">CODE</span>
+                                    <span className="value text-primary">{sessionCode}</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
 
-                <div className="quick-menu-footer">
-                    <CyberButton
-                        variant={confirmDisconnect ? 'danger' : 'ghost'}
+                {/* FOOTER */}
+                <div className="drawer-footer">
+                    <button
+                        className={`disconnect-btn ${confirmDisconnect ? 'confirm' : ''}`}
                         onClick={handleDisconnect}
-                        className={confirmDisconnect ? 'confirm-disconnect' : ''}
                     >
-                        {confirmDisconnect
-                            ? (role === 'host' ? '⚠ STOP STREAM?' : '⚠ CONFIRM DISCONNECT?')
-                            : (role === 'host' ? 'STOP STREAM' : 'DISCONNECT')}
-                    </CyberButton>
+                        <span className="material-symbols-outlined">power_settings_new</span>
+                        <span>{confirmDisconnect ? 'CONFIRM ABORT?' : 'DISCONNECT'}</span>
+                    </button>
                 </div>
-            </div>
+            </aside>
         </div>
     );
 }

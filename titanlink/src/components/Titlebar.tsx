@@ -1,25 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import './Titlebar.css';
 
 export const Titlebar = () => {
-    const [isMaximized, setIsMaximized] = useState(false);
-    const [fps, setFps] = useState(0);
-
-    // Simulate FPS counter for "Live Telemetry" feel
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setFps(Math.floor(58 + Math.random() * 4));
-        }, 1000);
-        return () => clearInterval(interval);
-    }, []);
-
     const handleMinimize = () => {
         window.electronAPI?.window.minimize();
     };
 
     const handleMaximize = () => {
         window.electronAPI?.window.maximize();
-        setIsMaximized(!isMaximized);
     };
 
     const handleClose = () => {
@@ -31,30 +19,26 @@ export const Titlebar = () => {
             <div className="titlebar-drag-region" />
 
             <div className="titlebar-left">
-                <div className="app-logo">
-                    <span className="logo-icon">◈</span>
-                    <span className="logo-text">TITAN<span className="text-cyan">LINK</span></span>
+                <div className="flex items-center gap-3 text-white app-logo">
+                    <div className="size-6 text-primary animate-pulse">
+                        <span className="material-symbols-outlined logo-icon">hub</span>
+                    </div>
+                    <div className="flex flex-col">
+                        <h2 className="text-white text-sm font-bold tracking-widest uppercase">TitanLink // Client</h2>
+                        <span className="text-[10px] text-primary/70 font-mono leading-none sys-status">SYS.STATUS: ONLINE</span>
+                    </div>
                 </div>
-                <div className="telemetry-pill">
-                    <span className="status-dot online"></span>
-                    <span className="system-status">SYS.ONLINE</span>
-                </div>
-            </div>
-
-            <div className="titlebar-center">
-                <span className="scan-line"></span>
-                <span className="monitor-text">MONITORING // {fps} FPS</span>
             </div>
 
             <div className="titlebar-controls">
                 <button onClick={handleMinimize} className="control-btn minimize" title="Minimize">
-                    <span className="icon">_</span>
+                    <span className="material-symbols-outlined icon">minimize</span>
                 </button>
                 <button onClick={handleMaximize} className="control-btn maximize" title="Maximize">
-                    <span className="icon">□</span>
+                    <span className="material-symbols-outlined icon">crop_square</span>
                 </button>
                 <button onClick={handleClose} className="control-btn close" title="Close">
-                    <span className="icon">✕</span>
+                    <span className="material-symbols-outlined icon">close</span>
                 </button>
             </div>
         </header>

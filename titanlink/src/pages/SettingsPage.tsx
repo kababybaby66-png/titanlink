@@ -1,6 +1,6 @@
-import React from 'react';
-import { StreamSettings, DEFAULT_SETTINGS } from '../../shared/types/ipc';
-import { CyberButton } from '../components/CyberButton';
+import React, { useState } from 'react';
+import { GlassCard } from '../components/ui/GlassCard';
+import type { StreamSettings } from '../../shared/types/ipc';
 import './SettingsPage.css';
 
 interface SettingsPageProps {
@@ -9,137 +9,189 @@ interface SettingsPageProps {
     onBack: () => void;
 }
 
-export function SettingsPage({ settings, onSave, onBack }: SettingsPageProps) {
-    const [localSettings, setLocalSettings] = React.useState<StreamSettings>(settings);
-
-    const handleChange = (key: keyof StreamSettings, value: StreamSettings[keyof StreamSettings]) => {
-        setLocalSettings(prev => ({ ...prev, [key]: value }));
-    };
+export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onBack }) => {
+    const [localSettings, setLocalSettings] = useState<StreamSettings>(settings);
 
     const handleSave = () => {
         onSave(localSettings);
         onBack();
     };
 
-    const applyPreset = (preset: 'low-latency' | 'balanced' | 'quality') => {
-        switch (preset) {
-            case 'low-latency':
-                setLocalSettings({ ...localSettings, resolution: '720p', fps: 60, bitrate: 5, codec: 'h264' });
-                break;
-            case 'balanced':
-                setLocalSettings({ ...localSettings, resolution: '1080p', fps: 60, bitrate: 15, codec: 'h264' });
-                break;
-            case 'quality':
-                setLocalSettings({ ...localSettings, resolution: '1440p', fps: 60, bitrate: 30, codec: 'h264' });
-                break;
-        }
+    const updateSetting = <K extends keyof StreamSettings>(key: K, value: StreamSettings[K]) => {
+        setLocalSettings(prev => ({ ...prev, [key]: value }));
     };
 
     return (
         <div className="settings-page">
-            <div className="settings-panel panel">
-                <div className="panel-header">
-                    <h2 className="text-cyan">SYSTEM CONFIGURATION</h2>
-                    <div className="header-decoration"></div>
-                </div>
+            <div className="settings-container">
+                <GlassCard className="settings-panel">
+                    <div className="settings-header">
+                        <div className="flex items-center gap-3">
+                            <span className="material-symbols-outlined text-primary text-3xl">tune</span>
+                            <h2>SYSTEM CONFIGURATION</h2>
+                        </div>
+                        <button className="close-btn" onClick={onBack}>
+                            <span className="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
 
-                <div className="settings-layout">
-                    {/* PRESETS */}
-                    <div className="presets-section">
-                        <label className="tech-label">QUICK_PRESETS</label>
-                        <div className="presets-grid">
-                            <button className="preset-card" onClick={() => applyPreset('low-latency')}>
-                                <div className="p-icon">🚀</div>
-                                <div className="p-info">
-                                    <span className="p-name">VELOCITY</span>
-                                    <span className="p-detail">Low Latency / 720p</span>
+                    <div className="settings-content custom-scrollbar">
+                        {/* GENERAL SETTINGS */}
+                        <div className="settings-section">
+                            <h3 className="section-title">GENERAL</h3>
+                            <div className="setting-item">
+                                <div className="setting-info">
+                                    <span className="label">Launch on Startup</span>
+                                    <span className="desc">Automatically initialize daemon on system boot</span>
                                 </div>
-                            </button>
-                            <button className="preset-card" onClick={() => applyPreset('balanced')}>
-                                <div className="p-icon">⚖️</div>
-                                <div className="p-info">
-                                    <span className="p-name">VANGUARD</span>
-                                    <span className="p-detail">Balanced / 1080p</span>
+                                <label className="cyber-switch">
+                                    <input type="checkbox" defaultChecked />
+                                    <span className="slider"></span>
+                                </label>
+                            </div>
+                            <div className="setting-item">
+                                <div className="setting-info">
+                                    <span className="label">Hardware Acceleration</span>
+                                    <span className="desc">Use GPU for encoding/decoding</span>
                                 </div>
-                            </button>
-                            <button className="preset-card" onClick={() => applyPreset('quality')}>
-                                <div className="p-icon">💎</div>
-                                <div className="p-info">
-                                    <span className="p-name">FIDELITY</span>
-                                    <span className="p-detail">High Quality / 1440p</span>
+                                <label className="cyber-switch">
+                                    <input type="checkbox" defaultChecked />
+                                    <span className="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        {/* NETWORK SETTINGS */}
+                        <div className="settings-section">
+                            <h3 className="section-title">NETWORK</h3>
+                            <div className="setting-item">
+                                <div className="setting-info">
+                                    <span className="label">UPnP Port Mapping</span>
+                                    <span className="desc">Automatically configure router ports</span>
                                 </div>
-                            </button>
+                                <label className="cyber-switch">
+                                    <input type="checkbox" defaultChecked />
+                                    <span className="slider"></span>
+                                </label>
+                            </div>
+                            <div className="input-row">
+                                <div className="input-field">
+                                    <label>Preferred Port</label>
+                                    <input type="text" className="cyber-input-sm" defaultValue="8000" />
+                                </div>
+                                <div className="input-field">
+                                    <label>Bitrate Limit (Mbps)</label>
+                                    <input
+                                        type="number"
+                                        className="cyber-input-sm"
+                                        value={localSettings.bitrate}
+                                        onChange={(e) => updateSetting('bitrate', parseInt(e.target.value) || 10)}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* INPUT SETTINGS */}
+                        <div className="settings-section">
+                            <h3 className="section-title">INPUT</h3>
+                            <div className="setting-item">
+                                <div className="setting-info">
+                                    <span className="label">Immersive Mode</span>
+                                    <span className="desc">Pass Windows hotkeys (Alt+Tab) to host</span>
+                                </div>
+                                <label className="cyber-switch">
+                                    <input type="checkbox" defaultChecked />
+                                    <span className="slider"></span>
+                                </label>
+                            </div>
+                            <div className="input-row">
+                                <div className="input-field">
+                                    <label>Gamepad Emulation</label>
+                                    <select className="cyber-select">
+                                        <option>Xbox 360 (ViGEm)</option>
+                                        <option>DualShock 4</option>
+                                        <option>Disabled</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* AUDIO SETTINGS */}
+                        <div className="settings-section">
+                            <h3 className="section-title">AUDIO</h3>
+                            <div className="input-row">
+                                <div className="input-field">
+                                    <label>Audio Device</label>
+                                    <select className="cyber-select">
+                                        <option>Default Output Device</option>
+                                        <option>Headphones (Realtek High Definition)</option>
+                                    </select>
+                                </div>
+                                <div className="input-field">
+                                    <label>Quality</label>
+                                    <select className="cyber-select">
+                                        <option>High (48kHz)</option>
+                                        <option>Low (Bandwidth Saver)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* VIDEO SETTINGS */}
+                        <div className="settings-section">
+                            <h3 className="section-title">VIDEO</h3>
+                            <div className="input-row">
+                                <div className="input-field">
+                                    <label>Resolution</label>
+                                    <select
+                                        className="cyber-select"
+                                        value={localSettings.resolution}
+                                        onChange={(e) => updateSetting('resolution', e.target.value as any)}
+                                    >
+                                        <option value="1080p">1920x1080 (1080p)</option>
+                                        <option value="1440p">2560x1440 (1440p)</option>
+                                        <option value="4k">3840x2160 (4K)</option>
+                                    </select>
+                                </div>
+                                <div className="input-field">
+                                    <label>Frame Rate (Hertz)</label>
+                                    <select
+                                        className="cyber-select"
+                                        value={localSettings.fps}
+                                        onChange={(e) => updateSetting('fps', parseInt(e.target.value) as any)}
+                                    >
+                                        <option value="30">30 Hz</option>
+                                        <option value="60">60 Hz</option>
+                                        <option value="120">120 Hz</option>
+                                        <option value="144">144 Hz</option>
+                                        <option value="240">240 Hz</option>
+                                    </select>
+                                </div>
+                                <div className="input-field">
+                                    <label>Encoder</label>
+                                    <select
+                                        className="cyber-select"
+                                        value={localSettings.codec}
+                                        onChange={(e) => updateSetting('codec', e.target.value as any)}
+                                    >
+                                        <option value="h265">H.265 (HEVC)</option>
+                                        <option value="h264">H.264 (AVC)</option>
+                                        <option value="vp9">VP9 (AV1)</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    {/* MANUAL CONFIG */}
-                    <div className="config-grid">
-                        <div className="config-group">
-                            <label className="tech-label">RESOLUTION_SCALE</label>
-                            <select
-                                className="cyber-select"
-                                value={localSettings.resolution}
-                                onChange={(e) => handleChange('resolution', e.target.value as StreamSettings['resolution'])}
-                            >
-                                <option value="720p">720P // HD</option>
-                                <option value="1080p">1080P // FHD</option>
-                                <option value="1440p">1440P // QHD</option>
-                                <option value="4k">2160P // 4K</option>
-                            </select>
-                        </div>
-
-                        <div className="config-group">
-                            <label className="tech-label">REFRESH_CYCLE (FPS)</label>
-                            <select
-                                className="cyber-select"
-                                value={localSettings.fps}
-                                onChange={(e) => handleChange('fps', Number(e.target.value))}
-                            >
-                                <option value={30}>30 HZ</option>
-                                <option value={60}>60 HZ</option>
-                                <option value={120}>120 HZ</option>
-                                <option value={144}>144 HZ</option>
-                            </select>
-                        </div>
-
-                        <div className="config-group wide">
-                            <label className="tech-label">BANDWIDTH_ALLOCATION: <span className="text-cyan">{localSettings.bitrate} MBPS</span></label>
-                            <input
-                                type="range"
-                                min="5"
-                                max="50"
-                                step="5"
-                                value={localSettings.bitrate}
-                                onChange={(e) => handleChange('bitrate', Number(e.target.value))}
-                                className="cyber-range"
-                            />
-                        </div>
-
-                        <div className="config-group">
-                            <label className="tech-label">ENCODING_PROTOCOL</label>
-                            <select
-                                className="cyber-select"
-                                value={localSettings.codec}
-                                onChange={(e) => handleChange('codec', e.target.value as StreamSettings['codec'])}
-                            >
-                                <option value="h264">H.264 // LEGACY</option>
-                                <option value="vp8">VP8 // STABLE</option>
-                                <option value="vp9">VP9 // MODERN</option>
-                            </select>
+                    <div className="settings-footer">
+                        <span className="version">TitanLink v1.0.4 build 2209</span>
+                        <div className="footer-actions">
+                            <button className="secondary-btn small" onClick={onBack}>CANCEL</button>
+                            <button className="primary-btn small" onClick={handleSave}>APPLY CHANGES</button>
                         </div>
                     </div>
-                </div>
-
-                <div className="actions-row settings-actions">
-                    <CyberButton variant="ghost" onClick={() => setLocalSettings(DEFAULT_SETTINGS)}>
-                        RESET_DEFAULTS
-                    </CyberButton>
-                    <div className="action-group-right">
-                        <CyberButton variant="secondary" onClick={onBack}>CANCEL</CyberButton>
-                        <CyberButton variant="primary" onClick={handleSave}>CONFIRM_CHANGES</CyberButton>
-                    </div>
-                </div>
+                </GlassCard>
             </div>
         </div>
     );
-}
+};

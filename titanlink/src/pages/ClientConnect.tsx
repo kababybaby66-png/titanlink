@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CyberButton } from '../components/CyberButton';
+import { GlassCard } from '../components/ui/GlassCard';
 import './ClientConnect.css';
 
 interface ClientConnectProps {
@@ -30,59 +30,78 @@ export function ClientConnect({ onConnect, onBack, error }: ClientConnectProps) 
 
     return (
         <div className="client-connect-page">
-            <div className="connect-module panel">
-                <div className="module-header">
-                    <h2 className="text-cyan">TARGET UPLINK</h2>
-                    <div className="target-reticle"></div>
-                </div>
-
-                <form onSubmit={handleConnect} className="connect-form">
-                    <label className="tech-label">ENTER TARGET COORDINATES (SESSION CODE)</label>
-                    <div className="input-group">
-                        <input
-                            type="text"
-                            value={inputCode}
-                            onChange={(e) => setInputCode(e.target.value.toUpperCase())}
-                            placeholder="XXXX-XXXX-XXXX"
-                            maxLength={20}
-                            className="cyber-input"
-                            autoFocus
-                            disabled={isConnecting}
-                        />
-                        <div className="input-decoration"></div>
+            <div className="connect-container">
+                <GlassCard className="connect-module" hoverEffect>
+                    <div className="module-header">
+                        <span className="material-symbols-outlined icon animate-spin-slow">hub</span>
+                        <h2>ESTABLISH UPLINK</h2>
                     </div>
 
-                    {(error || localError) && (
-                        <div className="error-message text-danger animate-glitch">
-                            [ERROR]: {error || localError}
+                    <form onSubmit={handleConnect} className="connect-form">
+                        <div className="input-group">
+                            <label className="input-label">TARGET SESSION CODE</label>
+                            <div className="input-wrapper">
+                                <input
+                                    type="text"
+                                    value={inputCode}
+                                    onChange={(e) => setInputCode(e.target.value.toUpperCase())}
+                                    placeholder="XXXX-XXXX-XXXX"
+                                    maxLength={20}
+                                    className="cyber-input-large"
+                                    autoFocus
+                                    disabled={isConnecting}
+                                />
+                                <div className="input-scanline"></div>
+                            </div>
                         </div>
-                    )}
 
-                    <div className="telemetry-readout">
-                        <div className="readout-item">
-                            <span className="label">SIGNAL_STRENGTH</span>
-                            <span className="val text-success">100%</span>
-                        </div>
-                        <div className="readout-item">
-                            <span className="label">ENCRYPTION</span>
-                            <span className="val text-cyan">AES-256</span>
-                        </div>
-                    </div>
+                        {(error || localError) && (
+                            <div className="error-banner">
+                                <span className="material-symbols-outlined">warning</span>
+                                <span>{error || localError}</span>
+                            </div>
+                        )}
 
-                    <div className="actions-row">
-                        <CyberButton variant="secondary" onClick={onBack} type="button">
-                            CANCEL
-                        </CyberButton>
-                        <CyberButton
-                            variant="primary"
-                            type="submit"
-                            disabled={!inputCode || isConnecting}
-                            glitch={isConnecting}
-                        >
-                            {isConnecting ? 'ESTABLISHING LINK...' : 'INITIATE JUMP'}
-                        </CyberButton>
-                    </div>
-                </form>
+                        <div className="telemetry-grid">
+                            <div className="telemetry-item">
+                                <span className="label">SIGNAL_INTEGRITY</span>
+                                <span className="value text-primary">100%</span>
+                            </div>
+                            <div className="telemetry-item">
+                                <span className="label">ENCRYPTION</span>
+                                <span className="value text-primary">TLS 1.3</span>
+                            </div>
+                            <div className="telemetry-item">
+                                <span className="label">PROTOCOL</span>
+                                <span className="value text-primary">UDP/P2P</span>
+                            </div>
+                        </div>
+
+                        <div className="actions-row">
+                            <button type="button" className="secondary-btn" onClick={onBack}>
+                                <span className="material-symbols-outlined">arrow_back</span>
+                                ABORT
+                            </button>
+                            <button
+                                type="submit"
+                                className="primary-btn"
+                                disabled={!inputCode || isConnecting}
+                            >
+                                {isConnecting ? (
+                                    <>
+                                        <span className="material-symbols-outlined animate-spin">sync</span>
+                                        CONNECTING...
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="material-symbols-outlined">bolt</span>
+                                        INITIATE LINK
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </form>
+                </GlassCard>
             </div>
         </div>
     );

@@ -1,200 +1,329 @@
 .landing-page {
-    height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    position: relative;
-    z-index: 10;
+    min-height: 100vh;
+    /* Allow scrolling if needed */
+    height: 100%;
+    padding: 1rem;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+    gap: 1rem;
+    /* Much tighter gap */
+    background: radial-gradient(circle at center, #0a0a0f 0%, #000 100%);
 }
 
 .landing-content {
-    width: 100%;
-    max-width: 900px;
-    padding: 0 40px;
     display: flex;
     flex-direction: column;
-    gap: 60px;
     align-items: center;
-    margin-top: 60px;
+    gap: 4rem;
+    /* Restore reasonable spacing */
+    width: 100%;
+    max-width: 1000px;
+    justify-content: center;
 }
 
-/* --- HERO SECTION --- */
+/* Header Centering */
 .landing-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     text-align: center;
 }
 
-.hero-title {
-    font-size: 80px;
-    font-weight: 900;
-    letter-spacing: -0.02em;
-    line-height: 1;
-    margin-bottom: 16px;
-    text-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    background: linear-gradient(180deg, #fff 0%, #aaa 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-
-.hero-title .text-cyan {
-    background: linear-gradient(180deg, var(--accent-cyan) 0%, #00a0aa 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    text-shadow: 0 0 30px var(--accent-cyan-dim);
-}
-
-.hero-subtitle {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-family: var(--font-mono);
-    color: var(--accent-success);
-    font-size: 14px;
-    letter-spacing: 0.1em;
-    padding: 6px 16px;
-    background: rgba(0, 255, 157, 0.05);
-    border: 1px solid rgba(0, 255, 157, 0.2);
-    border-radius: 99px;
-}
-
-.status-indicator {
-    width: 8px;
-    height: 8px;
-    background: var(--accent-success);
-    border-radius: 50%;
-    box-shadow: 0 0 10px var(--accent-success);
-    animation: pulse 2s infinite;
-}
-
-/* --- ACTION CARDS --- */
+/* Action Grid: Centered Middle Line */
 .action-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 30px;
+    display: flex;
+    justify-content: center;
+    gap: 2.5rem;
     width: 100%;
+    flex-wrap: wrap;
 }
 
+/* Card Styling - Apple/Glass Style */
+/* Card Styling - Apple/Glass Style */
 .action-card {
-    background: rgba(20, 20, 25, 0.4);
-    border: 1px solid var(--metal-mid);
-    padding: 40px;
-    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3.5rem;
+    /* Restore padding */
+    width: 400px;
+    /* Restore width */
+    min-height: 380px;
+    /* Restore height */
     position: relative;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+
+    /* Glass Effect - Restored */
+    background: rgba(20, 20, 25, 0.6);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    /* Start subtle */
+    border-radius: 40px;
     overflow: hidden;
-    transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    backdrop-filter: blur(10px);
+    /* STRICT overflow for glare */
+    box-shadow:
+        0 20px 40px rgba(0, 0, 0, 0.2),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    text-align: center;
+    z-index: 1;
+    /* Ensure stacking context */
 }
 
-.action-card::before {
-    content: '';
+/* Card Specific Colors */
+.host-card {
+    --card-color: var(--primary);
+}
+
+.connect-card {
+    --card-color: #ffd700;
+}
+
+/* Yellow */
+
+/* Remove Internal Box */
+.card-content {
+    display: contents;
+    /* Remove layout effect of wrapper */
+}
+
+/* Glare Effect */
+/* Glare Effect - Tuned */
+/* Glare Effect - Simplified & Corrected */
+.card-glare {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 2px;
-    background: var(--accent-cyan);
-    transform: scaleX(0);
-    transform-origin: left;
-    transition: transform 0.4s ease;
+    inset: 0;
+    /* Cover full card */
+    background: radial-gradient(circle at 50% 0%,
+            var(--card-color) 0%,
+            transparent 70%);
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    z-index: 0;
+    /* Behind content */
+    pointer-events: none;
+    mix-blend-mode: color-dodge;
+    /* Luminous effect */
+    filter: blur(20px);
+}
+
+.action-card:hover .card-glare {
+    opacity: 0.2;
+    /* Subtle glow */
+}
+
+/* Ensure content sits above glare */
+.card-icon,
+.action-card h2,
+.action-card p,
+.primary-action-btn {
+    position: relative;
+    z-index: 2;
+}
+
+.action-card:hover .card-glare {
+    opacity: 0.1;
+    /* Very subtle */
 }
 
 .action-card:hover {
-    background: rgba(30, 30, 35, 0.6);
-    border-color: var(--accent-cyan);
-    transform: translateY(-5px);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 30px var(--accent-cyan-dim);
+    transform: translateY(-8px) scale(1.02);
+    background: rgba(30, 30, 35, 0.8);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow:
+        0 30px 60px rgba(0, 0, 0, 0.3),
+        0 0 30px rgba(0, 0, 0, 0.5),
+        /* Neutral shadow */
+        inset 0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
-.action-card:hover::before {
-    transform: scaleX(1);
+.action-card:active {
+    transform: scale(0.98);
 }
 
-.connect-card:hover::before {
-    background: var(--accent-amber);
+/* Icons and Text */
+.card-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-top: 1rem;
+    position: relative;
+    z-index: 1;
 }
 
-.connect-card:hover {
-    border-color: var(--accent-amber);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 30px var(--accent-amber-dim);
+.card-icon-circle {
+    width: 6rem;
+    height: 6rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 2rem;
+    transition: all 0.5s ease;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
+.landing-card:hover .card-icon-circle {
+    transform: scale(1.1);
+    background: rgba(0, 242, 255, 0.1);
+    border-color: var(--primary);
+    box-shadow: 0 0 30px rgba(0, 242, 255, 0.2);
+}
+
+.card-hero .icon,
 .card-icon {
-    font-size: 32px;
-    margin-bottom: 20px;
-    color: var(--metal-light);
-    transition: color 0.3s;
+    font-size: 4rem;
+    /* Larger Icon */
+    color: var(--card-color);
+    margin-bottom: 1.5rem;
+    filter: drop-shadow(0 0 15px var(--card-color));
+    transition: transform 0.4s ease;
 }
 
 .action-card:hover .card-icon {
-    color: #fff;
-    text-shadow: 0 0 15px currentColor;
+    transform: scale(1.1) rotate(5deg);
 }
 
-.action-card h2 {
-    font-size: 24px;
-    margin-bottom: 12px;
-    letter-spacing: 0.05em;
-}
-
-.action-card p {
-    color: var(--metal-light);
-    font-size: 14px;
-    line-height: 1.6;
-    margin-bottom: 30px;
-}
-
-.card-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: 20px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.cmd-text {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--metal-mid);
+.card-hero h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    letter-spacing: -0.01em;
     transition: color 0.3s;
 }
 
-.arrow {
-    color: var(--metal-mid);
-    transition: transform 0.3s, color 0.3s;
+.landing-card:hover h1,
+.action-card:hover h1 {
+    color: var(--card-color);
 }
 
-.action-card:hover .cmd-text {
-    color: var(--accent-cyan);
+.card-hero p {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+    margin-bottom: 2rem;
 }
 
-.connect-card:hover .cmd-text {
-    color: var(--accent-amber);
+.card-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: 100%;
+    max-width: 320px;
+    margin: 0 auto;
 }
 
-.action-card:hover .arrow {
-    color: #fff;
-    transform: translateX(5px);
+.card-stat {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: rgba(0, 242, 255, 0.6);
+    margin-bottom: 0.25rem;
 }
 
-/* --- FOOTER --- */
+/* Primary Action Button inside Card */
+.primary-action-btn {
+    position: relative;
+    overflow: hidden;
+    height: 4.5rem;
+    /* Bigger */
+    width: 100%;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.1rem;
+    /* Bigger text */
+    letter-spacing: 0.05em;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+    /* Rounded Rectangle (not full pill) */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    margin-top: auto;
+    backdrop-filter: blur(10px);
+}
+
+.action-card:hover .primary-action-btn {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+    transform: translateY(-5px) scale(1.03);
+    box-shadow:
+        0 25px 50px rgba(0, 0, 0, 0.3),
+        0 0 15px var(--card-color);
+    /* Subtle color shine */
+    color: white;
+}
+
+/* Footer - Settings Button */
 .landing-footer {
-    margin-top: 20px;
-    opacity: 0.6;
-    transition: opacity 0.3s;
+    border-top: none;
+    padding-top: 0;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin-top: 3rem;
+    padding-bottom: 2rem;
 }
 
-.landing-footer:hover {
-    opacity: 1;
-}
-
+/* Override CyberButton for Settings to be Apple-style */
 .settings-btn {
-    letter-spacing: 0.2em;
-    font-size: 12px;
-    color: var(--metal-light);
+    clip-path: none !important;
+    /* Remove cyber cut */
+    border-radius: 24px !important;
+    /* Rounded Rectangle */
+    background: rgba(255, 255, 255, 0.08) !important;
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    padding: 2rem 8rem !important;
+    /* Even Bigger */
+    font-size: 1.25rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.1em !important;
+    color: white !important;
+    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2) !important;
+    text-transform: uppercase;
 }
 
 .settings-btn:hover {
-    color: var(--accent-cyan);
+    background: rgba(255, 255, 255, 0.2) !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+    transform: translateY(-5px) scale(1.03);
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Hide Status Bar if present (not in design request) */
+.landing-status-bar {
+    display: none;
+}
+
+/* Media Queries */
+@media (max-width: 1024px) {
+    .action-grid {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .action-card {
+        width: 100%;
+        max-width: 500px;
+    }
 }
