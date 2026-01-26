@@ -1,6 +1,6 @@
 {
     "name": "titanlink",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Low-latency peer-to-peer gaming client for remote multiplayer",
     "main": "./dist-electron/main.js",
     "author": "TitanLink Team",
@@ -22,6 +22,8 @@
         "@fontsource/jetbrains-mono": "^5.2.8",
         "@fontsource/space-grotesk": "^5.2.10",
         "dotenv": "^17.2.3",
+        "electron-log": "^5.4.3",
+        "electron-updater": "^6.7.3",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
         "socket.io-client": "^4.7.2",
@@ -54,6 +56,9 @@
         "directories": {
             "output": "release"
         },
+        "publish": [
+            "github"
+        ],
         "files": [
             "dist/**/*",
             "dist-electron/**/*",
@@ -101,5 +106,9 @@
     },
     "optionalDependencies": {
         "vigemclient": "^1.5.3"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/kababybaby66-png/titanlink.git"
     }
 }

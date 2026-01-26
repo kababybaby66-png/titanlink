@@ -614,6 +614,10 @@ function registerIpcHandlers() {
         else if (level === 'warn') console.warn(prefix, message);
         else console.log(prefix, message);
     });
+
+    ipcMain.on('update:restart-and-install', () => {
+        autoUpdater.quitAndInstall();
+    });
 }
 
 // ============================================
@@ -644,4 +648,64 @@ app.on('window-all-closed', () => {
 // Handle app shutdown gracefully
 app.on('before-quit', async () => {
     await virtualController?.destroyController();
+});
+
+// ============================================
+// Auto Updater
+// ============================================
+
+import { autoUpdater } from 'electron-updater';
+import log from 'electron-log';
+
+// Configure logging
+log.transports.file.level = 'info';
+autoUpdater.logger = log;
+
+// Auto-updater events
+autoUpdater.on('checking-for-update', () => {
+    log.info('Checking for update...');
+    if (mainWindow) mainWindow.webContents.send('update:status', 'checking');
+});
+
+autoUpdater.on('update-available', (info) => {
+    log.info('Update available.', info);
+    if (mainWindow) mainWindow.webContents.send('update:status', 'available');
+});
+
+autoUpdater.on('update-not-available', (info) => {
+    log.info('Update not available.', info);
+    if (mainWindow) mainWindow.webContents.send('update:status', 'not-available');
+});
+
+autoUpdater.on('error', (err) => {
+    log.error('Error in auto-updater. ' + err);
+    if (mainWindow) mainWindow.webContents.send('update:status', 'error', err.toString());
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+    let log_message = "Download speed: " + progressObj.bytesPerSecond;
+    log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
+    log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
+    log.info(log_message);
+    if (mainWindow) mainWindow.webContents.send('update:download-progress', progressObj);
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+    log.info('Update downloaded', info);
+    if (mainWindow) mainWindow.webContents.send('update:status', 'downloaded');
+    // Silent update or prompt? 
+    // For now, let's ask the user via dialog or just notify so they can restart.
+    // autoUpdater.quitAndInstall(); // If we want to force it
+});
+
+function initAutoUpdater() {
+    // Check for updates (and notify)
+    if (app.isPackaged) {
+        autoUpdater.checkForUpdatesAndNotify();
+    }
+}
+
+// Add to app.whenReady()
+app.on('ready', () => {
+    initAutoUpdater();
 });

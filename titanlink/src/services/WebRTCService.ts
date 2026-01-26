@@ -265,7 +265,7 @@ class WebRTCService {
                         maxWidth: width,
                         minHeight: height,
                         maxHeight: height,
-                        minFrameRate: this.settings.fps,
+                        minFrameRate: 30,
                         maxFrameRate: this.settings.fps,
                     },
                 } as MediaTrackConstraints,

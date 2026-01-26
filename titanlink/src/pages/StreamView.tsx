@@ -4,6 +4,7 @@ import { webrtcService } from '../services/WebRTCService';
 import { setButton, XBOX_BUTTONS, isButtonPressed } from '../../shared/types/ipc';
 import type { GamepadInputState } from '../../shared/types/ipc';
 import { ControllerOverlay } from '../components/ControllerOverlay';
+import { FloatingWindow } from '../components/ui/FloatingWindow';
 import { QuickMenu } from '../components/QuickMenu';
 import './StreamView.css';
 import { CyberButton } from '../components/CyberButton';
@@ -96,8 +97,8 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
                     leftStickY: applyDeadzone(gamepad.axes[1] || 0),
                     rightStickX: applyDeadzone(gamepad.axes[2] || 0),
                     rightStickY: applyDeadzone(gamepad.axes[3] || 0),
-                    leftTrigger: gamepad.buttons[6]?.value || 0,
-                    rightTrigger: gamepad.buttons[7]?.value || 0,
+                    leftTrigger: gamepad.buttons[6]?.value || (gamepad.buttons[6]?.pressed ? 1.0 : 0),
+                    rightTrigger: gamepad.buttons[7]?.value || (gamepad.buttons[7]?.pressed ? 1.0 : 0),
                     timestamp: Date.now(),
                 };
 
@@ -212,6 +213,23 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
         }
     };
 
+    // Desktop Window State (Client Only)
+    const [windows, setWindows] = useState({
+        stats: false,
+        controller: false,
+        debug: false,
+    });
+    const [activeWindow, setActiveWindow] = useState<string | null>(null);
+
+    const toggleWindow = (name: keyof typeof windows) => {
+        setWindows(prev => ({ ...prev, [name]: !prev[name] }));
+        if (!windows[name]) setActiveWindow(name);
+    };
+
+    const bringToFront = (name: string) => {
+        setActiveWindow(name);
+    };
+
     return (
         <div
             className={`stream-view ${showOverlay ? 'overlay-active' : 'overlay-hidden'}`}
@@ -234,101 +252,205 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
                 )}
             </div>
 
-            {/* HUD OVERLAY */}
-            <div className="hud-overlay">
-                {/* HUD CORNERS */}
-                <div className="hud-corner top-left"></div>
-                <div className="hud-corner top-right"></div>
-                <div className="hud-corner bottom-left"></div>
-                <div className="hud-corner bottom-right"></div>
-
-                {/* TELEMETRY TOP BAR */}
-                <div className="hud-top-bar">
-                    <div className="connection-status">
-                        <div className={`status-led ${sessionState.connectionState === 'streaming' ? 'stable' : 'warn'}`}></div>
-                        <span className="mono-text">UPLINK_STABLE</span>
-                    </div>
-
-                    <div className="telemetry-grid">
-                        <div className="telemetry-item">
-                            <span className="t-label">PING</span>
-                            <span className={`t-val ${sessionState.latency && sessionState.latency < 50 ? 'text-cyan' : 'text-warn'}`}>
-                                {sessionState.latency || 0} MS
-                            </span>
+            {/* --- CLIENT DESKTOP INTERFACE --- */}
+            {sessionState.role === 'client' ? (
+                <div className="client-desktop-interface">
+                    {/* Top Menu Bar / Dock */}
+                    <div className={`desktop-dock ${!showOverlay ? 'hidden' : ''}`}>
+                        <div className="dock-left">
+                            <div className="dock-logo">TitanLink OS</div>
+                            <div className="dock-divider"></div>
+                            <button
+                                className={`dock-btn ${windows.stats ? 'active' : ''}`}
+                                onClick={() => toggleWindow('stats')}
+                                title="Network Statistics"
+                            >
+                                <span className="material-symbols-outlined">speed</span>
+                            </button>
+                            <button
+                                className={`dock-btn ${windows.controller ? 'active' : ''}`}
+                                onClick={() => toggleWindow('controller')}
+                                title="Controller Input"
+                            >
+                                <span className="material-symbols-outlined">gamepad</span>
+                            </button>
+                            <button
+                                className={`dock-btn ${windows.debug ? 'active' : ''}`}
+                                onClick={() => toggleWindow('debug')}
+                                title="Debug Log"
+                            >
+                                <span className="material-symbols-outlined">terminal</span>
+                            </button>
                         </div>
-                        <div className="telemetry-item">
-                            <span className="t-label">CTRL</span>
-                            <span className={`t-val ${controllerConnected ? 'text-success' : 'text-dim'}`}>
-                                {controllerConnected ? 'ENGAGED' : 'NO_SIGNAL'}
-                            </span>
-                        </div>
-                        {sessionState.role === 'host' && sessionState.sessionCode && (
-                            <div className="telemetry-item session-code-display">
-                                <span className="t-label">CODE</span>
-                                <span className="t-val text-cyan session-code-value">{sessionState.sessionCode}</span>
+
+                        <div className="dock-right">
+                            <div className="connection-pill">
+                                <div className={`status-dot ${sessionState.connectionState === 'streaming' ? 'green' : 'red'}`}></div>
+                                <span>{sessionState.latency || 0} ms</span>
                             </div>
-                        )}
+                            <button className="dock-btn danger" onClick={onDisconnect} title="Disconnect">
+                                <span className="material-symbols-outlined">power_settings_new</span>
+                            </button>
+                            <button className="dock-btn" onClick={toggleFullscreen} title="Toggle Fullscreen">
+                                <span className="material-symbols-outlined">{isFullscreen ? 'fullscreen_exit' : 'fullscreen'}</span>
+                            </button>
+                        </div>
                     </div>
-                </div>
 
-                {/* Controller Overlay (bottom-right) */}
-                {showControllerOverlay && (
-                    <div className="controller-overlay-container">
-                        <ControllerOverlay input={currentInput} connected={controllerConnected} />
-                    </div>
-                )}
-
-                {/* CONTROLS BOTTOM BAR */}
-                <div className="hud-bottom-bar">
-                    <CyberButton variant="ghost" size="sm" onClick={() => setShowQuickMenu(true)}>
-                        [MENU]
-                    </CyberButton>
-
-                    {sessionState.role === 'client' && (
-                        <CyberButton variant="ghost" size="sm" onClick={toggleFullscreen}>
-                            [{isFullscreen ? 'EXIT_FS' : 'FULLSCREEN'}]
-                        </CyberButton>
+                    {/* Windows */}
+                    {windows.stats && (
+                        <FloatingWindow
+                            title="Network Statistics"
+                            onClose={() => toggleWindow('stats')}
+                            icon="speed"
+                            initialPosition={{ x: 20, y: 80 }}
+                            isActive={activeWindow === 'stats'}
+                            onFocus={() => bringToFront('stats')}
+                        >
+                            <div className="window-padding">
+                                <div className="stat-row">
+                                    <span className="label">Latency</span>
+                                    <span className="value">{sessionState.latency || 0} ms</span>
+                                </div>
+                                <div className="stat-row">
+                                    <span className="label">Resolution</span>
+                                    <span className="value">{videoRef.current?.videoWidth}x{videoRef.current?.videoHeight}</span>
+                                </div>
+                                <div className="stat-row">
+                                    <span className="label">Protocol</span>
+                                    <span className="value">WebRTC/UDP</span>
+                                </div>
+                            </div>
+                        </FloatingWindow>
                     )}
 
-                    <div className="peer-tag">
-                        {sessionState.role === 'host' ? 'Hosting Session' : 'Connected to'}: <span className="text-cyan">{sessionState.peerInfo?.username || 'REMOTE_TARGET'}</span>
+                    {windows.controller && (
+                        <FloatingWindow
+                            title="Controller Input"
+                            onClose={() => toggleWindow('controller')}
+                            icon="gamepad"
+                            initialPosition={{ x: 340, y: 80 }}
+                            initialSize={{ width: 400, height: 250 }}
+                            isActive={activeWindow === 'controller'}
+                            onFocus={() => bringToFront('controller')}
+                            className="no-padding"
+                        >
+                            <div className="window-controller-wrapper">
+                                <ControllerOverlay input={currentInput} connected={controllerConnected} />
+                            </div>
+                        </FloatingWindow>
+                    )}
+
+                    {windows.debug && (
+                        <FloatingWindow
+                            title="System Log"
+                            onClose={() => toggleWindow('debug')}
+                            icon="terminal"
+                            initialPosition={{ x: 20, y: 400 }}
+                            initialSize={{ width: 500, height: 200 }}
+                            isActive={activeWindow === 'debug'}
+                            onFocus={() => bringToFront('debug')}
+                        >
+                            <div className="debug-log-content">
+                                <div className="log-line">[SYSTEM] Desktop Environment Loaded</div>
+                                <div className="log-line">[NETWORK] Connected to Host</div>
+                                <div className="log-line">[VIDEO] Stream Active</div>
+                            </div>
+                        </FloatingWindow>
+                    )}
+                </div>
+            ) : (
+                /* --- HOST HUD (Original) --- */
+                <div className="hud-overlay">
+                    {/* HUD CORNERS */}
+                    <div className="hud-corner top-left"></div>
+                    <div className="hud-corner top-right"></div>
+                    <div className="hud-corner bottom-left"></div>
+                    <div className="hud-corner bottom-right"></div>
+
+                    {/* TELEMETRY TOP BAR */}
+                    <div className="hud-top-bar">
+                        <div className="connection-status">
+                            <div className={`status-led ${sessionState.connectionState === 'streaming' ? 'stable' : 'warn'}`}></div>
+                            <span className="mono-text">UPLINK_STABLE</span>
+                        </div>
+
+                        <div className="telemetry-grid">
+                            <div className="telemetry-item">
+                                <span className="t-label">PING</span>
+                                <span className={`t-val ${sessionState.latency && sessionState.latency < 50 ? 'text-cyan' : 'text-warn'}`}>
+                                    {sessionState.latency || 0} MS
+                                </span>
+                            </div>
+                            <div className="telemetry-item">
+                                <span className="t-label">CTRL</span>
+                                <span className={`t-val ${controllerConnected ? 'text-success' : 'text-dim'}`}>
+                                    {controllerConnected ? 'ENGAGED' : 'NO_SIGNAL'}
+                                </span>
+                            </div>
+                            {sessionState.role === 'host' && sessionState.sessionCode && (
+                                <div className="telemetry-item session-code-display">
+                                    <span className="t-label">CODE</span>
+                                    <span className="t-val text-cyan session-code-value">{sessionState.sessionCode}</span>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
-                    <CyberButton
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowControllerOverlay(prev => !prev)}
-                        className={showControllerOverlay ? 'active' : ''}
-                        title="Toggle Controller Overlay"
-                    >
-                        [🎮]
-                    </CyberButton>
+                    {/* Controller Overlay (bottom-right) */}
+                    {showControllerOverlay && (
+                        <div className="controller-overlay-container">
+                            <ControllerOverlay input={currentInput} connected={controllerConnected} />
+                        </div>
+                    )}
 
-                    <CyberButton variant="danger" size="sm" onClick={onDisconnect}>
-                        {sessionState.role === 'host' ? 'STOP_STREAM' : 'DISCONNECT'}
-                    </CyberButton>
+                    {/* CONTROLS BOTTOM BAR */}
+                    <div className="hud-bottom-bar">
+                        <CyberButton variant="ghost" size="sm" onClick={() => setShowQuickMenu(true)}>
+                            [MENU]
+                        </CyberButton>
+                        <div className="peer-tag">
+                            Hosting Session: <span className="text-cyan">{sessionState.peerInfo?.username || 'REMOTE_TARGET'}</span>
+                        </div>
+
+                        <CyberButton
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowControllerOverlay(prev => !prev)}
+                            className={showControllerOverlay ? 'active' : ''}
+                            title="Toggle Controller Overlay"
+                        >
+                            [🎮]
+                        </CyberButton>
+
+                        <CyberButton variant="danger" size="sm" onClick={onDisconnect}>
+                            STOP_STREAM
+                        </CyberButton>
+                    </div>
+
+                    {/* ESC hint */}
+                    <div className="esc-hint">
+                        Press <span className="key">ESC</span> for menu
+                    </div>
                 </div>
+            )}
 
-                {/* ESC hint */}
-                <div className="esc-hint">
-                    Press <span className="key">ESC</span> for menu
-                </div>
-            </div>
-
-            {/* Quick Menu Overlay */}
-            <QuickMenu
-                isOpen={showQuickMenu}
-                onClose={() => setShowQuickMenu(false)}
-                onDisconnect={onDisconnect}
-                onToggleFullscreen={toggleFullscreen}
-                onToggleControllerOverlay={() => setShowControllerOverlay(prev => !prev)}
-                showControllerOverlay={showControllerOverlay}
-                isFullscreen={isFullscreen}
-                sessionCode={sessionState.sessionCode}
-                role={sessionState.role}
-                latency={sessionState.latency}
-                peerName={sessionState.peerInfo?.username}
-            />
+            {/* Quick Menu Overlay - Only for Host, Client uses dock/windows now */}
+            {sessionState.role === 'host' && (
+                <QuickMenu
+                    isOpen={showQuickMenu}
+                    onClose={() => setShowQuickMenu(false)}
+                    onDisconnect={onDisconnect}
+                    onToggleFullscreen={toggleFullscreen}
+                    onToggleControllerOverlay={() => setShowControllerOverlay(prev => !prev)}
+                    showControllerOverlay={showControllerOverlay}
+                    isFullscreen={isFullscreen}
+                    sessionCode={sessionState.sessionCode}
+                    role={sessionState.role}
+                    latency={sessionState.latency}
+                    peerName={sessionState.peerInfo?.username}
+                />
+            )}
         </div>
     );
 }

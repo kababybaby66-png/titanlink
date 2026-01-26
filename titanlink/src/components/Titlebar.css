@@ -89,3 +89,47 @@
     background: rgba(255, 42, 42, 0.2);
     color: var(--danger);
 }
+
+.update-ready-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 243, 255, 0.1);
+    border: 1px solid rgba(0, 243, 255, 0.3);
+    color: #00f3ff;
+    padding: 0 12px;
+    height: 32px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    font-weight: bold;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-right: 8px;
+    animation: glow-pulse 2s infinite ease-in-out;
+}
+
+.update-ready-btn:hover {
+    background: rgba(0, 243, 255, 0.2);
+    border-color: #00f3ff;
+    box-shadow: 0 0 15px rgba(0, 243, 255, 0.3);
+}
+
+.update-ready-btn .material-symbols-outlined {
+    font-size: 16px;
+}
+
+@keyframes glow-pulse {
+
+    0%,
+    100% {
+        border-color: rgba(0, 243, 255, 0.3);
+        box-shadow: 0 0 5px rgba(0, 243, 255, 0.1);
+    }
+
+    50% {
+        border-color: rgba(0, 243, 255, 0.8);
+        box-shadow: 0 0 15px rgba(0, 243, 255, 0.3);
+    }
+}

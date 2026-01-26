@@ -1,7 +1,26 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import './Titlebar.css';
 
 export const Titlebar = () => {
+    const [updateReady, setUpdateReady] = useState(false);
+
+    useEffect(() => {
+        if (!window.electronAPI?.updater) return;
+
+        const cleanup = window.electronAPI.updater.onStatusChange((status) => {
+            console.log('[Titlebar] Auto-updater status:', status);
+            if (status === 'downloaded') {
+                setUpdateReady(true);
+            }
+        });
+
+        return cleanup;
+    }, []);
+
+    const handleRestart = () => {
+        window.electronAPI?.updater.restartAndInstall();
+    };
+
     const handleMinimize = () => {
         window.electronAPI?.window.minimize();
     };
@@ -31,6 +50,12 @@ export const Titlebar = () => {
             </div>
 
             <div className="titlebar-controls">
+                {updateReady && (
+                    <button className="update-ready-btn" onClick={handleRestart} title="Update Ready! Click to Restart">
+                        <span className="material-symbols-outlined">system_update_alt</span>
+                        <span className="btn-text">Update Ready</span>
+                    </button>
+                )}
                 <button onClick={handleMinimize} className="control-btn minimize" title="Minimize">
                     <span className="material-symbols-outlined icon">minimize</span>
                 </button>

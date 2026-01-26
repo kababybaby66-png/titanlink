@@ -77,6 +77,18 @@ const electronAPI = {
         configureSelfHosted: (serverUrl: string, secret: string): Promise<{ success: boolean }> =>
             ipcRenderer.invoke('turn:configure-selfhosted', serverUrl, secret),
     },
+
+    // ============================================
+    // Auto-Updater APIs
+    // ============================================
+    updater: {
+        onStatusChange: (callback: (status: string, error?: string) => void) => {
+            const listener = (_event: any, status: string, error?: string) => callback(status, error);
+            ipcRenderer.on('update:status', listener);
+            return () => { ipcRenderer.removeListener('update:status', listener); };
+        },
+        restartAndInstall: () => ipcRenderer.send('update:restart-and-install'),
+    },
 };
 
 // Type-safe API exposure
