@@ -5,15 +5,17 @@ interface GlassCardProps {
     children: React.ReactNode;
     className?: string;
     hoverEffect?: boolean;
+    style?: React.CSSProperties;
 }
 
 export const GlassCard: React.FC<GlassCardProps> = ({
     children,
     className = '',
-    hoverEffect = false
+    hoverEffect = false,
+    style
 }) => {
     return (
-        <div className={`glass-card ${hoverEffect ? 'glass-card--hover' : ''} ${className}`}>
+        <div className={`glass-card ${hoverEffect ? 'glass-card--hover' : ''} ${className}`} style={style}>
             {children}
             {/* Corner Accents */}
             <div className="glass-card__corner glass-card__corner--tl"></div>
