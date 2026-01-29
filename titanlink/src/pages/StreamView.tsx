@@ -241,7 +241,7 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
                     className="stream-video"
                     autoPlay
                     playsInline
-                    muted={sessionState.role === 'host'}
+                    muted={sessionState.role === 'host'} // Host must be muted locally
                 />
                 {sessionState.role === 'host' && (
                     <div className="host-broadcast-indicator">

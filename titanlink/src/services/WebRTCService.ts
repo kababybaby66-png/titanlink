@@ -33,8 +33,10 @@ interface IncomingSignal {
 }
 
 // Signaling server configuration
+import { CONFIG } from '../config';
+
 // Supports both public server and direct IP connection modes
-const PUBLIC_SIGNALING_SERVER = 'ws://129.159.142.124:3001';
+const PUBLIC_SIGNALING_SERVER = CONFIG.SIGNALING.URL;
 
 // Connection mode types
 export type SignalingMode = 'public' | 'direct';
@@ -230,9 +232,15 @@ class WebRTCService {
 
     private generateSessionCode(): string {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        const length = 6;
         let code = '';
-        for (let i = 0; i < 6; i++) {
-            code += chars.charAt(Math.floor(Math.random() * chars.length));
+
+        // Use crypto for secure random generation
+        const randomValues = new Uint32Array(length);
+        window.crypto.getRandomValues(randomValues);
+
+        for (let i = 0; i < length; i++) {
+            code += chars.charAt(randomValues[i] % chars.length);
         }
         return code;
     }
@@ -254,25 +262,40 @@ class WebRTCService {
             case '4k': width = 3840; height = 2160; break;
         }
 
+        const videoConstraints = {
+            mandatory: {
+                chromeMediaSource: 'desktop',
+                chromeMediaSourceId: displayId,
+                minWidth: width,
+                maxWidth: width,
+                minHeight: height,
+                maxHeight: height,
+                minFrameRate: 30,
+                maxFrameRate: this.settings.fps,
+            },
+        };
+
         try {
+            console.log('[WebRTC] Attempting screen capture WITH audio...');
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                audio: false,
-                video: {
+                audio: {
                     mandatory: {
-                        chromeMediaSource: 'desktop',
-                        chromeMediaSourceId: displayId,
-                        minWidth: width,
-                        maxWidth: width,
-                        minHeight: height,
-                        maxHeight: height,
-                        minFrameRate: 30,
-                        maxFrameRate: this.settings.fps,
-                    },
-                } as MediaTrackConstraints,
+                        chromeMediaSource: 'desktop'
+                    }
+                } as any,
+                video: videoConstraints as any,
             });
         } catch (error) {
-            console.error('Screen capture error:', error);
-            throw new Error('Failed to capture screen. Please check system permissions.');
+            console.warn('[WebRTC] System audio capture failed, falling back to video only. Error:', error);
+            try {
+                this.mediaStream = await navigator.mediaDevices.getUserMedia({
+                    audio: false,
+                    video: videoConstraints as any,
+                });
+            } catch (videoError) {
+                console.error('Screen capture error (video only):', videoError);
+                throw new Error('Failed to capture screen. Please check system permissions.');
+            }
         }
     }
 
@@ -694,14 +717,22 @@ class WebRTCService {
 
     private setBandwidth(sdp: string, bitrateMbps: number): string {
         const bitrateKbps = bitrateMbps * 1000;
-        const modifier = 'b=AS:' + bitrateKbps;
+        let modifier = 'b=AS:' + bitrateKbps;
+
+        // Advanced SDP Munging for Stability
+        // If CBR is requested, we force a high minimum bitrate to prevent quality drops
+        if (this.settings.bitrateMode === 'cbr') {
+            modifier += `\r\na=fmtp:96 x-google-min-bitrate=${Math.floor(bitrateKbps * 0.8)};x-google-max-bitrate=${bitrateKbps}`;
+        }
 
         const lines = sdp.split('\n');
         const newLines = lines.map(line => line.trim());
 
+        // 1. Set Bandwidth Line (b=AS)
         for (let i = 0; i < newLines.length; i++) {
             if (newLines[i].startsWith('m=video')) {
                 i++;
+                // Skip past existing attributes to find the best place to insert
                 while (i < newLines.length && newLines[i] && (newLines[i].startsWith('i=') || newLines[i].startsWith('c=') || newLines[i].startsWith('b=') || newLines[i].startsWith('a='))) {
                     if (newLines[i].startsWith('b=AS:')) {
                         newLines.splice(i, 1);

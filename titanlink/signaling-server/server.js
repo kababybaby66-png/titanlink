@@ -38,9 +38,18 @@ app.get('/', (req, res) => {
 // Create WebSocket server
 const wss = new WebSocketServer({ server: httpServer });
 
+// Heartbeat function
+function heartbeat() {
+    this.isAlive = true;
+}
+
 wss.on('connection', (ws) => {
     const connId = crypto.randomUUID().substring(0, 8);
     console.log('Client connected:', connId);
+
+    // Setup heartbeat
+    ws.isAlive = true;
+    ws.on('pong', heartbeat);
 
     connections.set(connId, {
         ws,
@@ -52,7 +61,7 @@ wss.on('connection', (ws) => {
     ws.on('message', (data) => {
         try {
             const message = JSON.parse(data.toString());
-            console.log('[WS] Message from', connId, ':', message.type);
+            // console.log('[WS] Message from', connId, ':', message.type);
 
             const conn = connections.get(connId);
             if (!conn) return;
@@ -169,6 +178,23 @@ wss.on('connection', (ws) => {
         console.error('WebSocket error for', connId, ':', err.message);
         handleDisconnect(connId);
     });
+});
+
+// Ping interval to terminate dead connections
+const interval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+        if (ws.isAlive === false) {
+            console.log('Terminating dead connection');
+            return ws.terminate();
+        }
+
+        ws.isAlive = false;
+        ws.ping();
+    });
+}, 30000);
+
+wss.on('close', () => {
+    clearInterval(interval);
 });
 
 function handleDisconnect(connId) {

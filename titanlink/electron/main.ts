@@ -473,17 +473,19 @@ function registerIpcHandlers() {
     });
 
     ipcMain.handle('system:get-displays', async (): Promise<DisplayInfo[]> => {
-        // ... (existing implementation)
         const sources = await desktopCapturer.getSources({
             types: ['screen'],
-            thumbnailSize: { width: 0, height: 0 }
+            thumbnailSize: { width: 0, height: 0 } // Performance optimization
         });
 
         const displays = screen.getAllDisplays();
 
         return sources.map((source, index) => {
+            // Match sources to displays roughly by index as desktopCapturer doesn't rely reliably on display ID
             const display = displays[index] || displays[0];
             const scaleFactor = display.scaleFactor || 1;
+
+            // CRITICAL: Return ONLY simple serializable data to avoid "Bad IPC Message" crash
             return {
                 id: source.id,
                 name: source.name,

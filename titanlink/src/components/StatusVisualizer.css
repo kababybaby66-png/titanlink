@@ -1,0 +1,22 @@
+.status-visualizer-panel {
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    padding: 1rem;
+}
+
+.status-visualizer-title {
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+    letter-spacing: 0.1em;
+}
+
+.status-viewport {
+    height: 12rem;
+    /* h-48 */
+    border: 1px solid rgba(0, 242, 255, 0.2);
+    background-color: rgba(0, 242, 255, 0.05);
+    border-radius: 0.25rem;
+    position: relative;
+    width: 100%;
+}

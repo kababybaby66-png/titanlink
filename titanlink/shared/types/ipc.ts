@@ -36,7 +36,13 @@ export interface StreamSettings {
     resolution: '1080p' | '720p' | '1440p' | '4k';
     fps: 30 | 60 | 120 | 144 | 240;
     bitrate: number; // in Mbps
-    codec: 'h264' | 'vp8' | 'vp9';
+    codec: 'h264' | 'vp8' | 'vp9' | 'av1';
+    // Advanced Settings
+    bitrateMode: 'cbr' | 'vbr';
+    audioBitrate: number; // in kbps (96-512)
+    audioQualityMode: 'game' | 'voice'; // 'game' disables echo cancellation
+    vsync: boolean;
+    iceRestart: boolean;
 }
 
 export const DEFAULT_SETTINGS: StreamSettings = {
@@ -44,6 +50,11 @@ export const DEFAULT_SETTINGS: StreamSettings = {
     fps: 60,
     bitrate: 10,
     codec: 'h264',
+    bitrateMode: 'cbr',
+    audioBitrate: 128,
+    audioQualityMode: 'game',
+    vsync: false,
+    iceRestart: true,
 };
 
 // ============================================

@@ -180,6 +180,67 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                                     </select>
                                 </div>
                             </div>
+                            <div className="setting-item">
+                                <div className="setting-info">
+                                    <span className="label">VSync (Buffer)</span>
+                                    <span className="desc">Reduces tearing, increases latency</span>
+                                </div>
+                                <label className="cyber-switch">
+                                    <input
+                                        type="checkbox"
+                                        checked={localSettings.vsync}
+                                        onChange={(e) => updateSetting('vsync', e.target.checked)}
+                                    />
+                                    <span className="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        {/* ADVANCED NETWORK */}
+                        <div className="settings-section">
+                            <h3 className="section-title">ADVANCED NETWORK</h3>
+                            <div className="input-row">
+                                <div className="input-field">
+                                    <label>Bitrate Mode</label>
+                                    <div className="flex gap-2">
+                                        <button
+                                            className={`flex-1 px-3 py-2 text-xs font-bold rounded ${localSettings.bitrateMode === 'cbr' ? 'bg-primary text-black' : 'bg-white/5 text-white/60'}`}
+                                            onClick={() => updateSetting('bitrateMode', 'cbr')}
+                                            title="Constant Bitrate: Maintains a steady data stream. Better for consistency and preventing lag spikes."
+                                        >
+                                            CBR (Stable)
+                                        </button>
+                                        <button
+                                            className={`flex-1 px-3 py-2 text-xs font-bold rounded ${localSettings.bitrateMode === 'vbr' ? 'bg-primary text-black' : 'bg-white/5 text-white/60'}`}
+                                            onClick={() => updateSetting('bitrateMode', 'vbr')}
+                                            title="Variable Bitrate: Adjusts bandwidth usage based on complexity. Can look better but might cause spikes."
+                                        >
+                                            VBR (Quality)
+                                        </button>
+                                    </div>
+                                    <div className="text-[10px] text-white/40 mt-1">
+                                        {localSettings.bitrateMode === 'cbr'
+                                            ? 'CBR forces consistent quality. Recommended for most connections.'
+                                            : 'VBR saves bandwidth on static screens but may pixelate during fast motion.'}
+                                    </div>
+                                </div>
+                                <div className="input-field">
+                                    <label>Audio Mode</label>
+                                    <select
+                                        className="cyber-select"
+                                        value={localSettings.audioQualityMode}
+                                        onChange={(e) => updateSetting('audioQualityMode', e.target.value as any)}
+                                    >
+                                        <option value="game">Game Audio (High Fidelity)</option>
+                                        <option value="voice">Voice (Echo Cancelled)</option>
+                                    </select>
+                                    <div className="text-[10px] text-white/40 mt-1">
+                                        {localSettings.audioQualityMode === 'game'
+                                            ? 'Raw audio stream. Best for music/games. Echo cancellation OFF.'
+                                            : 'Optimized for speech. Removes background noise and echo.'}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

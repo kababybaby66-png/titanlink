@@ -1,5 +1,6 @@
-import React from 'react';
-import { CyberButton } from '../components/CyberButton';
+import React, { useEffect, useState } from 'react';
+import { GlassCard } from '../components/ui/GlassCard';
+import { Antigravity } from '../components/ui/Antigravity';
 import './LandingPage.css';
 
 interface LandingPageProps {
@@ -13,53 +14,116 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     onConnectClick,
     onSettingsClick
 }) => {
+    const [scrambleText, setScrambleText] = useState('SYSTEM_READY');
+
+    // Simple scramble effect on mount
+    useEffect(() => {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_#@';
+        let iter = 0;
+        const target = 'SYSTEM_READY';
+
+        const interval = setInterval(() => {
+            setScrambleText(target.split('').map((c, i) => {
+                if (i < iter) return c;
+                return chars[Math.floor(Math.random() * chars.length)];
+            }).join(''));
+
+            if (iter >= target.length) clearInterval(interval);
+            iter += 1 / 3;
+        }, 50);
+
+        return () => clearInterval(interval);
+    }, []);
+
     return (
         <div className="landing-page">
-            <div className="landing-content">
-                <div className="landing-header">
-                    <h1 className="hero-title">TITAN<span className="text-cyan">LINK</span></h1>
-                    <div className="hero-subtitle">
-                        <span className="status-indicator"></span>
-                        SECURE NEURAL UPLINK READY
-                    </div>
-                </div>
+            {/* Background elements */}
+            <div className="grid-overlay"></div>
+            <div className="orbital-ring"></div>
 
-                <div className="action-grid">
-                    <div className="action-card host-card" onClick={onHostClick}>
-                        <div className="card-glare"></div>
-                        <div className="card-icon">◈</div>
-                        <h2>HOST SESSION</h2>
-                        <p>Initialize transmission beacon. Allow remote neural interface.</p>
-                        <button className="primary-action-btn">
-                            <span className="cmd-text">HOST SESSION</span>
-                            <span className="material-symbols-outlined">arrow_forward</span>
-                        </button>
-                    </div>
-
-                    <div className="action-card connect-card" onClick={onConnectClick}>
-                        <div className="card-glare"></div>
-                        <div className="card-icon">⚡</div>
-                        <h2>CONNECT</h2>
-                        <p>Establish link to remote beacon. Low latency synchronization.</p>
-                        <button className="primary-action-btn">
-                            <span className="cmd-text">JOIN SESSION</span>
-                            <span className="material-symbols-outlined">arrow_forward</span>
-                        </button>
-                    </div>
-                </div>
-
-                <div className="landing-footer">
-                    <CyberButton
-                        variant="ghost"
-                        onClick={onSettingsClick}
-                        className="settings-btn"
-                    >
-                        SYSTEM CONFIGURATION
-                    </CyberButton>
-                </div>
+            {/* Antigravity Particle Field */}
+            <div style={{ position: 'absolute', inset: 0, zIndex: 1, opacity: 0.6, pointerEvents: 'none' }}>
+                <Antigravity
+                    count={150}
+                    magnetRadius={250}
+                    particleSize={2}
+                    color="#00f2ff"
+                />
             </div>
 
-            <div className="scanline-overlay"></div>
+            <div className="landing-layout">
+                {/* HEAD & STATUS */}
+                <header className="landing-head">
+                    <div className="brand-lockup">
+                        <div className="logo-glitch" data-text="TITANLINK">TITANLINK</div>
+                        <div className="version-tag">Build v1.0.4 // STABLE</div>
+                    </div>
+
+                    <div className="system-status-pill">
+                        <span className="status-dot"></span>
+                        <span className="status-text">{scrambleText}</span>
+                    </div>
+                </header>
+
+                {/* MAIN ACTIONS */}
+                <div className="actions-stage">
+                    {/* HOST ACTION */}
+                    <GlassCard className="action-panel host-panel" hoverEffect={true}>
+                        <div className="panel-content" onClick={onHostClick}>
+                            <div className="panel-decoration top-right"></div>
+                            <div className="icon-frame">
+                                <span className="material-symbols-outlined">broadcast_on_personal</span>
+                            </div>
+                            <h2 className="panel-title">INITIATE HOST</h2>
+                            <p className="panel-desc">Broadcast local neural feed to remote clients.</p>
+
+                            <div className="panel-footer">
+                                <span className="cmd-prompt">&gt; EXECUTE_PROTOCOL</span>
+                                <span className="material-symbols-outlined arrow">arrow_forward</span>
+                            </div>
+                            <div className="scanline"></div>
+                        </div>
+                    </GlassCard>
+
+                    {/* CONNECT ACTION */}
+                    <GlassCard className="action-panel client-panel" hoverEffect={true}>
+                        <div className="panel-content" onClick={onConnectClick}>
+                            <div className="panel-decoration top-right"></div>
+                            <div className="icon-frame">
+                                <span className="material-symbols-outlined">link</span>
+                            </div>
+                            <h2 className="panel-title">JOIN SESSION</h2>
+                            <p className="panel-desc">Establish secure uplink to existing beacon.</p>
+
+                            <div className="panel-footer">
+                                <span className="cmd-prompt">&gt; CONNECT_REMOTE</span>
+                                <span className="material-symbols-outlined arrow">arrow_forward</span>
+                            </div>
+                            <div className="scanline"></div>
+                        </div>
+                    </GlassCard>
+                </div>
+
+                {/* FOOTER / SETTINGS */}
+                <footer className="landing-foot">
+                    <GlassCard className="utility-bar">
+                        <div className="utility-item" onClick={onSettingsClick}>
+                            <span className="material-symbols-outlined">tune</span>
+                            <span>CONFIGURATION</span>
+                        </div>
+                        <div className="separator"></div>
+                        <div className="utility-item">
+                            <span className="material-symbols-outlined">help</span>
+                            <span>MANUAL</span>
+                        </div>
+                        <div className="separator"></div>
+                        <div className="utility-item inactive">
+                            <span className="material-symbols-outlined">security</span>
+                            <span>SECURE_BOOT: ON</span>
+                        </div>
+                    </GlassCard>
+                </footer>
+            </div>
         </div>
     );
 };
