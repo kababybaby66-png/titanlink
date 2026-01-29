@@ -15,6 +15,15 @@ interface QuickMenuProps {
     role: 'host' | 'client' | null;
     latency?: number;
     peerName?: string;
+    // Audio controls
+    volume?: number;
+    isMuted?: boolean;
+    hasAudio?: boolean;
+    onVolumeChange?: (volume: number) => void;
+    onMuteToggle?: () => void;
+    // Connection quality
+    packetLoss?: number;
+    jitter?: number;
 }
 
 export function QuickMenu({
@@ -29,6 +38,13 @@ export function QuickMenu({
     role,
     latency = 0,
     peerName,
+    volume = 100,
+    isMuted = false,
+    hasAudio = false,
+    onVolumeChange,
+    onMuteToggle,
+    packetLoss = 0,
+    jitter = 0,
 }: QuickMenuProps) {
     const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
@@ -88,6 +104,45 @@ export function QuickMenu({
                         </button>
                     </div>
 
+                    {/* AUDIO CONTROLS */}
+                    <div className="menu-section">
+                        <p className="section-label">AUDIO</p>
+
+                        <button
+                            className={`menu-item ${isMuted ? '' : 'active'}`}
+                            onClick={onMuteToggle}
+                            disabled={!hasAudio}
+                        >
+                            <div className="item-icon-box">
+                                <span className="material-symbols-outlined">
+                                    {!hasAudio ? 'volume_off' : isMuted ? 'volume_mute' : 'volume_up'}
+                                </span>
+                            </div>
+                            <div className="item-details">
+                                <p className="label">{!hasAudio ? 'Audio Unavailable' : isMuted ? 'Unmute Audio' : 'Mute Audio'}</p>
+                                <p className="sub">{!hasAudio ? 'No audio track' : isMuted ? 'MUTED' : 'PLAYING'}</p>
+                            </div>
+                            <span className="hotkey">M</span>
+                        </button>
+
+                        {hasAudio && (
+                            <div className="audio-slider-container">
+                                <span className="material-symbols-outlined audio-icon">volume_down</span>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    value={isMuted ? 0 : volume}
+                                    onChange={(e) => onVolumeChange?.(parseInt(e.target.value))}
+                                    className="audio-slider"
+                                    disabled={!hasAudio}
+                                />
+                                <span className="material-symbols-outlined audio-icon">volume_up</span>
+                                <span className="volume-value">{isMuted ? 0 : volume}%</span>
+                            </div>
+                        )}
+                    </div>
+
                     {/* TELEMETRY */}
                     <div className="menu-section">
                         <p className="section-label">TELEMETRY</p>
@@ -100,8 +155,8 @@ export function QuickMenu({
                                 </div>
                             </div>
                             <div className="telemetry-details">
-                                <span>LOSS: 0.0%</span>
-                                <span>JITTER: 1.2ms</span>
+                                <span className={packetLoss > 1 ? 'text-warn' : ''}>LOSS: {packetLoss}%</span>
+                                <span className={jitter > 5 ? 'text-warn' : ''}>JITTER: {jitter}ms</span>
                             </div>
                             {/* Animated Decoration */}
                             <div className="telemetry-anim-bar">
@@ -124,6 +179,12 @@ export function QuickMenu({
                                     <span className="value text-primary">{sessionCode}</span>
                                 </div>
                             )}
+                            <div className="info-item">
+                                <span className="label">AUDIO</span>
+                                <span className={`value ${hasAudio ? 'text-success' : 'text-warn'}`}>
+                                    {hasAudio ? 'ACTIVE' : 'N/A'}
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>

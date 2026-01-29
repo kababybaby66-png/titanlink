@@ -418,6 +418,18 @@
     color: #ff5555;
 }
 
+.dock-btn:disabled,
+.dock-btn.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.dock-btn:disabled:hover,
+.dock-btn.disabled:hover {
+    background: transparent;
+    color: #888;
+}
+
 .connection-pill {
     display: flex;
     align-items: center;

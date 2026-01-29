@@ -77,10 +77,9 @@
     opacity: 0.5;
 }
 
-/* Style the native resize handle if possible, or just let browser handle it */
+/* Hide the native resize handle visually, but keep resize functionality via border hover */
 .draggable-widget::-webkit-resizer {
-    background-color: var(--primary);
-    border-radius: 4px;
+    background-color: transparent;
 }
 
 /* --- GENERIC CARD STYLING (Centered & Compact) --- */

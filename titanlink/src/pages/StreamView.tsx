@@ -26,13 +26,32 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
     const overlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastGuidePress = useRef<number>(0);
 
+    // Audio state
+    const [volume, setVolume] = useState(100);
+    const [isMuted, setIsMuted] = useState(false);
+    const [hasAudio, setHasAudio] = useState(false);
+
+    // Connection quality
+    const [packetLoss, setPacketLoss] = useState(0);
+    const [jitter, setJitter] = useState(0);
+
     // Attach video stream to video element
     useEffect(() => {
         if (videoRef.current && videoStream) {
             console.log('[StreamView] Attaching video stream to element', videoStream.id);
-            const tracks = videoStream.getVideoTracks();
-            console.log(`[StreamView] Stream has ${tracks.length} video tracks`);
-            tracks.forEach(t => console.log(`[StreamView] Track ${t.id}: enabled=${t.enabled}, muted=${t.muted}, state=${t.readyState}`));
+
+            // Check video tracks
+            const videoTracks = videoStream.getVideoTracks();
+            console.log(`[StreamView] Stream has ${videoTracks.length} video tracks`);
+            videoTracks.forEach(t => console.log(`[StreamView] Video Track ${t.id}: enabled=${t.enabled}, muted=${t.muted}, state=${t.readyState}`));
+
+            // Check audio tracks
+            const audioTracks = videoStream.getAudioTracks();
+            console.log(`[StreamView] Stream has ${audioTracks.length} audio tracks`);
+            audioTracks.forEach(t => console.log(`[StreamView] Audio Track ${t.id}: enabled=${t.enabled}, muted=${t.muted}, state=${t.readyState}`));
+
+            // Set audio availability
+            setHasAudio(audioTracks.length > 0);
 
             videoRef.current.srcObject = videoStream;
 
@@ -41,11 +60,44 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
             });
 
             // Monitor track unexpected ending
-            videoStream.getVideoTracks()[0].onended = () => {
-                console.warn('[StreamView] Video track ended unexpectedly');
-            };
+            if (videoTracks[0]) {
+                videoTracks[0].onended = () => {
+                    console.warn('[StreamView] Video track ended unexpectedly');
+                };
+            }
         }
     }, [videoStream]);
+
+    // Poll connection quality metrics
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const quality = webrtcService.getConnectionQuality();
+            setPacketLoss(quality.packetLoss);
+            setJitter(quality.jitter);
+            setHasAudio(quality.hasAudio || hasAudio); // Keep true if we detected audio
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [hasAudio]);
+
+    // Handle volume changes
+    useEffect(() => {
+        if (videoRef.current) {
+            videoRef.current.volume = isMuted ? 0 : volume / 100;
+        }
+    }, [volume, isMuted]);
+
+    // Toggle mute with M key
+    const handleMuteToggle = useCallback(() => {
+        setIsMuted(prev => !prev);
+    }, []);
+
+    const handleVolumeChange = useCallback((newVolume: number) => {
+        setVolume(newVolume);
+        if (newVolume > 0 && isMuted) {
+            setIsMuted(false);
+        }
+    }, [isMuted]);
 
     // Keyboard hotkeys
     useEffect(() => {
@@ -66,11 +118,17 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
                     setShowControllerOverlay(prev => !prev);
                 }
             }
+            // M - Toggle mute
+            else if (e.key === 'm' || e.key === 'M') {
+                if (!showQuickMenu) {
+                    handleMuteToggle();
+                }
+            }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [showQuickMenu]);
+    }, [showQuickMenu, handleMuteToggle]);
 
     // Gamepad polling loop (client only)
     useEffect(() => {
@@ -241,7 +299,7 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
                     className="stream-video"
                     autoPlay
                     playsInline
-                    muted={sessionState.role === 'host'} // Host must be muted locally
+                    muted={sessionState.role === 'host' ? true : isMuted} // Host always muted to prevent feedback, client uses mute state
                 />
                 {sessionState.role === 'host' && (
                     <div className="host-broadcast-indicator">
@@ -284,6 +342,17 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
                         </div>
 
                         <div className="dock-right">
+                            {/* Audio control */}
+                            <button
+                                className={`dock-btn ${!hasAudio ? 'disabled' : isMuted ? '' : 'active'}`}
+                                onClick={handleMuteToggle}
+                                title={!hasAudio ? 'No Audio' : isMuted ? 'Unmute' : 'Mute'}
+                                disabled={!hasAudio}
+                            >
+                                <span className="material-symbols-outlined">
+                                    {!hasAudio ? 'volume_off' : isMuted ? 'volume_mute' : 'volume_up'}
+                                </span>
+                            </button>
                             <div className="connection-pill">
                                 <div className={`status-dot ${sessionState.connectionState === 'streaming' ? 'green' : 'red'}`}></div>
                                 <span>{sessionState.latency || 0} ms</span>
@@ -449,6 +518,15 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
                     role={sessionState.role}
                     latency={sessionState.latency}
                     peerName={sessionState.peerInfo?.username}
+                    // Audio controls
+                    volume={volume}
+                    isMuted={isMuted}
+                    hasAudio={hasAudio}
+                    onVolumeChange={handleVolumeChange}
+                    onMuteToggle={handleMuteToggle}
+                    // Connection quality
+                    packetLoss={packetLoss}
+                    jitter={jitter}
                 />
             )}
         </div>

@@ -81,6 +81,13 @@ export interface WebRTCServiceCallbacks {
     onInputReceived?: (input: GamepadInputState) => void;
 }
 
+export interface ConnectionQuality {
+    latency: number;
+    packetLoss: number;
+    jitter: number;
+    hasAudio: boolean;
+}
+
 class WebRTCService {
     private ws: WebSocket | null = null;
     private peerConnection: RTCPeerConnection | null = null;
@@ -93,6 +100,10 @@ class WebRTCService {
     private latencyInterval: ReturnType<typeof setInterval> | null = null;
     private dynamicIceServers: RTCIceServer[] | null = null;
     private hasLoggedConnectionStats = false;
+    private hasAudioTrack = false;
+    private previousPacketsLost = 0;
+    private previousPacketsReceived = 0;
+    private connectionQuality: ConnectionQuality = { latency: 0, packetLoss: 0, jitter: 0, hasAudio: false };
 
     constructor() {
         this.peerId = uuidv4().substring(0, 8);
@@ -275,27 +286,46 @@ class WebRTCService {
             },
         };
 
+        // First, try to capture video with audio in a single call
         try {
-            console.log('[WebRTC] Attempting screen capture WITH audio...');
+            console.log('[WebRTC] Attempting screen capture with audio...');
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     mandatory: {
-                        chromeMediaSource: 'desktop'
+                        chromeMediaSource: 'desktop',
+                        chromeMediaSourceId: displayId,
                     }
                 } as any,
                 video: videoConstraints as any,
             });
-        } catch (error) {
-            console.warn('[WebRTC] System audio capture failed, falling back to video only. Error:', error);
-            try {
-                this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                    audio: false,
-                    video: videoConstraints as any,
-                });
-            } catch (videoError) {
-                console.error('Screen capture error (video only):', videoError);
-                throw new Error('Failed to capture screen. Please check system permissions.');
+
+            const audioTracks = this.mediaStream.getAudioTracks();
+            const videoTracks = this.mediaStream.getVideoTracks();
+            console.log('[WebRTC] Capture result:', {
+                video: videoTracks.length,
+                audio: audioTracks.length
+            });
+
+            if (audioTracks.length > 0) {
+                console.log('[WebRTC] ✓ Audio capture successful!');
             }
+            return;
+        } catch (error) {
+            console.log('[WebRTC] Audio+Video capture failed:', (error as Error).message);
+        }
+
+        // Fallback: Try video only
+        try {
+            console.log('[WebRTC] Falling back to video-only capture...');
+            this.mediaStream = await navigator.mediaDevices.getUserMedia({
+                audio: false,
+                video: videoConstraints as any,
+            });
+            console.log('[WebRTC] ✓ Video capture successful (no audio)');
+            console.warn('[WebRTC] 💡 Tip: To enable audio, enable "Stereo Mix" in Windows Sound Settings > Recording');
+        } catch (videoError) {
+            console.error('[WebRTC] Screen capture failed:', videoError);
+            throw new Error('Failed to capture screen. Please check system permissions.');
         }
     }
 
@@ -515,12 +545,27 @@ class WebRTCService {
 
         this.peerConnection.onconnectionstatechange = () => {
             const state = this.peerConnection?.connectionState;
-            console.log('Connection state:', state);
+            console.log('[WebRTC] Connection state:', state);
 
             if (state === 'connected') {
                 this.callbacks?.onStateChange('streaming');
                 this.startLatencyMeasurement();
-            } else if (state === 'disconnected' || state === 'failed') {
+            } else if (state === 'disconnected') {
+                // Connection temporarily lost - attempt ICE restart to recover
+                console.log('[WebRTC] Connection disconnected - attempting recovery...');
+                if (this.role === 'host' && this.settings.iceRestart) {
+                    // Give it a moment before restarting ICE
+                    setTimeout(() => {
+                        if (this.peerConnection?.connectionState === 'disconnected') {
+                            console.log('[WebRTC] Initiating ICE restart for recovery...');
+                            this.attemptIceRestart().catch(e => {
+                                console.error('[WebRTC] ICE restart failed during recovery:', e);
+                            });
+                        }
+                    }, 2000);
+                }
+            } else if (state === 'failed') {
+                console.error('[WebRTC] Connection failed - cannot recover');
                 this.callbacks?.onPeerDisconnected();
                 if (this.role === 'host') {
                     this.callbacks?.onStateChange('waiting-for-peer');
@@ -531,7 +576,10 @@ class WebRTCService {
         };
 
         this.peerConnection.ontrack = (event) => {
-            console.log('Received track:', event.track.kind);
+            console.log('[WebRTC] Received track:', event.track.kind, 'id:', event.track.id);
+            if (event.track.kind === 'audio') {
+                console.log('[WebRTC] Audio track received! Audio streaming is now available.');
+            }
             if (event.streams[0]) {
                 this.callbacks?.onStreamReceived?.(event.streams[0]);
             }
@@ -543,10 +591,26 @@ class WebRTCService {
             }
         };
 
+        // Add media tracks when hosting
         if (this.role === 'host' && this.mediaStream) {
+            // Add video track
             const videoTrack = this.mediaStream.getVideoTracks()[0];
             if (videoTrack) {
+                console.log('[WebRTC] Adding video track to peer connection');
                 this.peerConnection.addTrack(videoTrack, this.mediaStream);
+            }
+
+            // Add audio track (critical for system audio streaming!)
+            const audioTrack = this.mediaStream.getAudioTracks()[0];
+            if (audioTrack) {
+                console.log('[WebRTC] Adding audio track to peer connection - system audio will be streamed');
+                this.peerConnection.addTrack(audioTrack, this.mediaStream);
+                this.hasAudioTrack = true;
+                this.connectionQuality.hasAudio = true;
+            } else {
+                console.warn('[WebRTC] No audio track available - system audio capture may have failed');
+                this.hasAudioTrack = false;
+                this.connectionQuality.hasAudio = false;
             }
         }
     }
@@ -688,6 +752,7 @@ class WebRTCService {
                 const stats = await this.peerConnection.getStats();
 
                 stats.forEach((report) => {
+                    // Track connection quality from candidate-pair
                     if (report.type === 'candidate-pair' && report.state === 'succeeded') {
                         // Log connection details once
                         if (!this.hasLoggedConnectionStats) {
@@ -705,14 +770,80 @@ class WebRTCService {
                         const rtt = report.currentRoundTripTime;
                         if (rtt !== undefined) {
                             const latencyMs = Math.round((rtt * 1000) / 2);
+                            this.connectionQuality.latency = latencyMs;
                             this.callbacks?.onLatencyUpdate?.(latencyMs);
                         }
+                    }
+
+                    // Track packet loss and jitter from inbound-rtp
+                    if (report.type === 'inbound-rtp' && (report.kind === 'video' || report.mediaType === 'video')) {
+                        const packetsLost = report.packetsLost || 0;
+                        const packetsReceived = report.packetsReceived || 0;
+                        const jitter = report.jitter || 0;
+
+                        // Calculate packet loss percentage
+                        const deltaLost = packetsLost - this.previousPacketsLost;
+                        const deltaReceived = packetsReceived - this.previousPacketsReceived;
+                        const totalDelta = deltaLost + deltaReceived;
+
+                        if (totalDelta > 0) {
+                            const lossPercent = (deltaLost / totalDelta) * 100;
+                            this.connectionQuality.packetLoss = Math.round(lossPercent * 10) / 10;
+                        }
+
+                        this.connectionQuality.jitter = Math.round(jitter * 1000 * 10) / 10; // Convert to ms
+
+                        this.previousPacketsLost = packetsLost;
+                        this.previousPacketsReceived = packetsReceived;
                     }
                 });
             } catch (error) {
                 console.error('Error getting RTT:', error);
             }
         }, 1000);
+    }
+
+    /**
+     * Get current connection quality metrics
+     */
+    getConnectionQuality(): ConnectionQuality {
+        return { ...this.connectionQuality };
+    }
+
+    /**
+     * Check if audio is available in the stream
+     */
+    hasAudio(): boolean {
+        return this.hasAudioTrack;
+    }
+
+    /**
+     * Attempt ICE restart to recover from connection issues
+     */
+    async attemptIceRestart(): Promise<boolean> {
+        if (!this.peerConnection || this.role !== 'host') {
+            console.warn('[WebRTC] ICE restart only available for host');
+            return false;
+        }
+
+        try {
+            console.log('[WebRTC] Attempting ICE restart...');
+            const offer = await this.peerConnection.createOffer({ iceRestart: true });
+            await this.peerConnection.setLocalDescription(offer);
+
+            this.sendSignal({
+                type: 'signal',
+                sessionCode: this.sessionCode,
+                from: this.peerId,
+                payload: offer,
+            });
+
+            console.log('[WebRTC] ICE restart offer sent');
+            return true;
+        } catch (error) {
+            console.error('[WebRTC] ICE restart failed:', error);
+            return false;
+        }
     }
 
     private setBandwidth(sdp: string, bitrateMbps: number): string {
