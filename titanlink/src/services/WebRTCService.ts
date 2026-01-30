@@ -64,12 +64,44 @@ const getSignalingServerUrl = async (): Promise<string> => {
     return currentSignalingUrl;
 };
 
-// ICE servers configuration
+// ICE servers configuration - expanded pool for redundancy
 const ICE_SERVERS: RTCIceServer[] = [
-    // STUN servers for discovering public IP (fallback)
+    // Google STUN servers (high availability)
+    { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    // Mozilla STUN (backup)
+    { urls: 'stun:stun.services.mozilla.com:3478' },
+    // Twilio STUN (backup)
+    { urls: 'stun:global.stun.twilio.com:3478' },
 ];
+
+// Network quality levels for adaptive bitrate
+export type NetworkQualityLevel = 'excellent' | 'good' | 'fair' | 'poor' | 'critical';
+
+// Adaptive bitrate configuration
+const ADAPTIVE_BITRATE_CONFIG = {
+    // Thresholds for quality degradation
+    thresholds: {
+        latencyMs: { good: 50, fair: 100, poor: 200 },
+        packetLoss: { good: 1, fair: 3, poor: 5 },
+        jitter: { good: 20, fair: 40, poor: 80 },
+    },
+    // Bitrate multipliers based on quality level
+    bitrateMultipliers: {
+        excellent: 1.0,
+        good: 0.85,
+        fair: 0.65,
+        poor: 0.45,
+        critical: 0.25,
+    },
+    // Minimum time between bitrate adjustments (ms)
+    adjustmentCooldownMs: 3000,
+    // Number of samples to average for stability
+    sampleWindow: 5,
+};
 
 export interface WebRTCServiceCallbacks {
     onStateChange: (state: ConnectionState) => void;
@@ -86,6 +118,9 @@ export interface ConnectionQuality {
     packetLoss: number;
     jitter: number;
     hasAudio: boolean;
+    networkQuality: NetworkQualityLevel;
+    currentBitrate: number; // Current adjusted bitrate in Mbps
+    targetBitrate: number;  // Original target bitrate in Mbps
 }
 
 class WebRTCService {
@@ -103,7 +138,23 @@ class WebRTCService {
     private hasAudioTrack = false;
     private previousPacketsLost = 0;
     private previousPacketsReceived = 0;
-    private connectionQuality: ConnectionQuality = { latency: 0, packetLoss: 0, jitter: 0, hasAudio: false };
+    private connectionQuality: ConnectionQuality = {
+        latency: 0,
+        packetLoss: 0,
+        jitter: 0,
+        hasAudio: false,
+        networkQuality: 'excellent',
+        currentBitrate: 10,
+        targetBitrate: 10,
+    };
+
+    // Adaptive bitrate state
+    private adaptiveBitrateEnabled: boolean = true;
+    private lastBitrateAdjustment: number = 0;
+    private latencySamples: number[] = [];
+    private packetLossSamples: number[] = [];
+    private jitterSamples: number[] = [];
+    private videoSender: RTCRtpSender | null = null;
 
     constructor() {
         this.peerId = uuidv4().substring(0, 8);
@@ -503,10 +554,19 @@ class WebRTCService {
             console.log(`[WebRTC] Server [${i}]: ${urls} | Auth: ${s.username ? 'YES' : 'NO'}`);
         });
 
+        // Optimized RTCPeerConnection configuration for better NAT traversal
         this.peerConnection = new RTCPeerConnection({
             iceServers: iceServers,
             iceCandidatePoolSize: 10, // Pre-gather candidates for faster connection
+            bundlePolicy: 'max-bundle', // Multiplex all media over single transport (reduces ports needed)
+            rtcpMuxPolicy: 'require',   // Require RTCP multiplexing (simplifies NAT traversal)
+            // Use all ICE candidate types (host, srflx, relay)
+            iceTransportPolicy: 'all',
         });
+
+        // Initialize adaptive bitrate tracking
+        this.connectionQuality.targetBitrate = this.settings.bitrate;
+        this.connectionQuality.currentBitrate = this.settings.bitrate;
 
         // Log ICE gathering state changes
         this.peerConnection.onicegatheringstatechange = () => {
@@ -593,11 +653,14 @@ class WebRTCService {
 
         // Add media tracks when hosting
         if (this.role === 'host' && this.mediaStream) {
-            // Add video track
+            // Add video track with sender reference for adaptive bitrate
             const videoTrack = this.mediaStream.getVideoTracks()[0];
             if (videoTrack) {
                 console.log('[WebRTC] Adding video track to peer connection');
-                this.peerConnection.addTrack(videoTrack, this.mediaStream);
+                this.videoSender = this.peerConnection.addTrack(videoTrack, this.mediaStream);
+
+                // Set codec preferences for optimal quality (prioritize H.264 hardware encoding)
+                this.setCodecPreferences();
             }
 
             // Add audio track (critical for system audio streaming!)
@@ -797,10 +860,184 @@ class WebRTCService {
                         this.previousPacketsReceived = packetsReceived;
                     }
                 });
+
+                // Run adaptive bitrate adjustment
+                this.adjustBitrateIfNeeded();
             } catch (error) {
                 console.error('Error getting RTT:', error);
             }
         }, 1000);
+    }
+
+    /**
+     * Calculate network quality level based on current metrics
+     */
+    private calculateNetworkQuality(): NetworkQualityLevel {
+        const { latency, packetLoss, jitter } = this.connectionQuality;
+        const thresholds = ADAPTIVE_BITRATE_CONFIG.thresholds;
+
+        // Score each metric (0 = excellent, 1 = good, 2 = fair, 3 = poor)
+        let score = 0;
+
+        if (latency >= thresholds.latencyMs.poor) score += 3;
+        else if (latency >= thresholds.latencyMs.fair) score += 2;
+        else if (latency >= thresholds.latencyMs.good) score += 1;
+
+        if (packetLoss >= thresholds.packetLoss.poor) score += 3;
+        else if (packetLoss >= thresholds.packetLoss.fair) score += 2;
+        else if (packetLoss >= thresholds.packetLoss.good) score += 1;
+
+        if (jitter >= thresholds.jitter.poor) score += 3;
+        else if (jitter >= thresholds.jitter.fair) score += 2;
+        else if (jitter >= thresholds.jitter.good) score += 1;
+
+        // Map total score to quality level
+        if (score <= 1) return 'excellent';
+        if (score <= 3) return 'good';
+        if (score <= 5) return 'fair';
+        if (score <= 7) return 'poor';
+        return 'critical';
+    }
+
+    /**
+     * Adjust video bitrate based on network conditions (adaptive bitrate)
+     */
+    private async adjustBitrateIfNeeded(): Promise<void> {
+        if (!this.adaptiveBitrateEnabled || this.role !== 'host' || !this.videoSender) {
+            return;
+        }
+
+        // Respect cooldown period to prevent oscillation
+        const now = Date.now();
+        if (now - this.lastBitrateAdjustment < ADAPTIVE_BITRATE_CONFIG.adjustmentCooldownMs) {
+            return;
+        }
+
+        // Add current samples to rolling window
+        this.latencySamples.push(this.connectionQuality.latency);
+        this.packetLossSamples.push(this.connectionQuality.packetLoss);
+        this.jitterSamples.push(this.connectionQuality.jitter);
+
+        // Keep only recent samples
+        const windowSize = ADAPTIVE_BITRATE_CONFIG.sampleWindow;
+        if (this.latencySamples.length > windowSize) {
+            this.latencySamples.shift();
+            this.packetLossSamples.shift();
+            this.jitterSamples.shift();
+        }
+
+        // Need enough samples before adjusting
+        if (this.latencySamples.length < windowSize) {
+            return;
+        }
+
+        // Calculate averages
+        const avgLatency = this.latencySamples.reduce((a, b) => a + b, 0) / windowSize;
+        const avgPacketLoss = this.packetLossSamples.reduce((a, b) => a + b, 0) / windowSize;
+        const avgJitter = this.jitterSamples.reduce((a, b) => a + b, 0) / windowSize;
+
+        // Update connection quality with averages for stability
+        const previousQuality = this.connectionQuality.networkQuality;
+        this.connectionQuality.networkQuality = this.calculateNetworkQuality();
+
+        // Calculate target bitrate based on network quality
+        const multiplier = ADAPTIVE_BITRATE_CONFIG.bitrateMultipliers[this.connectionQuality.networkQuality];
+        const newBitrate = Math.round(this.connectionQuality.targetBitrate * multiplier * 10) / 10;
+
+        // Only adjust if bitrate actually changed
+        if (Math.abs(newBitrate - this.connectionQuality.currentBitrate) < 0.5) {
+            return;
+        }
+
+        // Log quality changes
+        if (previousQuality !== this.connectionQuality.networkQuality) {
+            console.log(`[WebRTC] Network quality changed: ${previousQuality} → ${this.connectionQuality.networkQuality}`);
+            console.log(`[WebRTC]   Avg Latency: ${avgLatency.toFixed(1)}ms, Packet Loss: ${avgPacketLoss.toFixed(1)}%, Jitter: ${avgJitter.toFixed(1)}ms`);
+        }
+
+        // Apply new bitrate via RTCRtpSender parameters
+        try {
+            const params = this.videoSender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) {
+                params.encodings = [{}];
+            }
+
+            const bitrateKbps = newBitrate * 1000 * 1000; // Convert Mbps to bps
+            params.encodings[0].maxBitrate = bitrateKbps;
+
+            await this.videoSender.setParameters(params);
+
+            console.log(`[WebRTC] Adaptive bitrate: ${this.connectionQuality.currentBitrate}Mbps → ${newBitrate}Mbps (${this.connectionQuality.networkQuality})`);
+            this.connectionQuality.currentBitrate = newBitrate;
+            this.lastBitrateAdjustment = now;
+        } catch (error) {
+            console.error('[WebRTC] Failed to adjust bitrate:', error);
+        }
+    }
+
+    /**
+     * Set codec preferences to prioritize H.264 hardware encoding
+     */
+    private setCodecPreferences(): void {
+        if (!this.peerConnection) return;
+
+        try {
+            const transceivers = this.peerConnection.getTransceivers();
+            const videoTransceiver = transceivers.find(t => t.sender.track?.kind === 'video');
+
+            if (videoTransceiver && typeof RTCRtpSender.getCapabilities === 'function') {
+                const capabilities = RTCRtpSender.getCapabilities('video');
+                if (capabilities?.codecs) {
+                    // Prioritize codecs: H.264 > VP9 > VP8
+                    const preferredOrder = ['H264', 'VP9', 'VP8', 'AV1'];
+                    const sortedCodecs = [...capabilities.codecs].sort((a, b) => {
+                        const aIndex = preferredOrder.findIndex(p => a.mimeType.toUpperCase().includes(p));
+                        const bIndex = preferredOrder.findIndex(p => b.mimeType.toUpperCase().includes(p));
+                        const aScore = aIndex === -1 ? 999 : aIndex;
+                        const bScore = bIndex === -1 ? 999 : bIndex;
+                        return aScore - bScore;
+                    });
+
+                    videoTransceiver.setCodecPreferences(sortedCodecs);
+                    console.log('[WebRTC] Codec preferences set. Priority: H264 > VP9 > VP8');
+                }
+            }
+        } catch (error) {
+            console.warn('[WebRTC] Could not set codec preferences (may not be supported):', error);
+        }
+    }
+
+    /**
+     * Enable or disable adaptive bitrate
+     */
+    setAdaptiveBitrateEnabled(enabled: boolean): void {
+        this.adaptiveBitrateEnabled = enabled;
+        console.log(`[WebRTC] Adaptive bitrate ${enabled ? 'enabled' : 'disabled'}`);
+
+        // Reset to target bitrate when disabling
+        if (!enabled && this.videoSender) {
+            this.resetBitrateToTarget();
+        }
+    }
+
+    /**
+     * Reset bitrate to the original target setting
+     */
+    async resetBitrateToTarget(): Promise<void> {
+        if (!this.videoSender) return;
+
+        try {
+            const params = this.videoSender.getParameters();
+            if (params.encodings && params.encodings.length > 0) {
+                const bitrateKbps = this.connectionQuality.targetBitrate * 1000 * 1000;
+                params.encodings[0].maxBitrate = bitrateKbps;
+                await this.videoSender.setParameters(params);
+                this.connectionQuality.currentBitrate = this.connectionQuality.targetBitrate;
+                console.log(`[WebRTC] Bitrate reset to target: ${this.connectionQuality.targetBitrate}Mbps`);
+            }
+        } catch (error) {
+            console.error('[WebRTC] Failed to reset bitrate:', error);
+        }
     }
 
     /**
