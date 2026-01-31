@@ -174,8 +174,8 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
         };
 
         // Update which nodes can connect - ensure minimum connections per node
-        const minConnections = 2;
-        const maxConnections = 4;
+        const minConnections = 3;
+        const maxConnections = 6;
 
         const updateConnections = () => {
             // Reset all connections
