@@ -63,17 +63,17 @@ const electronAPI = {
     },
 
     // ============================================
-    // TURN Server APIs (Self-hosted coturn + Twilio fallback)
+    // TURN Server APIs (Multi-server with health checking)
     // ============================================
     turn: {
         getIceServers: (): Promise<Array<{ urls: string | string[]; username?: string; credential?: string }>> =>
             ipcRenderer.invoke('turn:get-ice-servers'),
         isConfigured: (): Promise<boolean> =>
             ipcRenderer.invoke('turn:is-configured'),
-        getStatus: (): Promise<{ selfHosted: boolean; twilio: boolean }> =>
+        getStatus: (): Promise<{ configured: boolean; servers: Array<{ label: string; url: string; healthy: boolean; latencyMs: number }> }> =>
             ipcRenderer.invoke('turn:get-status'),
-        configureTwilio: (accountSid: string, authToken: string): Promise<{ success: boolean }> =>
-            ipcRenderer.invoke('turn:configure-twilio', accountSid, authToken),
+        runHealthCheck: (): Promise<{ configured: boolean; servers: Array<{ label: string; url: string; healthy: boolean; latencyMs: number }> }> =>
+            ipcRenderer.invoke('turn:run-health-check'),
         configureSelfHosted: (serverUrl: string, secret: string): Promise<{ success: boolean }> =>
             ipcRenderer.invoke('turn:configure-selfhosted', serverUrl, secret),
     },

@@ -575,20 +575,24 @@ function registerIpcHandlers() {
     });
     ipcMain.on('window:close', () => mainWindow?.close());
 
-    // TURN Server handlers (priority: Self-hosted > Fallback STUN)
+    // TURN Server handlers (priority: Self-hosted > Free Public TURN > STUN fallback)
     ipcMain.handle('turn:get-ice-servers', async () => {
-        // Priority 1: Self-hosted coturn server (unlimited, ~$5/month)
+        // Priority 1: Self-hosted coturn server(s) with health checking
         if (selfHostedTurnService.isConfigured()) {
-            console.log('[TURN] Using self-hosted coturn server');
-            return selfHostedTurnService.getIceServers();
+            console.log('[TURN] Using self-hosted TURN server(s) with health check');
+            return await selfHostedTurnService.getIceServers();
         }
 
-        // Fallback: STUN only (may not work across all NATs)
-        console.log('[TURN] No TURN configured, using STUN fallback');
+        // Fallback: Free public TURN + STUN (limited but better than nothing)
+        console.log('[TURN] No self-hosted TURN configured, using free public TURN fallback');
         return [
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
             { urls: 'stun:stun2.l.google.com:19302' },
+            // OpenRelay free TURN
+            { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+            { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+            { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
         ];
     });
 
@@ -602,11 +606,15 @@ function registerIpcHandlers() {
         return { success: true };
     });
 
-    // Get current TURN configuration status
+    // Get current TURN configuration status with server health info
     ipcMain.handle('turn:get-status', () => {
-        return {
-            selfHosted: selfHostedTurnService.isConfigured(),
-        };
+        return selfHostedTurnService.getStatus();
+    });
+
+    // Force health check on all TURN servers
+    ipcMain.handle('turn:run-health-check', async () => {
+        await selfHostedTurnService.runHealthChecks();
+        return selfHostedTurnService.getStatus();
     });
 
     // Logging handler - allows renderer to log to main terminal

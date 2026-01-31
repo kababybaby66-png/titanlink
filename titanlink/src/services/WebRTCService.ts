@@ -64,7 +64,7 @@ const getSignalingServerUrl = async (): Promise<string> => {
     return currentSignalingUrl;
 };
 
-// ICE servers configuration - expanded pool for redundancy
+// ICE servers configuration - expanded pool with TURN fallback
 const ICE_SERVERS: RTCIceServer[] = [
     // Google STUN servers (high availability)
     { urls: 'stun:stun.l.google.com:19302' },
@@ -76,6 +76,10 @@ const ICE_SERVERS: RTCIceServer[] = [
     { urls: 'stun:stun.services.mozilla.com:3478' },
     // Twilio STUN (backup)
     { urls: 'stun:global.stun.twilio.com:3478' },
+    // Free public TURN servers (emergency fallback for NAT traversal)
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
 ];
 
 // Network quality levels for adaptive bitrate
