@@ -1,6 +1,6 @@
 {
     "name": "titanlink",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "Low-latency peer-to-peer gaming client for remote multiplayer",
     "main": "./dist-electron/main.js",
     "author": "TitanLink Team",

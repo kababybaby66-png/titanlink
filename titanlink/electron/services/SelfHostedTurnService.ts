@@ -318,13 +318,12 @@ export class SelfHostedTurnService {
             });
         }
 
-        // If no healthy self-hosted servers, add free public TURN as fallback
-        if (healthyServers.length === 0) {
-            console.log('[TurnManager] No healthy self-hosted TURN, using free public TURN fallback');
-            iceServers.push(...FREE_PUBLIC_TURN_SERVERS);
-        }
+        // ALWAYS include free public TURN as backup (even if self-hosted is configured)
+        // This ensures relay candidates are always available for strict NAT scenarios
+        console.log(`[TurnManager] Adding ${FREE_PUBLIC_TURN_SERVERS.length} free public TURN servers as backup`);
+        iceServers.push(...FREE_PUBLIC_TURN_SERVERS);
 
-        console.log(`[TurnManager] Returning ${iceServers.length} ICE servers (${healthyServers.length} self-hosted healthy)`);
+        console.log(`[TurnManager] Returning ${iceServers.length} ICE servers (${healthyServers.length} self-hosted healthy, + free public backup)`);
         return iceServers;
     }
 

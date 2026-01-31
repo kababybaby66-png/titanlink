@@ -341,13 +341,26 @@ class WebRTCService {
             },
         };
 
+        // Check available audio devices for debugging
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const audioInputs = devices.filter(d => d.kind === 'audioinput');
+            console.log('[WebRTC] Available audio inputs:', audioInputs.map(d => `${d.label} (${d.deviceId})`));
+        } catch (e) {
+            console.warn('[WebRTC] Failed to enumerate devices:', e);
+        }
+
         // First, try to capture video with audio in a single call
         try {
             console.log('[WebRTC] Attempting screen capture with audio...');
+
+            // Try with standard constraints first
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     mandatory: {
                         chromeMediaSource: 'desktop',
+                        // On some Windows systems, specifying the ID for audio causes failure
+                        // Try matching it, but we might remove it in a fallback
                         chromeMediaSourceId: displayId,
                     }
                 } as any,
@@ -363,10 +376,28 @@ class WebRTCService {
 
             if (audioTracks.length > 0) {
                 console.log('[WebRTC] ✓ Audio capture successful!');
+                return;
             }
-            return;
         } catch (error) {
-            console.log('[WebRTC] Audio+Video capture failed:', (error as Error).message);
+            console.warn('[WebRTC] Primary audio+video capture failed:', (error as Error).message);
+
+            // Secondary attempt: Try without specifying audio source ID (let OS pick default system audio)
+            try {
+                console.log('[WebRTC] Retrying with generic system audio reference...');
+                this.mediaStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        mandatory: {
+                            chromeMediaSource: 'desktop',
+                            // No sourceId for audio - captures "system audio" from default output
+                        }
+                    } as any,
+                    video: videoConstraints as any,
+                });
+                console.log('[WebRTC] ✓ Retry successful!');
+                return;
+            } catch (retryError) {
+                console.error('[WebRTC] Retry also failed:', (retryError as Error).message);
+            }
         }
 
         // Fallback: Try video only
