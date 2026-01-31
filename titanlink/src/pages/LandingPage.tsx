@@ -65,8 +65,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             {/* Circuit Network - Neural Network Particle System */}
             <div style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
                 <CircuitNetwork
-                    nodeCount={90}
-                    connectionDistance={200}
+                    nodeCount={180}
+                    connectionDistance={280}
                     mouseRadius={280}
                     primaryColor="#00f2ff"
                     secondaryColor="#4abdff"

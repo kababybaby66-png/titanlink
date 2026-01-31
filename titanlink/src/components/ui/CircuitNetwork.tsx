@@ -82,15 +82,15 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
         // Initialize micro particles (dust/fill)
         const initMicroParticles = () => {
             microParticles = [];
-            const microCount = Math.floor(width * height / 8000); // Density based on screen size
+            const microCount = Math.floor(width * height / 4000); // Higher density for more fill
             for (let i = 0; i < microCount; i++) {
                 microParticles.push({
                     x: Math.random() * width,
                     y: Math.random() * height,
-                    vx: (Math.random() - 0.5) * 0.3,
-                    vy: (Math.random() - 0.5) * 0.3,
-                    size: Math.random() * 1.5 + 0.5,
-                    alpha: Math.random() * 0.3 + 0.1,
+                    vx: (Math.random() - 0.5) * 0.2,
+                    vy: (Math.random() - 0.5) * 0.2,
+                    size: Math.random() * 2 + 0.5, // Larger particles
+                    alpha: Math.random() * 0.4 + 0.15, // More visible
                     twinklePhase: Math.random() * Math.PI * 2,
                 });
             }
