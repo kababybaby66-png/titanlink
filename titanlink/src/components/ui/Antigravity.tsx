@@ -158,15 +158,55 @@ export const Antigravity: React.FC<AntigravityProps> = ({
                     // Smoothly interpolate angle to prevent snapping
                     p.angle = lerpAngle(p.angle, targetAngle, 0.02);
 
-                    ctx.fillStyle = p.color;
-                    ctx.globalAlpha = alpha;
+                    // Enhanced brightness based on mouse proximity
+                    // Particles glow brighter when close to cursor
+                    const proximityBoost = Math.max(0, 1 - (dist / 350));
+                    const glowIntensity = 0.3 + proximityBoost * 0.7; // 0.3 to 1.0 range
+
+                    // Scale factor - particles grow slightly when near cursor
+                    const scaleBoost = 1 + proximityBoost * 0.4;
 
                     ctx.save();
                     ctx.translate(p.x, p.y);
                     ctx.rotate(p.angle);
 
-                    const r = p.width / 2;
-                    const w = p.size;
+                    const r = (p.width / 2) * scaleBoost;
+                    const w = p.size * scaleBoost;
+
+                    // Create gradient for textured appearance
+                    const gradient = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
+
+                    // Parse color and apply intensity
+                    const baseColor = p.color;
+                    const intensifiedAlpha = alpha * glowIntensity;
+
+                    // Core is brighter, edges fade
+                    gradient.addColorStop(0, `rgba(255, 255, 255, ${intensifiedAlpha * 0.1})`);
+                    gradient.addColorStop(0.3, baseColor.replace(')', `, ${intensifiedAlpha})`).replace('rgb', 'rgba'));
+                    gradient.addColorStop(0.7, baseColor.replace(')', `, ${intensifiedAlpha})`).replace('rgb', 'rgba'));
+                    gradient.addColorStop(1, `rgba(255, 255, 255, ${intensifiedAlpha * 0.1})`);
+
+                    // Outer glow layer (if close to cursor)
+                    if (proximityBoost > 0.2) {
+                        ctx.globalAlpha = alpha * proximityBoost * 0.3;
+                        ctx.shadowColor = p.color;
+                        ctx.shadowBlur = 8 + proximityBoost * 12;
+
+                        ctx.beginPath();
+                        ctx.moveTo(-w / 2 + r, -r);
+                        ctx.lineTo(w / 2 - r, -r);
+                        ctx.arc(w / 2 - r, 0, r, -Math.PI / 2, Math.PI / 2);
+                        ctx.lineTo(-w / 2 + r, r);
+                        ctx.arc(-w / 2 + r, 0, r, Math.PI / 2, -Math.PI / 2);
+                        ctx.closePath();
+                        ctx.fill();
+
+                        ctx.shadowBlur = 0;
+                    }
+
+                    // Main particle body with gradient texture
+                    ctx.globalAlpha = alpha * glowIntensity;
+                    ctx.fillStyle = gradient;
 
                     ctx.beginPath();
                     ctx.moveTo(-w / 2 + r, -r);

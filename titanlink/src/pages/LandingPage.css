@@ -14,40 +14,39 @@
 }
 
 /* --- MOUSE GLOW EFFECT --- */
+/* Very subtle ambient glow - no transition for instant tracking */
 .mouse-glow {
     position: absolute;
     pointer-events: none;
-    width: 600px;
-    height: 600px;
+    width: 800px;
+    height: 800px;
     border-radius: 50%;
     background: radial-gradient(circle at center,
-            rgba(0, 242, 255, 0.15) 0%,
-            rgba(0, 242, 255, 0.08) 25%,
-            rgba(0, 242, 255, 0.02) 50%,
+            rgba(0, 242, 255, 0.03) 0%,
+            rgba(0, 242, 255, 0.015) 30%,
+            rgba(0, 242, 255, 0.005) 50%,
             transparent 70%);
     transform: translate(-50%, -50%);
     left: var(--mouse-x);
     top: var(--mouse-y);
     z-index: 2;
-    transition: left 0.1s ease-out, top 0.1s ease-out;
     mix-blend-mode: screen;
 }
 
 .mouse-glow-secondary {
     position: absolute;
     pointer-events: none;
-    width: 400px;
-    height: 400px;
+    width: 500px;
+    height: 500px;
     border-radius: 50%;
     background: radial-gradient(circle at center,
-            rgba(255, 180, 50, 0.06) 0%,
-            rgba(255, 150, 0, 0.03) 40%,
+            rgba(255, 255, 255, 0.015) 0%,
+            rgba(200, 220, 255, 0.008) 40%,
             transparent 70%);
     transform: translate(-50%, -50%);
     left: var(--mouse-x);
     top: var(--mouse-y);
     z-index: 2;
-    transition: left 0.15s ease-out, top 0.15s ease-out;
     mix-blend-mode: screen;
 }
 
