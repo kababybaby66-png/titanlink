@@ -39,9 +39,20 @@ interface DataPulse {
     color: string;
 }
 
+// Micro particles for filling empty spaces
+interface MicroParticle {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    size: number;
+    alpha: number;
+    twinklePhase: number;
+}
+
 export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
-    nodeCount = 80,
-    connectionDistance = 180,
+    nodeCount = 120,
+    connectionDistance = 220,
     mouseRadius = 250,
     primaryColor = '#00f2ff',
     secondaryColor = '#4abdff',
@@ -64,8 +75,26 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
 
         let nodes: Node[] = [];
         let pulses: DataPulse[] = [];
+        let microParticles: MicroParticle[] = [];
         let mouseX = -1000;
         let mouseY = -1000;
+
+        // Initialize micro particles (dust/fill)
+        const initMicroParticles = () => {
+            microParticles = [];
+            const microCount = Math.floor(width * height / 8000); // Density based on screen size
+            for (let i = 0; i < microCount; i++) {
+                microParticles.push({
+                    x: Math.random() * width,
+                    y: Math.random() * height,
+                    vx: (Math.random() - 0.5) * 0.3,
+                    vy: (Math.random() - 0.5) * 0.3,
+                    size: Math.random() * 1.5 + 0.5,
+                    alpha: Math.random() * 0.3 + 0.1,
+                    twinklePhase: Math.random() * Math.PI * 2,
+                });
+            }
+        };
 
         // Initialize nodes
         const initNodes = () => {
@@ -93,6 +122,55 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
 
             // Precompute potential connections
             updateConnections();
+        };
+
+        // Ensure even distribution by using grid-based placement for some nodes
+        const initNodesWithGrid = () => {
+            nodes = [];
+
+            // Grid-based nodes for even coverage (60% of nodes)
+            const gridCount = Math.floor(nodeCount * 0.6);
+            const cols = Math.ceil(Math.sqrt(gridCount * (width / height)));
+            const rows = Math.ceil(gridCount / cols);
+            const cellW = width / cols;
+            const cellH = height / rows;
+
+            for (let i = 0; i < gridCount; i++) {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                // Jitter within cell
+                const x = (col + 0.2 + Math.random() * 0.6) * cellW;
+                const y = (row + 0.2 + Math.random() * 0.6) * cellH;
+                const z = Math.random() * 0.8 + 0.4;
+
+                nodes.push({
+                    x, y, originX: x, originY: y,
+                    vx: 0, vy: 0, z,
+                    size: (2 + Math.random() * 2) * z,
+                    pulsePhase: Math.random() * Math.PI * 2,
+                    connections: [],
+                });
+            }
+
+            // Random nodes for organic feel (40% of nodes)
+            const randomCount = nodeCount - gridCount;
+            for (let i = 0; i < randomCount; i++) {
+                const x = Math.random() * width;
+                const y = Math.random() * height;
+                const z = Math.random() * 0.8 + 0.4;
+
+                nodes.push({
+                    x, y, originX: x, originY: y,
+                    vx: 0, vy: 0, z,
+                    size: (2 + Math.random() * 2) * z,
+                    pulsePhase: Math.random() * Math.PI * 2,
+                    connections: [],
+                });
+            }
+
+            nodes.sort((a, b) => a.z - b.z);
+            updateConnections();
+            initMicroParticles();
         };
 
         // Update which nodes can connect
@@ -136,7 +214,7 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
             }
         };
 
-        initNodes();
+        initNodesWithGrid();
 
         const handleMouseMove = (e: MouseEvent) => {
             mouseX = e.clientX;
@@ -146,7 +224,7 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
         const handleResize = () => {
             width = canvas.width = window.innerWidth;
             height = canvas.height = window.innerHeight;
-            initNodes();
+            initNodesWithGrid();
         };
 
         window.addEventListener('mousemove', handleMouseMove);
@@ -166,6 +244,35 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
 
             // Maybe spawn new pulses
             maybeSpawnPulse();
+
+            // Update and draw micro particles (background dust)
+            microParticles.forEach(p => {
+                // Slow drift
+                p.x += p.vx;
+                p.y += p.vy;
+                p.twinklePhase += 0.02;
+
+                // Wrap around screen
+                if (p.x < 0) p.x = width;
+                if (p.x > width) p.x = 0;
+                if (p.y < 0) p.y = height;
+                if (p.y > height) p.y = 0;
+
+                // Twinkle effect
+                const twinkle = Math.sin(p.twinklePhase) * 0.5 + 0.5;
+                const alpha = p.alpha * (0.5 + twinkle * 0.5);
+
+                // Mouse proximity boost
+                const dx = mouseX - p.x;
+                const dy = mouseY - p.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const mouseBoost = Math.max(0, 1 - dist / 300) * 0.4;
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(0, 242, 255, ${alpha + mouseBoost})`;
+                ctx.fill();
+            });
 
             // Update and draw nodes
             nodes.forEach((node, i) => {
