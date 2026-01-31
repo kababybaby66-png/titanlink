@@ -7,6 +7,48 @@
     align-items: center;
     justify-content: center;
     background: radial-gradient(circle at 50% 50%, #0f1219 0%, #000000 100%);
+
+    /* CSS custom properties for mouse position */
+    --mouse-x: 50%;
+    --mouse-y: 50%;
+}
+
+/* --- MOUSE GLOW EFFECT --- */
+.mouse-glow {
+    position: absolute;
+    pointer-events: none;
+    width: 600px;
+    height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle at center,
+            rgba(0, 242, 255, 0.15) 0%,
+            rgba(0, 242, 255, 0.08) 25%,
+            rgba(0, 242, 255, 0.02) 50%,
+            transparent 70%);
+    transform: translate(-50%, -50%);
+    left: var(--mouse-x);
+    top: var(--mouse-y);
+    z-index: 2;
+    transition: left 0.1s ease-out, top 0.1s ease-out;
+    mix-blend-mode: screen;
+}
+
+.mouse-glow-secondary {
+    position: absolute;
+    pointer-events: none;
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    background: radial-gradient(circle at center,
+            rgba(255, 180, 50, 0.06) 0%,
+            rgba(255, 150, 0, 0.03) 40%,
+            transparent 70%);
+    transform: translate(-50%, -50%);
+    left: var(--mouse-x);
+    top: var(--mouse-y);
+    z-index: 2;
+    transition: left 0.15s ease-out, top 0.15s ease-out;
+    mix-blend-mode: screen;
 }
 
 /* --- BACKGROUND FX --- */

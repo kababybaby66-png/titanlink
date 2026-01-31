@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Antigravity } from '../components/ui/Antigravity';
 import './LandingPage.css';
@@ -15,6 +15,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     onSettingsClick
 }) => {
     const [scrambleText, setScrambleText] = useState('SYSTEM_READY');
+    const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+    // Mouse tracking for glow effect
+    const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        setMousePos({
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top,
+        });
+    }, []);
 
     // Simple scramble effect on mount
     useEffect(() => {
@@ -36,7 +46,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     }, []);
 
     return (
-        <div className="landing-page">
+        <div
+            className="landing-page"
+            onMouseMove={handleMouseMove}
+            style={{
+                '--mouse-x': `${mousePos.x}px`,
+                '--mouse-y': `${mousePos.y}px`,
+            } as React.CSSProperties}
+        >
+            {/* Mouse-following glow effect */}
+            <div className="mouse-glow" />
+            <div className="mouse-glow-secondary" />
+
             {/* Background elements */}
             <div className="grid-overlay"></div>
             <div className="orbital-ring"></div>
