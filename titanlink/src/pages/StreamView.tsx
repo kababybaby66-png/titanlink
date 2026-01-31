@@ -34,6 +34,7 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
     // Connection quality
     const [packetLoss, setPacketLoss] = useState(0);
     const [jitter, setJitter] = useState(0);
+    const [actualFps, setActualFps] = useState(0);
 
     // Attach video stream to video element
     useEffect(() => {
@@ -75,7 +76,8 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
             setPacketLoss(quality.packetLoss);
             setJitter(quality.jitter);
             setHasAudio(quality.hasAudio || hasAudio); // Keep true if we detected audio
-        }, 1000);
+            setActualFps(webrtcService.getActualFps());
+        }, 500); // LOW LATENCY: Poll faster for responsive stats
 
         return () => clearInterval(interval);
     }, [hasAudio]);
@@ -379,11 +381,31 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
                             <div className="window-padding">
                                 <div className="stat-row">
                                     <span className="label">Latency</span>
-                                    <span className="value">{sessionState.latency || 0} ms</span>
+                                    <span className={`value ${(sessionState.latency || 0) < 30 ? 'text-green-400' : (sessionState.latency || 0) < 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                        {sessionState.latency || 0} ms
+                                    </span>
+                                </div>
+                                <div className="stat-row">
+                                    <span className="label">FPS</span>
+                                    <span className={`value ${actualFps >= 55 ? 'text-green-400' : actualFps >= 30 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                        {actualFps} fps
+                                    </span>
                                 </div>
                                 <div className="stat-row">
                                     <span className="label">Resolution</span>
                                     <span className="value">{videoRef.current?.videoWidth}x{videoRef.current?.videoHeight}</span>
+                                </div>
+                                <div className="stat-row">
+                                    <span className="label">Packet Loss</span>
+                                    <span className={`value ${packetLoss < 1 ? 'text-green-400' : packetLoss < 3 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                        {packetLoss.toFixed(1)}%
+                                    </span>
+                                </div>
+                                <div className="stat-row">
+                                    <span className="label">Jitter</span>
+                                    <span className={`value ${jitter < 20 ? 'text-green-400' : jitter < 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                        {jitter.toFixed(1)} ms
+                                    </span>
                                 </div>
                                 <div className="stat-row">
                                     <span className="label">Protocol</span>

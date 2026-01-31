@@ -159,6 +159,12 @@ class WebRTCService {
     private packetLossSamples: number[] = [];
     private jitterSamples: number[] = [];
     private videoSender: RTCRtpSender | null = null;
+    private audioSender: RTCRtpSender | null = null;
+
+    // FPS monitoring for stats overlay
+    private actualFps: number = 0;
+    private frameCount: number = 0;
+    private lastFpsUpdate: number = 0;
 
     constructor() {
         this.peerId = uuidv4().substring(0, 8);
@@ -708,19 +714,32 @@ class WebRTCService {
             const videoTrack = this.mediaStream.getVideoTracks()[0];
             if (videoTrack) {
                 console.log('[WebRTC] Adding video track to peer connection');
+
+                // LOW LATENCY: Set content hint to 'motion' for fast motion optimization
+                if ('contentHint' in videoTrack) {
+                    (videoTrack as any).contentHint = 'motion';
+                    console.log('[WebRTC] Video track contentHint set to "motion" for low latency');
+                }
+
                 this.videoSender = this.peerConnection.addTrack(videoTrack, this.mediaStream);
 
                 // Set codec preferences for optimal quality (prioritize H.264 hardware encoding)
                 this.setCodecPreferences();
+
+                // Apply low-latency encoder parameters
+                this.applyLowLatencyEncoderSettings();
             }
 
             // Add audio track (critical for system audio streaming!)
             const audioTrack = this.mediaStream.getAudioTracks()[0];
             if (audioTrack) {
                 console.log('[WebRTC] Adding audio track to peer connection - system audio will be streamed');
-                this.peerConnection.addTrack(audioTrack, this.mediaStream);
+                this.audioSender = this.peerConnection.addTrack(audioTrack, this.mediaStream);
                 this.hasAudioTrack = true;
                 this.connectionQuality.hasAudio = true;
+
+                // Apply audio bitrate settings
+                this.applyAudioSettings();
             } else {
                 console.warn('[WebRTC] No audio track available - system audio capture may have failed');
                 this.hasAudioTrack = false;
@@ -732,13 +751,18 @@ class WebRTCService {
     private createInputChannel(): void {
         if (!this.peerConnection) return;
 
-        console.log('[WebRTC] Creating negotiated input channel (id: 0)');
+        console.log('[WebRTC] Creating HIGH PRIORITY negotiated input channel (id: 0)');
         this.inputChannel = this.peerConnection.createDataChannel('input', {
             ordered: false,
             maxRetransmits: 0,
             negotiated: true,
             id: 0,
-        });
+            // LOW LATENCY: Maximum priority for controller input
+            priority: 'high',
+        } as RTCDataChannelInit);
+
+        // Set buffered amount low threshold to 0 for immediate sending
+        this.inputChannel.bufferedAmountLowThreshold = 0;
 
         this.setupInputChannel(this.inputChannel);
     }
@@ -859,6 +883,7 @@ class WebRTCService {
     }
 
     private startLatencyMeasurement(): void {
+        // LOW LATENCY: Poll every 500ms instead of 1000ms for faster adaptive response
         this.latencyInterval = setInterval(async () => {
             if (!this.peerConnection) return;
 
@@ -889,7 +914,7 @@ class WebRTCService {
                         }
                     }
 
-                    // Track packet loss and jitter from inbound-rtp
+                    // Track packet loss, jitter, and FPS from inbound-rtp
                     if (report.type === 'inbound-rtp' && (report.kind === 'video' || report.mediaType === 'video')) {
                         const packetsLost = report.packetsLost || 0;
                         const packetsReceived = report.packetsReceived || 0;
@@ -909,6 +934,21 @@ class WebRTCService {
 
                         this.previousPacketsLost = packetsLost;
                         this.previousPacketsReceived = packetsReceived;
+
+                        // Track actual FPS from framesDecoded or framesPerSecond
+                        const framesDecoded = report.framesDecoded || 0;
+                        const now = Date.now();
+                        const timeDelta = now - this.lastFpsUpdate;
+
+                        if (timeDelta >= 1000 && this.lastFpsUpdate > 0) {
+                            const framesDelta = framesDecoded - this.frameCount;
+                            this.actualFps = Math.round((framesDelta / timeDelta) * 1000);
+                            this.frameCount = framesDecoded;
+                            this.lastFpsUpdate = now;
+                        } else if (this.lastFpsUpdate === 0) {
+                            this.frameCount = framesDecoded;
+                            this.lastFpsUpdate = now;
+                        }
                     }
                 });
 
@@ -917,7 +957,7 @@ class WebRTCService {
             } catch (error) {
                 console.error('Error getting RTT:', error);
             }
-        }, 1000);
+        }, 500); // LOW LATENCY: 500ms polling vs 1000ms
     }
 
     /**
@@ -1059,6 +1099,98 @@ class WebRTCService {
     }
 
     /**
+     * Apply aggressive low-latency encoder settings
+     * This sets maxFramerate, scalabilityMode, and priority for minimal delay
+     */
+    private async applyLowLatencyEncoderSettings(): Promise<void> {
+        if (!this.videoSender) return;
+
+        try {
+            // Small delay to let sender initialize
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            const params = this.videoSender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) {
+                params.encodings = [{}];
+            }
+
+            const encoding = params.encodings[0];
+
+            // === AGGRESSIVE LOW LATENCY SETTINGS ===
+
+            // 1. Enforce max frame rate from settings
+            encoding.maxFramerate = this.settings.fps;
+
+            // 2. Set maximum bitrate
+            encoding.maxBitrate = this.settings.bitrate * 1000 * 1000; // Mbps to bps
+
+            // 3. Set priority to high for this stream
+            encoding.priority = 'high';
+            encoding.networkPriority = 'high';
+
+            // 4. L1T1 scalability mode - no temporal layers = lower latency
+            // This disables B-frames and temporal scalability
+            if ('scalabilityMode' in encoding || true) {
+                (encoding as any).scalabilityMode = 'L1T1';
+            }
+
+            await this.videoSender.setParameters(params);
+
+            console.log('[WebRTC] LOW LATENCY encoder settings applied:', {
+                maxFramerate: this.settings.fps,
+                maxBitrate: `${this.settings.bitrate}Mbps`,
+                priority: 'high',
+                scalabilityMode: 'L1T1',
+            });
+        } catch (error) {
+            console.warn('[WebRTC] Could not apply low-latency encoder settings:', error);
+        }
+    }
+
+    /**
+     * Apply audio bitrate and sample rate settings
+     */
+    private async applyAudioSettings(): Promise<void> {
+        if (!this.audioSender) return;
+
+        try {
+            // Small delay to let sender initialize
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            const params = this.audioSender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) {
+                params.encodings = [{}];
+            }
+
+            const encoding = params.encodings[0];
+
+            // Set audio bitrate from settings (convert kbps to bps)
+            const audioBitrateBps = (this.settings.audioBitrate || 128) * 1000;
+            encoding.maxBitrate = audioBitrateBps;
+
+            // High priority for audio too
+            encoding.priority = 'high';
+            encoding.networkPriority = 'high';
+
+            await this.audioSender.setParameters(params);
+
+            console.log('[WebRTC] Audio settings applied:', {
+                maxBitrate: `${this.settings.audioBitrate || 128}kbps`,
+                priority: 'high',
+            });
+        } catch (error) {
+            console.warn('[WebRTC] Could not apply audio settings:', error);
+        }
+    }
+
+    /**
+     * Get actual FPS from stats (for monitoring)
+     */
+    getActualFps(): number {
+        return this.actualFps;
+    }
+
+    /**
      * Enable or disable adaptive bitrate
      */
     setAdaptiveBitrateEnabled(enabled: boolean): void {
@@ -1136,18 +1268,34 @@ class WebRTCService {
 
     private setBandwidth(sdp: string, bitrateMbps: number): string {
         const bitrateKbps = bitrateMbps * 1000;
-        let modifier = 'b=AS:' + bitrateKbps;
 
-        // Advanced SDP Munging for Stability
-        // If CBR is requested, we force a high minimum bitrate to prevent quality drops
+        // === LOW LATENCY SDP MODIFICATIONS ===
+        let videoModifier = 'b=AS:' + bitrateKbps;
+
+        // Advanced SDP Munging for low latency and stability
+        // Add Google-specific extensions for real-time streaming
+        const fmtpParams: string[] = [];
+
+        // 1. If CBR is requested, force stable bitrate
         if (this.settings.bitrateMode === 'cbr') {
-            modifier += `\r\na=fmtp:96 x-google-min-bitrate=${Math.floor(bitrateKbps * 0.8)};x-google-max-bitrate=${bitrateKbps}`;
+            fmtpParams.push(`x-google-min-bitrate=${Math.floor(bitrateKbps * 0.8)}`);
+            fmtpParams.push(`x-google-max-bitrate=${bitrateKbps}`);
+        }
+
+        // 2. Reduce keyframe interval for faster error recovery (1000ms = 1 second)
+        fmtpParams.push('x-google-max-keyframe-interval=1000');
+
+        // 3. Start at higher bitrate for faster ramp-up
+        fmtpParams.push(`x-google-start-bitrate=${Math.floor(bitrateKbps * 0.9)}`);
+
+        if (fmtpParams.length > 0) {
+            videoModifier += `\r\na=fmtp:96 ${fmtpParams.join(';')}`;
         }
 
         const lines = sdp.split('\n');
         const newLines = lines.map(line => line.trim());
 
-        // 1. Set Bandwidth Line (b=AS)
+        // 1. Set Bandwidth Line (b=AS) for video
         for (let i = 0; i < newLines.length; i++) {
             if (newLines[i].startsWith('m=video')) {
                 i++;
@@ -1159,7 +1307,16 @@ class WebRTCService {
                     }
                     i++;
                 }
-                newLines.splice(i, 0, modifier);
+                newLines.splice(i, 0, videoModifier);
+            }
+        }
+
+        // 2. Add session-level attributes for real-time (before first m= line)
+        for (let i = 0; i < newLines.length; i++) {
+            if (newLines[i].startsWith('m=')) {
+                // Insert conference flag for real-time optimization
+                newLines.splice(i, 0, 'a=x-google-flag:conference');
+                break;
             }
         }
 

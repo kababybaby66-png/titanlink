@@ -40,6 +40,7 @@ export interface StreamSettings {
     // Advanced Settings
     bitrateMode: 'cbr' | 'vbr';
     audioBitrate: number; // in kbps (96-512)
+    audioSampleRate: 48000 | 44100; // in Hz
     audioQualityMode: 'game' | 'voice'; // 'game' disables echo cancellation
     vsync: boolean;
     iceRestart: boolean;
@@ -52,6 +53,7 @@ export const DEFAULT_SETTINGS: StreamSettings = {
     codec: 'h264',
     bitrateMode: 'cbr',
     audioBitrate: 128,
+    audioSampleRate: 48000,
     audioQualityMode: 'game',
     vsync: false,
     iceRestart: true,

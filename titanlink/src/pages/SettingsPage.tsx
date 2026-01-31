@@ -121,18 +121,35 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                             <h3 className="section-title">AUDIO</h3>
                             <div className="input-row">
                                 <div className="input-field">
-                                    <label>Audio Device</label>
-                                    <select className="cyber-select">
-                                        <option>Default Output Device</option>
-                                        <option>Headphones (Realtek High Definition)</option>
+                                    <label>Sample Rate</label>
+                                    <select
+                                        className="cyber-select"
+                                        value={localSettings.audioSampleRate}
+                                        onChange={(e) => updateSetting('audioSampleRate', parseInt(e.target.value) as any)}
+                                    >
+                                        <option value="48000">48 kHz (High Quality)</option>
+                                        <option value="44100">44.1 kHz (Standard)</option>
                                     </select>
+                                    <div className="text-[10px] text-white/40 mt-1">
+                                        Higher = better quality, more bandwidth
+                                    </div>
                                 </div>
                                 <div className="input-field">
-                                    <label>Quality</label>
-                                    <select className="cyber-select">
-                                        <option>High (48kHz)</option>
-                                        <option>Low (Bandwidth Saver)</option>
+                                    <label>Audio Bitrate</label>
+                                    <select
+                                        className="cyber-select"
+                                        value={localSettings.audioBitrate}
+                                        onChange={(e) => updateSetting('audioBitrate', parseInt(e.target.value))}
+                                    >
+                                        <option value="96">96 kbps (Low)</option>
+                                        <option value="128">128 kbps (Standard)</option>
+                                        <option value="192">192 kbps (High)</option>
+                                        <option value="256">256 kbps (Very High)</option>
+                                        <option value="320">320 kbps (Maximum)</option>
                                     </select>
+                                    <div className="text-[10px] text-white/40 mt-1">
+                                        {localSettings.audioBitrate}kbps • Higher = better audio clarity
+                                    </div>
                                 </div>
                             </div>
                         </div>
