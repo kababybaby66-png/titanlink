@@ -71,7 +71,6 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
         // Configuration
         const friction = 0.92;
         const returnForce = 0.008;
-        const repelForce = 0.4;
 
         let nodes: Node[] = [];
         let pulses: DataPulse[] = [];
@@ -276,20 +275,12 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
 
             // Update and draw nodes
             nodes.forEach((node, i) => {
-                // Mouse interaction
+                // Mouse interaction (for glow effects, no repulsion)
                 const dx = mouseX - node.x;
                 const dy = mouseY - node.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
-                // Repel from mouse
-                if (dist < mouseRadius) {
-                    const force = (mouseRadius - dist) / mouseRadius;
-                    const angle = Math.atan2(dy, dx);
-                    node.vx -= Math.cos(angle) * force * repelForce * node.z;
-                    node.vy -= Math.sin(angle) * force * repelForce * node.z;
-                }
-
-                // Return to origin
+                // Gentle drift back to origin (no repel - nodes stay in place)
                 node.vx += (node.originX - node.x) * returnForce * node.z;
                 node.vy += (node.originY - node.y) * returnForce * node.z;
 
