@@ -5,6 +5,7 @@ import type { DisplayInfo, SystemStats, GamepadInputState } from '../../shared/t
 import { GlassCard } from '../components/ui/GlassCard';
 import { StatusVisualizer } from '../components/StatusVisualizer';
 import { ControllerOverlay } from '../components/ControllerOverlay';
+import { AudioSetupModal } from '../components/AudioSetupModal';
 import { webrtcService } from '../services/WebRTCService';
 import './HostLobby.css';
 
@@ -105,6 +106,9 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
     const [currentInput, setCurrentInput] = useState<GamepadInputState | null>(null);
     const [showControllerOverlay, setShowControllerOverlay] = useState(true);
 
+    // Audio setup modal state
+    const [showAudioSetupModal, setShowAudioSetupModal] = useState(false);
+
     // Connection quality metrics
     const [connectionQuality, setConnectionQuality] = useState({
         latency: 0,
@@ -119,7 +123,7 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
     // -- DRAG & DROP STATE --
     // Note: 'controller', 'client', 'quality' will only render when streaming is active
     const [panels, setPanels] = useState<{ left: string[], right: string[] }>({
-        left: ['latency', 'region', 'protocol', 'client', 'quality'],
+        left: ['latency', 'region', 'protocol', 'audio', 'client', 'quality'],
         right: ['reactor', 'resources', 'controller', 'logs', 'stopbtn']
     });
 
@@ -205,6 +209,13 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
         try {
             await onStartHosting(selectedDisplay);
             addLog('Session Created successfully');
+
+            // Check if audio was captured - if not, show the audio setup modal
+            const hasAudio = webrtcService.getConnectionQuality().hasAudio;
+            if (!hasAudio) {
+                addLog('[WARN] Audio capture failed - showing setup options');
+                setTimeout(() => setShowAudioSetupModal(true), 500);
+            }
         } catch (err) {
             setLocalError(err instanceof Error ? err.message : 'Failed');
             addLog('[ERROR] Init failed');
@@ -316,6 +327,32 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
                         </div>
                         <div className="card-value">UDP/P2P</div>
                         <span className="badge-secure">SECURE</span>
+                    </GlassCard>
+                );
+            case 'audio':
+                // Audio status widget - only show when hosting
+                if (!isHosting) return null;
+                const hasAudio = webrtcService.getConnectionQuality().hasAudio;
+                return (
+                    <GlassCard className={`audio-widget ${hasAudio ? 'active' : 'inactive'}`}>
+                        <div className="card-header">
+                            <span className="material-symbols-outlined icon">
+                                {hasAudio ? 'volume_up' : 'volume_off'}
+                            </span>
+                            <span className="title">AUDIO</span>
+                            <span className={`status-badge ${hasAudio ? 'connected' : 'disconnected'}`}>
+                                {hasAudio ? 'ACTIVE' : 'DISABLED'}
+                            </span>
+                        </div>
+                        {!hasAudio && (
+                            <button
+                                className="audio-fix-btn"
+                                onClick={() => setShowAudioSetupModal(true)}
+                            >
+                                <span className="material-symbols-outlined">settings</span>
+                                Fix Audio
+                            </button>
+                        )}
                     </GlassCard>
                 );
             case 'reactor':
@@ -536,6 +573,15 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
                     );
                 })}
             </aside>
+
+            {/* Audio Setup Modal */}
+            <AudioSetupModal
+                isOpen={showAudioSetupModal}
+                onClose={() => setShowAudioSetupModal(false)}
+                onInstallComplete={() => {
+                    addLog('[AUDIO] VB-Cable installed successfully');
+                }}
+            />
         </div>
     );
 }

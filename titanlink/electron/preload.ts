@@ -89,6 +89,27 @@ const electronAPI = {
         },
         restartAndInstall: () => ipcRenderer.send('update:restart-and-install'),
     },
+
+    // ============================================
+    // Audio / VB-Cable APIs
+    // ============================================
+    audio: {
+        checkVBCableInstalled: (): Promise<{ installed: boolean; reason?: string }> =>
+            ipcRenderer.invoke('audio:check-vbcable-installed'),
+        installVBCable: (): Promise<{ success: boolean; error?: string }> =>
+            ipcRenderer.invoke('audio:install-vbcable'),
+        enableVBCableRouting: (): Promise<{ success: boolean; error?: string }> =>
+            ipcRenderer.invoke('audio:enable-vbcable-routing'),
+        disableVBCableRouting: (): Promise<{ success: boolean; error?: string }> =>
+            ipcRenderer.invoke('audio:disable-vbcable-routing'),
+        getDevices: (): Promise<{ devices: Array<{ Name: string; Status: string }>; hasVBCable: boolean }> =>
+            ipcRenderer.invoke('audio:get-devices'),
+        onVBCableProgress: (callback: (data: { status: string; progress?: number; error?: string }) => void) => {
+            const listener = (_event: any, data: { status: string; progress?: number; error?: string }) => callback(data);
+            ipcRenderer.on('audio:vbcable-progress', listener);
+            return () => { ipcRenderer.removeListener('audio:vbcable-progress', listener); };
+        },
+    },
 };
 
 // Type-safe API exposure

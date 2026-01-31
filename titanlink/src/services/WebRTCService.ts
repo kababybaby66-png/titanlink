@@ -216,6 +216,16 @@ class WebRTCService {
 
             await this.startScreenCapture(displayId);
 
+            // Enable VB-Cable audio routing if available (so host can still hear their audio)
+            try {
+                const routingResult = await window.electronAPI?.audio?.enableVBCableRouting();
+                if (routingResult?.success) {
+                    console.log('[WebRTC] VB-Cable audio routing enabled for hosting');
+                }
+            } catch {
+                // VB-Cable routing is optional - continue without it
+            }
+
             // Fetch ICE servers
             this.dynamicIceServers = await this.fetchIceServers();
 
@@ -284,6 +294,20 @@ class WebRTCService {
             this.ws = null;
         }
 
+        // Disable VB-Cable audio routing when hosting stops
+        if (this.role === 'host') {
+            try {
+                await window.electronAPI?.audio?.disableVBCableRouting();
+                console.log('[WebRTC] VB-Cable audio routing disabled');
+            } catch {
+                // Ignore errors during cleanup
+            }
+        }
+
+        // Reset audio status
+        this.hasAudioTrack = false;
+        this.connectionQuality.hasAudio = false;
+
         this.role = null;
         this.sessionCode = '';
         this.callbacks?.onStateChange('disconnected');
@@ -334,6 +358,7 @@ class WebRTCService {
             case '4k': width = 3840; height = 2160; break;
         }
 
+        // Video constraints - always needs the specific displayId
         const videoConstraints = {
             mandatory: {
                 chromeMediaSource: 'desktop',
@@ -351,23 +376,25 @@ class WebRTCService {
         try {
             const devices = await navigator.mediaDevices.enumerateDevices();
             const audioInputs = devices.filter(d => d.kind === 'audioinput');
+            const audioOutputs = devices.filter(d => d.kind === 'audiooutput');
             console.log('[WebRTC] Available audio inputs:', audioInputs.map(d => `${d.label} (${d.deviceId})`));
+            console.log('[WebRTC] Available audio outputs:', audioOutputs.map(d => `${d.label} (${d.deviceId})`));
         } catch (e) {
             console.warn('[WebRTC] Failed to enumerate devices:', e);
         }
 
-        // First, try to capture video with audio in a single call
+        // ============================================
+        // STRATEGY 1: Combined video + audio capture (audio WITHOUT chromeMediaSourceId)
+        // On Windows, system audio capture works better when we DON'T specify chromeMediaSourceId for audio
+        // ============================================
         try {
-            console.log('[WebRTC] Attempting screen capture with audio...');
-
-            // Try with standard constraints first
+            console.log('[WebRTC] Strategy 1: Combined capture (audio without sourceId)...');
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     mandatory: {
                         chromeMediaSource: 'desktop',
-                        // On some Windows systems, specifying the ID for audio causes failure
-                        // Try matching it, but we might remove it in a fallback
-                        chromeMediaSourceId: displayId,
+                        // CRITICAL: Do NOT specify chromeMediaSourceId for audio on Windows!
+                        // The audio should capture system-wide, not per-display
                     }
                 } as any,
                 video: videoConstraints as any,
@@ -375,66 +402,118 @@ class WebRTCService {
 
             const audioTracks = this.mediaStream.getAudioTracks();
             const videoTracks = this.mediaStream.getVideoTracks();
-            console.log('[WebRTC] Capture result:', {
-                video: videoTracks.length,
-                audio: audioTracks.length
-            });
+            console.log('[WebRTC] Strategy 1 result:', { video: videoTracks.length, audio: audioTracks.length });
 
             if (audioTracks.length > 0) {
-                console.log('[WebRTC] ✓ Audio capture successful!');
+                console.log('[WebRTC] ✓ Strategy 1 SUCCESS - Audio + Video captured!');
+                this.hasAudioTrack = true;
+                this.connectionQuality.hasAudio = true;
                 return;
             }
+            // Strategy 1 got video but no audio - continue to try loopback devices
+            console.warn('[WebRTC] Strategy 1: Video captured but no audio tracks - trying loopback...');
         } catch (error) {
-            console.warn('[WebRTC] Primary audio+video capture failed:', (error as Error).message);
-
-            // Secondary attempt: Try without specifying audio source ID
-            try {
-                console.log('[WebRTC] Retrying with generic system audio reference...');
-                this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        mandatory: {
-                            chromeMediaSource: 'desktop',
-                        }
-                    } as any,
-                    video: videoConstraints as any,
-                });
-                console.log('[WebRTC] ✓ Retry successful!');
-                return;
-            } catch (retryError) {
-                console.warn('[WebRTC] Retry with "desktop" failed:', (retryError as Error).message);
-
-                // Tertiary attempt: Try 'system' source (modern Electron)
-                try {
-                    console.log('[WebRTC] Attempting fallback to "system" audio source...');
-                    this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                        audio: {
-                            mandatory: {
-                                chromeMediaSource: 'system',
-                            }
-                        } as any,
-                        video: videoConstraints as any,
-                    });
-                    console.log('[WebRTC] ✓ "System" audio fallback successful!');
-                    return;
-                } catch (systemError) {
-                    console.error('[WebRTC] All audio capture attempts failed:', (systemError as Error).message);
-                }
-            }
+            console.warn('[WebRTC] Strategy 1 failed:', (error as Error).message);
         }
 
-        // Fallback: Try video only
+        // NOTE: We intentionally skip trying to capture desktop audio separately!
+        // In Electron, calling getUserMedia with chromeMediaSource:'desktop' for audio 
+        // AND video:false causes a "bad IPC message" crash that terminates the renderer.
+        // Desktop audio capture MUST be combined with video in a single getUserMedia call.
+
+        // ============================================
+        // STRATEGY 2: Try with loopback audio device (Stereo Mix, WASAPI loopback)
+        // Look for virtual audio devices that provide system audio
+        // ============================================
         try {
-            console.log('[WebRTC] Falling back to video-only capture...');
+            console.log('[WebRTC] Strategy 2: Trying loopback/virtual audio device...');
+
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const loopbackDevice = devices.find(d =>
+                d.kind === 'audioinput' &&
+                (d.label.toLowerCase().includes('stereo mix') ||
+                    d.label.toLowerCase().includes('what u hear') ||
+                    d.label.toLowerCase().includes('loopback') ||
+                    d.label.toLowerCase().includes('wave out') ||
+                    d.label.toLowerCase().includes('virtual cable'))
+            );
+
+            if (loopbackDevice) {
+                console.log('[WebRTC] Found loopback device:', loopbackDevice.label);
+
+                // Reuse video stream from Strategy 1 if we have it
+                let videoStream: MediaStream;
+                if (this.mediaStream && this.mediaStream.getVideoTracks().length > 0) {
+                    console.log('[WebRTC] Reusing video stream from Strategy 1');
+                    videoStream = this.mediaStream;
+                } else {
+                    // Get fresh video
+                    videoStream = await navigator.mediaDevices.getUserMedia({
+                        audio: false,
+                        video: videoConstraints as any,
+                    });
+                }
+
+                // Get audio from loopback device (this is a regular mic-style capture, safe to do)
+                const audioStream = await navigator.mediaDevices.getUserMedia({
+                    audio: { deviceId: { exact: loopbackDevice.deviceId } },
+                    video: false,
+                });
+
+                this.mediaStream = new MediaStream([
+                    ...videoStream.getVideoTracks(),
+                    ...audioStream.getAudioTracks(),
+                ]);
+                console.log('[WebRTC] ✓ Strategy 2 SUCCESS - Loopback audio captured!');
+                this.hasAudioTrack = true;
+                this.connectionQuality.hasAudio = true;
+                return;
+            } else {
+                console.log('[WebRTC] Strategy 2: No loopback device found');
+            }
+        } catch (error) {
+            console.warn('[WebRTC] Strategy 2 failed:', (error as Error).message);
+        }
+
+        // ============================================
+        // FALLBACK: Video only - audio not available
+        // ============================================
+        // Check if we already have video from Strategy 1
+        if (this.mediaStream && this.mediaStream.getVideoTracks().length > 0) {
+            console.log('[WebRTC] ✓ Using video from Strategy 1 (NO AUDIO)');
+            console.warn('[WebRTC] ⚠️ AUDIO CAPTURE FAILED - Client will not hear system sounds');
+            console.warn('[WebRTC] 💡 To enable audio on Windows:');
+            console.warn('[WebRTC]    1. Right-click speaker icon > Sounds > Recording tab');
+            console.warn('[WebRTC]    2. Right-click empty area > "Show Disabled Devices"');
+            console.warn('[WebRTC]    3. Enable "Stereo Mix" and set as default');
+            console.warn('[WebRTC]    4. OR install VB-Audio Virtual Cable: https://vb-audio.com/Cable/');
+            return;
+        }
+
+        // Last resort: fresh video-only capture
+        try {
+            console.log('[WebRTC] Fallback: Fresh video-only capture...');
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
                 audio: false,
                 video: videoConstraints as any,
             });
-            console.log('[WebRTC] ✓ Video capture successful (no audio)');
-            console.warn('[WebRTC] 💡 Tip: To enable audio, enable "Stereo Mix" in Windows Sound Settings > Recording');
+            console.log('[WebRTC] ✓ Video capture successful (NO AUDIO)');
+            console.warn('[WebRTC] ⚠️ AUDIO CAPTURE FAILED - Client will not hear system sounds');
+            console.warn('[WebRTC] 💡 To enable audio on Windows:');
+            console.warn('[WebRTC]    1. Right-click speaker icon > Sounds > Recording tab');
+            console.warn('[WebRTC]    2. Right-click empty area > "Show Disabled Devices"');
+            console.warn('[WebRTC]    3. Enable "Stereo Mix" and set as default');
+            console.warn('[WebRTC]    4. OR install VB-Audio Virtual Cable: https://vb-audio.com/Cable/');
         } catch (videoError) {
-            console.error('[WebRTC] Screen capture failed:', videoError);
+            console.error('[WebRTC] Screen capture completely failed:', videoError);
             throw new Error('Failed to capture screen. Please check system permissions.');
         }
+
+        // Update audio status after all capture attempts
+        const audioTracks = this.mediaStream?.getAudioTracks() ?? [];
+        this.hasAudioTrack = audioTracks.length > 0;
+        this.connectionQuality.hasAudio = this.hasAudioTrack;
+        console.log(`[WebRTC] Audio capture status: ${this.hasAudioTrack ? 'SUCCESS' : 'FAILED - No audio tracks'}`);
     }
 
     private async connectToSignalingServer(retryCount: number = 0): Promise<void> {
