@@ -381,14 +381,13 @@ class WebRTCService {
         } catch (error) {
             console.warn('[WebRTC] Primary audio+video capture failed:', (error as Error).message);
 
-            // Secondary attempt: Try without specifying audio source ID (let OS pick default system audio)
+            // Secondary attempt: Try without specifying audio source ID
             try {
                 console.log('[WebRTC] Retrying with generic system audio reference...');
                 this.mediaStream = await navigator.mediaDevices.getUserMedia({
                     audio: {
                         mandatory: {
                             chromeMediaSource: 'desktop',
-                            // No sourceId for audio - captures "system audio" from default output
                         }
                     } as any,
                     video: videoConstraints as any,
@@ -396,7 +395,24 @@ class WebRTCService {
                 console.log('[WebRTC] ✓ Retry successful!');
                 return;
             } catch (retryError) {
-                console.error('[WebRTC] Retry also failed:', (retryError as Error).message);
+                console.warn('[WebRTC] Retry with "desktop" failed:', (retryError as Error).message);
+
+                // Tertiary attempt: Try 'system' source (modern Electron)
+                try {
+                    console.log('[WebRTC] Attempting fallback to "system" audio source...');
+                    this.mediaStream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            mandatory: {
+                                chromeMediaSource: 'system',
+                            }
+                        } as any,
+                        video: videoConstraints as any,
+                    });
+                    console.log('[WebRTC] ✓ "System" audio fallback successful!');
+                    return;
+                } catch (systemError) {
+                    console.error('[WebRTC] All audio capture attempts failed:', (systemError as Error).message);
+                }
             }
         }
 

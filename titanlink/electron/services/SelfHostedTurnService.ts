@@ -70,7 +70,15 @@ export class SelfHostedTurnService {
         const secretsEnv = process.env.TURN_SERVER_SECRET || '';
 
         if (!urlsEnv || !secretsEnv) {
-            console.log('[TurnManager] No TURN servers configured in environment');
+            console.log('[TurnManager] No TURN servers in env, using default Oracle config');
+            // Hardcoded fallback for production (since .env isn't packaged)
+            this.servers.push({
+                url: 'turn:129.159.142.124:3478',
+                secret: 'bdd04d11598125464972e35f3dffc634c449177114639527ec56185856426725',
+                priority: 0,
+                label: 'Oracle-Cloud',
+                healthy: true,
+            });
             return;
         }
 
@@ -265,7 +273,10 @@ export class SelfHostedTurnService {
      * Get the best available TURN servers (sorted by health/latency)
      */
     getHealthyServers(): TurnServerEntry[] {
-        return this.servers.filter(s => s.healthy !== false);
+        // Bypass health check for now to FORCE Oracle server usage
+        console.log('[TurnManager] Returning ALL servers (health check bypassed)');
+        return this.servers;
+        // return this.servers.filter(s => s.healthy !== false);
     }
 
     /**
