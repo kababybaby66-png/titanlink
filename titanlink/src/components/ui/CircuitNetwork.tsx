@@ -71,6 +71,7 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
         // Configuration
         const friction = 0.92;
         const returnForce = 0.008;
+        const parallaxStrength = 30; // Max pixel shift for 3D parallax effect
 
         let nodes: Node[] = [];
         let pulses: DataPulse[] = [];
@@ -236,6 +237,18 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
             ctx.clearRect(0, 0, width, height);
             frameCount++;
 
+            // Calculate parallax offset based on mouse position relative to center
+            // Objects with higher z (closer) shift more, creating 3D depth
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const mouseOffsetX = (mouseX - centerX) / centerX; // -1 to 1
+            const mouseOffsetY = (mouseY - centerY) / centerY; // -1 to 1
+
+            const getParallaxOffset = (z: number) => ({
+                x: mouseOffsetX * parallaxStrength * (z - 0.5),
+                y: mouseOffsetY * parallaxStrength * (z - 0.5),
+            });
+
             // Update connections every 30 frames
             if (frameCount % 30 === 0) {
                 updateConnections();
@@ -298,8 +311,18 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
 
             // Draw connections first (behind nodes)
             nodes.forEach((node, i) => {
+                const nodeOffset = getParallaxOffset(node.z);
+
                 node.connections.forEach(j => {
                     const other = nodes[j];
+                    const otherOffset = getParallaxOffset(other.z);
+
+                    // Apply parallax to positions
+                    const nodeDrawX = node.x + nodeOffset.x;
+                    const nodeDrawY = node.y + nodeOffset.y;
+                    const otherDrawX = other.x + otherOffset.x;
+                    const otherDrawY = other.y + otherOffset.y;
+
                     const dx = other.x - node.x;
                     const dy = other.y - node.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -307,8 +330,8 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
 
                     if (dist < maxDist) {
                         // Calculate proximity to mouse for glow effect
-                        const midX = (node.x + other.x) / 2;
-                        const midY = (node.y + other.y) / 2;
+                        const midX = (nodeDrawX + otherDrawX) / 2;
+                        const midY = (nodeDrawY + otherDrawY) / 2;
                         const mouseDist = Math.sqrt((mouseX - midX) ** 2 + (mouseY - midY) ** 2);
                         const mouseProximity = Math.max(0, 1 - mouseDist / (mouseRadius * 1.5));
 
@@ -322,8 +345,8 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
 
                         if (alpha > 0.02) {
                             ctx.beginPath();
-                            ctx.moveTo(node.x, node.y);
-                            ctx.lineTo(other.x, other.y);
+                            ctx.moveTo(nodeDrawX, nodeDrawY);
+                            ctx.lineTo(otherDrawX, otherDrawY);
 
                             // Glow effect when mouse is near
                             if (mouseProximity > 0.2) {
@@ -372,8 +395,13 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
 
             // Draw nodes (on top)
             nodes.forEach((node, i) => {
-                const dx = mouseX - node.x;
-                const dy = mouseY - node.y;
+                // Get parallax offset for this node's depth
+                const offset = getParallaxOffset(node.z);
+                const drawX = node.x + offset.x;
+                const drawY = node.y + offset.y;
+
+                const dx = mouseX - drawX;
+                const dy = mouseY - drawY;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 const mouseProximity = Math.max(0, 1 - dist / mouseRadius);
 
@@ -392,23 +420,23 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
                 // Outer glow
                 if (mouseProximity > 0.2 || pulse > 0.7) {
                     const glowSize = size * 3;
-                    const glowGradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, glowSize);
+                    const glowGradient = ctx.createRadialGradient(drawX, drawY, 0, drawX, drawY, glowSize);
                     glowGradient.addColorStop(0, `rgba(0, 242, 255, ${(mouseProximity * 0.3 + pulse * 0.1) * alpha})`);
                     glowGradient.addColorStop(0.5, `rgba(0, 242, 255, ${(mouseProximity * 0.1) * alpha})`);
                     glowGradient.addColorStop(1, 'transparent');
 
                     ctx.fillStyle = glowGradient;
-                    ctx.fillRect(node.x - glowSize, node.y - glowSize, glowSize * 2, glowSize * 2);
+                    ctx.fillRect(drawX - glowSize, drawY - glowSize, glowSize * 2, glowSize * 2);
                 }
 
                 // Node core
                 ctx.beginPath();
-                ctx.arc(node.x, node.y, size, 0, Math.PI * 2);
+                ctx.arc(drawX, drawY, size, 0, Math.PI * 2);
 
                 // Gradient fill for depth
                 const coreGradient = ctx.createRadialGradient(
-                    node.x - size * 0.3, node.y - size * 0.3, 0,
-                    node.x, node.y, size
+                    drawX - size * 0.3, drawY - size * 0.3, 0,
+                    drawX, drawY, size
                 );
                 coreGradient.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
                 coreGradient.addColorStop(0.4, `rgba(0, 242, 255, ${alpha})`);
@@ -420,7 +448,7 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
                 // Inner highlight (when active)
                 if (mouseProximity > 0.3) {
                     ctx.beginPath();
-                    ctx.arc(node.x, node.y, size * 0.4, 0, Math.PI * 2);
+                    ctx.arc(drawX, drawY, size * 0.4, 0, Math.PI * 2);
                     ctx.fillStyle = `rgba(255, 255, 255, ${mouseProximity * 0.8})`;
                     ctx.fill();
                 }
