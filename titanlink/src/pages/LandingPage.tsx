@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { GlassCard } from '../components/ui/GlassCard';
-import { Antigravity } from '../components/ui/Antigravity';
+import { CircuitNetwork } from '../components/ui/CircuitNetwork';
 import './LandingPage.css';
 
 interface LandingPageProps {
@@ -62,13 +62,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="grid-overlay"></div>
             <div className="orbital-ring"></div>
 
-            {/* Antigravity Particle Field */}
-            <div style={{ position: 'absolute', inset: 0, zIndex: 1, opacity: 0.6, pointerEvents: 'none' }}>
-                <Antigravity
-                    count={150}
-                    magnetRadius={250}
-                    particleSize={2}
-                    color="#00f2ff"
+            {/* Circuit Network - Neural Network Particle System */}
+            <div style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
+                <CircuitNetwork
+                    nodeCount={90}
+                    connectionDistance={200}
+                    mouseRadius={280}
+                    primaryColor="#00f2ff"
+                    secondaryColor="#4abdff"
                 />
             </div>
 
