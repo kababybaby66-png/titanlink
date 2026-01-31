@@ -82,15 +82,15 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
         // Initialize micro particles (dust/fill)
         const initMicroParticles = () => {
             microParticles = [];
-            const microCount = Math.floor(width * height / 4000); // Higher density for more fill
+            const microCount = Math.floor(width * height / 6000); // Balanced density
             for (let i = 0; i < microCount; i++) {
                 microParticles.push({
                     x: Math.random() * width,
                     y: Math.random() * height,
                     vx: (Math.random() - 0.5) * 0.2,
                     vy: (Math.random() - 0.5) * 0.2,
-                    size: Math.random() * 2 + 0.5, // Larger particles
-                    alpha: Math.random() * 0.4 + 0.15, // More visible
+                    size: Math.random() * 1.5 + 0.5,
+                    alpha: Math.random() * 0.25 + 0.1,
                     twinklePhase: Math.random() * Math.PI * 2,
                 });
             }
@@ -173,19 +173,40 @@ export const CircuitNetwork: React.FC<CircuitNetworkProps> = ({
             initMicroParticles();
         };
 
-        // Update which nodes can connect
+        // Update which nodes can connect - ensure minimum connections per node
+        const minConnections = 2;
+        const maxConnections = 4;
+
         const updateConnections = () => {
+            // Reset all connections
+            nodes.forEach(node => node.connections = []);
+
+            // For each node, find its nearest neighbors and connect
             nodes.forEach((node, i) => {
-                node.connections = [];
+                // Calculate distances to all other nodes
+                const distances: { idx: number; dist: number }[] = [];
                 nodes.forEach((other, j) => {
-                    if (i >= j) return; // Avoid duplicates
+                    if (i === j) return;
                     const dx = node.x - other.x;
                     const dy = node.y - other.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < connectionDistance * Math.max(node.z, other.z)) {
-                        node.connections.push(j);
-                    }
+                    distances.push({ idx: j, dist });
                 });
+
+                // Sort by distance
+                distances.sort((a, b) => a.dist - b.dist);
+
+                // Connect to nearest neighbors (up to maxConnections)
+                // But at least minConnections
+                const connectionCount = minConnections + Math.floor(Math.random() * (maxConnections - minConnections + 1));
+
+                for (let c = 0; c < Math.min(connectionCount, distances.length); c++) {
+                    const targetIdx = distances[c].idx;
+                    // Only add if not already connected (avoid duplicates)
+                    if (i < targetIdx && !node.connections.includes(targetIdx)) {
+                        node.connections.push(targetIdx);
+                    }
+                }
             });
         };
 
