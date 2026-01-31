@@ -10,12 +10,13 @@ import { HostLobby } from './pages/HostLobby';
 import { ClientConnect } from './pages/ClientConnect';
 import { StreamView } from './pages/StreamView';
 import { SettingsPage } from './pages/SettingsPage';
+import { ControllerTest } from './pages/ControllerTest';
 import { DriverWarning } from './components/DriverWarning';
 import { webrtcService } from './services/WebRTCService';
 import type { DriverCheckResult, ConnectionState, PeerInfo, StreamSettings } from '../shared/types/ipc';
 import { DEFAULT_SETTINGS } from '../shared/types/ipc';
 
-type AppView = 'landing' | 'host-lobby' | 'client-connect' | 'streaming' | 'settings';
+type AppView = 'landing' | 'host-lobby' | 'client-connect' | 'streaming' | 'settings' | 'controller-test';
 
 export interface SessionState {
     sessionCode: string;
@@ -55,6 +56,16 @@ function App() {
         };
 
         checkDrivers();
+
+        // Keyboard shortcut for controller test page (Ctrl+Shift+C)
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+                e.preventDefault();
+                setCurrentView(prev => prev === 'controller-test' ? 'landing' : 'controller-test');
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
     // Update service settings when they change
@@ -63,11 +74,12 @@ function App() {
     }, [settings]);
 
     // Handle navigation based on connection state
+    // Only clients go to streaming view - hosts stay on HostLobby
     useEffect(() => {
-        if (sessionState.connectionState === 'streaming') {
+        if (sessionState.connectionState === 'streaming' && sessionState.role === 'client') {
             setCurrentView('streaming');
         }
-    }, [sessionState.connectionState]);
+    }, [sessionState.connectionState, sessionState.role]);
 
     // Create WebRTC callbacks
     const createWebRTCCallbacks = useCallback(() => ({
@@ -224,6 +236,8 @@ function App() {
                         onDisconnect={handleBackToLanding}
                     />
                 );
+            case 'controller-test':
+                return <ControllerTest />;
             default:
                 return null;
         }

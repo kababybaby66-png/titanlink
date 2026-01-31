@@ -1,0 +1,268 @@
+/* Controller Test Page Styles */
+
+.controller-test-page {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #0a0a0c 0%, #12141a 50%, #0a0a0c 100%);
+    padding: 20px;
+    color: #fff;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+}
+
+.test-header {
+    text-align: center;
+    margin-bottom: 30px;
+    position: relative;
+}
+
+.test-header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent-cyan, #00f2ff);
+    margin: 0;
+    text-shadow: 0 0 20px rgba(0, 242, 255, 0.5);
+}
+
+.test-header .subtitle {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 14px;
+    margin-top: 8px;
+}
+
+.back-btn {
+    position: absolute;
+    top: 0;
+    left: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.back-btn:hover {
+    background: rgba(0, 242, 255, 0.2);
+    border-color: var(--accent-cyan, #00f2ff);
+}
+
+.test-container {
+    display: flex;
+    gap: 30px;
+    max-width: 1200px;
+    margin: 0 auto;
+    align-items: flex-start;
+}
+
+.controller-display {
+    flex: 1;
+    min-width: 400px;
+    height: 350px;
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.debug-panel {
+    width: 350px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.debug-panel h3 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-cyan, #00f2ff);
+    margin: 0 0 12px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.status-section {
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.connection-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.connection-status .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.connection-status.connected {
+    color: var(--accent-cyan, #00f2ff);
+}
+
+.connection-status.connected .dot {
+    background: var(--accent-cyan, #00f2ff);
+    box-shadow: 0 0 10px var(--accent-cyan, #00f2ff);
+}
+
+.connection-status.disconnected {
+    color: var(--accent-amber, #ffb300);
+}
+
+.connection-status.disconnected .dot {
+    background: var(--accent-amber, #ffb300);
+    animation: pulse 1.5s infinite;
+}
+
+.gamepad-name {
+    margin-top: 8px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.4);
+    word-break: break-word;
+}
+
+.axes-section,
+.triggers-section {
+    margin-bottom: 20px;
+}
+
+.axis-row,
+.trigger-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 11px;
+}
+
+.axis-row>span:first-child,
+.trigger-row>span:first-child {
+    width: 60px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.axis-bar {
+    flex: 1;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    position: relative;
+}
+
+.axis-bar::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.axis-value {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 12px;
+    height: 12px;
+    background: var(--accent-cyan, #00f2ff);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--accent-cyan, #00f2ff);
+}
+
+.trigger-bar {
+    flex: 1;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.trigger-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-cyan, #00f2ff), #00ff88);
+    box-shadow: 0 0 10px var(--accent-cyan, #00f2ff);
+    transition: width 0.05s;
+}
+
+.value {
+    width: 50px;
+    text-align: right;
+    color: rgba(255, 255, 255, 0.8);
+    font-variant-numeric: tabular-nums;
+}
+
+.buttons-section {
+    margin-top: 20px;
+}
+
+.button-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.button-indicator {
+    padding: 4px 8px;
+    font-size: 9px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.4);
+    transition: all 0.1s;
+}
+
+.button-indicator.active {
+    background: var(--accent-cyan, #00f2ff);
+    border-color: var(--accent-cyan, #00f2ff);
+    color: #000;
+    box-shadow: 0 0 10px var(--accent-cyan, #00f2ff);
+}
+
+.instructions {
+    text-align: center;
+    padding: 30px 20px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.instructions p {
+    margin: 0 0 10px 0;
+}
+
+.instructions .hint {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.3);
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
+}
+
+/* Responsive */
+@media (max-width: 800px) {
+    .test-container {
+        flex-direction: column;
+    }
+
+    .controller-display {
+        min-width: 100%;
+        height: 300px;
+    }
+
+    .debug-panel {
+        width: 100%;
+    }
+}

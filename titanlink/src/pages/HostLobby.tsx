@@ -1,9 +1,11 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { SessionState } from '../App';
-import type { DisplayInfo, SystemStats } from '../../shared/types/ipc';
+import type { DisplayInfo, SystemStats, GamepadInputState } from '../../shared/types/ipc';
 import { GlassCard } from '../components/ui/GlassCard';
 import { StatusVisualizer } from '../components/StatusVisualizer';
+import { ControllerOverlay } from '../components/ControllerOverlay';
+import { webrtcService } from '../services/WebRTCService';
 import './HostLobby.css';
 
 interface HostLobbyProps {
@@ -11,6 +13,83 @@ interface HostLobbyProps {
     onStartHosting: (displayId: string) => Promise<string>;
     onBack: () => void;
     error: string | null;
+}
+
+// Resizable Widget Component - handles resize from entire border
+interface ResizableWidgetProps {
+    id: string;
+    panel: 'left' | 'right';
+    children: React.ReactNode;
+    onDragStart: (e: React.DragEvent, id: string, panel: 'left' | 'right') => void;
+    onDrop: (e: React.DragEvent, id: string, panel: 'left' | 'right') => void;
+}
+
+function ResizableWidget({ id, panel, children, onDragStart, onDrop }: ResizableWidgetProps) {
+    const widgetRef = useRef<HTMLDivElement>(null);
+    const [isResizing, setIsResizing] = useState(false);
+    const [height, setHeight] = useState<number | undefined>(undefined);
+    const startY = useRef(0);
+    const startHeight = useRef(0);
+
+    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+        // Check if clicking near edges (within 12px of any edge)
+        const rect = widgetRef.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        const distToTop = e.clientY - rect.top;
+        const distToBottom = rect.bottom - e.clientY;
+        const edgeThreshold = 12;
+
+        // Only trigger resize if near top or bottom edge
+        if (distToTop <= edgeThreshold || distToBottom <= edgeThreshold) {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsResizing(true);
+            startY.current = e.clientY;
+            startHeight.current = rect.height;
+            widgetRef.current?.classList.add('resizing');
+        }
+    }, []);
+
+    const handleMouseMove = useCallback((e: MouseEvent) => {
+        if (!isResizing) return;
+
+        const deltaY = e.clientY - startY.current;
+        const newHeight = Math.max(80, startHeight.current + deltaY);
+        setHeight(newHeight);
+    }, [isResizing]);
+
+    const handleMouseUp = useCallback(() => {
+        if (isResizing) {
+            setIsResizing(false);
+            widgetRef.current?.classList.remove('resizing');
+        }
+    }, [isResizing]);
+
+    useEffect(() => {
+        if (isResizing) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+            return () => {
+                window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mouseup', handleMouseUp);
+            };
+        }
+    }, [isResizing, handleMouseMove, handleMouseUp]);
+
+    return (
+        <div
+            ref={widgetRef}
+            className={`draggable-widget ${isResizing ? 'resizing' : ''}`}
+            style={{ height: height ? `${height}px` : undefined }}
+            draggable={!isResizing}
+            onDragStart={(e) => !isResizing && onDragStart(e, id, panel)}
+            onDrop={(e) => onDrop(e, id, panel)}
+            onMouseDown={handleMouseDown}
+        >
+            {children}
+        </div>
+    );
 }
 
 export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostLobbyProps) {
@@ -21,12 +100,27 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
     const [localError, setLocalError] = useState<string | null>(null);
     const [stats, setStats] = useState<SystemStats>({ cpuUsage: 0, memUsage: 0, totalMem: 0, freeMem: 0 });
 
+    // Controller detection state (for when client connects)
+    const [controllerConnected, setControllerConnected] = useState(false);
+    const [currentInput, setCurrentInput] = useState<GamepadInputState | null>(null);
+    const [showControllerOverlay, setShowControllerOverlay] = useState(true);
+
+    // Connection quality metrics
+    const [connectionQuality, setConnectionQuality] = useState({
+        latency: 0,
+        packetLoss: 0,
+        jitter: 0,
+        networkQuality: 'excellent' as string,
+    });
+
     const isHosting = sessionState.connectionState !== 'disconnected';
+    const isStreaming = sessionState.connectionState === 'streaming';
 
     // -- DRAG & DROP STATE --
+    // Note: 'controller', 'client', 'quality' will only render when streaming is active
     const [panels, setPanels] = useState<{ left: string[], right: string[] }>({
-        left: ['latency', 'region', 'protocol'],
-        right: ['reactor', 'resources', 'logs', 'stopbtn']
+        left: ['latency', 'region', 'protocol', 'client', 'quality'],
+        right: ['reactor', 'resources', 'controller', 'logs', 'stopbtn']
     });
 
     const [draggedItem, setDraggedItem] = useState<string | null>(null);
@@ -69,6 +163,39 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
         else if (sessionState.connectionState === 'connecting') addLog('Status: Peer Negotiation');
         else if (sessionState.connectionState === 'streaming') addLog('Status: Uplink Established');
     }, [sessionState.connectionState]);
+
+    // Listen for controller input from connected client
+    useEffect(() => {
+        if (!isStreaming) return;
+
+        const handleInputReceived = (e: CustomEvent<GamepadInputState>) => {
+            setCurrentInput(e.detail);
+            setControllerConnected(true);
+        };
+
+        window.addEventListener('titanlink:input' as any, handleInputReceived);
+
+        return () => {
+            window.removeEventListener('titanlink:input' as any, handleInputReceived);
+        };
+    }, [isStreaming]);
+
+    // Poll connection quality metrics when streaming
+    useEffect(() => {
+        if (!isStreaming) return;
+
+        const interval = setInterval(() => {
+            const quality = webrtcService.getConnectionQuality();
+            setConnectionQuality({
+                latency: quality.latency,
+                packetLoss: quality.packetLoss,
+                jitter: quality.jitter,
+                networkQuality: quality.networkQuality,
+            });
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [isStreaming]);
 
     const handleStartHosting = async () => {
         if (!selectedDisplay) return;
@@ -166,7 +293,7 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
                             <span className="material-symbols-outlined icon">speed</span>
                             <span className="title">LATENCY</span>
                         </div>
-                        <div className="card-value large">4<span className="unit">ms</span></div>
+                        <div className="card-value large">{connectionQuality.latency}<span className="unit">ms</span></div>
                     </GlassCard>
                 );
             case 'region':
@@ -234,6 +361,74 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
                         STOP HOSTING
                     </button>
                 );
+            case 'controller':
+                // Controller input visualization - only show when streaming
+                if (!isStreaming) return null;
+                return (
+                    <GlassCard className="controller-widget">
+                        <div className="card-header">
+                            <span className="material-symbols-outlined icon">gamepad</span>
+                            <span className="title">CONTROLLER</span>
+                            <span className={`status-badge ${controllerConnected ? 'connected' : 'disconnected'}`}>
+                                {controllerConnected ? 'ACTIVE' : 'WAITING'}
+                            </span>
+                        </div>
+                        <div className="controller-preview">
+                            <ControllerOverlay input={currentInput} connected={controllerConnected} />
+                        </div>
+                    </GlassCard>
+                );
+            case 'client':
+                // Connected client info - only show when streaming
+                if (!isStreaming) return null;
+                return (
+                    <GlassCard className="client-widget">
+                        <div className="card-header">
+                            <span className="material-symbols-outlined icon">person</span>
+                            <span className="title">CLIENT</span>
+                        </div>
+                        <div className="client-info">
+                            <div className="client-name">{sessionState.peerInfo?.username || 'Remote User'}</div>
+                            <div className="client-stats">
+                                <div className="stat">
+                                    <span className="label">Quality</span>
+                                    <span className={`value quality-${connectionQuality.networkQuality}`}>
+                                        {connectionQuality.networkQuality.toUpperCase()}
+                                    </span>
+                                </div>
+                                <div className="stat">
+                                    <span className="label">Loss</span>
+                                    <span className="value">{connectionQuality.packetLoss.toFixed(1)}%</span>
+                                </div>
+                                <div className="stat">
+                                    <span className="label">Jitter</span>
+                                    <span className="value">{connectionQuality.jitter.toFixed(0)}ms</span>
+                                </div>
+                            </div>
+                        </div>
+                    </GlassCard>
+                );
+            case 'quality':
+                // Network quality indicator - only show when streaming
+                if (!isStreaming) return null;
+                return (
+                    <GlassCard className="quality-widget">
+                        <div className="card-header">
+                            <span className="material-symbols-outlined icon">signal_cellular_alt</span>
+                            <span className="title">NETWORK</span>
+                        </div>
+                        <div className={`quality-indicator ${connectionQuality.networkQuality}`}>
+                            <div className="quality-bars">
+                                <div className={`bar ${['excellent', 'good', 'fair', 'poor', 'critical'].indexOf(connectionQuality.networkQuality) <= 0 ? 'active' : ''}`}></div>
+                                <div className={`bar ${['excellent', 'good', 'fair', 'poor'].indexOf(connectionQuality.networkQuality) <= 1 ? 'active' : ''}`}></div>
+                                <div className={`bar ${['excellent', 'good', 'fair'].indexOf(connectionQuality.networkQuality) <= 2 ? 'active' : ''}`}></div>
+                                <div className={`bar ${['excellent', 'good'].indexOf(connectionQuality.networkQuality) <= 1 ? 'active' : ''}`}></div>
+                                <div className={`bar ${connectionQuality.networkQuality === 'excellent' ? 'active' : ''}`}></div>
+                            </div>
+                            <div className="quality-label">{connectionQuality.networkQuality.toUpperCase()}</div>
+                        </div>
+                    </GlassCard>
+                );
             default:
                 return null;
         }
@@ -251,15 +446,15 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
                     const content = renderWidget(id);
                     if (!content) return null;
                     return (
-                        <div
+                        <ResizableWidget
                             key={id}
-                            className="draggable-widget"
-                            draggable
-                            onDragStart={(e) => onDragStart(e, id, 'left')}
-                            onDrop={(e) => onDrop(e, id, 'left')}
+                            id={id}
+                            panel="left"
+                            onDragStart={onDragStart}
+                            onDrop={onDrop}
                         >
                             {content}
-                        </div>
+                        </ResizableWidget>
                     );
                 })}
             </aside>
@@ -329,15 +524,15 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
                     const content = renderWidget(id);
                     if (!content) return null;
                     return (
-                        <div
+                        <ResizableWidget
                             key={id}
-                            className="draggable-widget"
-                            draggable
-                            onDragStart={(e) => onDragStart(e, id, 'right')}
-                            onDrop={(e) => onDrop(e, id, 'right')}
+                            id={id}
+                            panel="right"
+                            onDragStart={onDragStart}
+                            onDrop={onDrop}
                         >
                             {content}
-                        </div>
+                        </ResizableWidget>
                     );
                 })}
             </aside>

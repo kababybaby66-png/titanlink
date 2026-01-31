@@ -53,23 +53,25 @@
 .draggable-widget {
     position: relative;
     cursor: grab;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
     background: rgba(0, 0, 0, 0.2);
-    /* Basic backing for disjointed widgets */
     border-radius: 8px;
-    overflow: hidden;
-    /* Required for resize */
-    resize: vertical;
-    /* User can resize height */
+    overflow: visible;
+    /* Allow resize handles to extend */
     min-height: 80px;
     flex-shrink: 0;
-    /* Respect user size */
+    border: 2px solid transparent;
+}
+
+/* Highlight entire border when hovering for resize */
+.draggable-widget:hover {
+    border-color: rgba(0, 242, 255, 0.3);
 }
 
 .draggable-widget:active {
     cursor: grabbing;
     box-shadow: 0 0 15px rgba(0, 242, 255, 0.2);
-    border: 1px solid var(--primary);
+    border-color: var(--primary);
     z-index: 100;
 }
 
@@ -77,9 +79,116 @@
     opacity: 0.5;
 }
 
-/* Hide the native resize handle visually, but keep resize functionality via border hover */
-.draggable-widget::-webkit-resizer {
-    background-color: transparent;
+/* Resize state when actively resizing */
+.draggable-widget.resizing {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 20px rgba(0, 242, 255, 0.4);
+    z-index: 200;
+    cursor: ns-resize !important;
+}
+
+/* === EDGE RESIZE HANDLES === */
+/* These invisible zones cover the entire edge for easy grabbing */
+
+/* Top edge */
+.draggable-widget::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    left: 0;
+    right: 0;
+    height: 12px;
+    cursor: ns-resize;
+    z-index: 10;
+}
+
+/* Bottom edge */
+.draggable-widget::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 0;
+    right: 0;
+    height: 12px;
+    cursor: ns-resize;
+    z-index: 10;
+}
+
+/* Left and right edges via additional elements (handled in JS) */
+.resize-edge {
+    position: absolute;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.resize-edge:hover {
+    opacity: 1;
+}
+
+.resize-edge.left {
+    left: -6px;
+    top: 0;
+    bottom: 0;
+    width: 12px;
+    cursor: ew-resize;
+}
+
+.resize-edge.right {
+    right: -6px;
+    top: 0;
+    bottom: 0;
+    width: 12px;
+    cursor: ew-resize;
+}
+
+.resize-edge.top {
+    top: -6px;
+    left: 0;
+    right: 0;
+    height: 12px;
+    cursor: ns-resize;
+}
+
+.resize-edge.bottom {
+    bottom: -6px;
+    left: 0;
+    right: 0;
+    height: 12px;
+    cursor: ns-resize;
+}
+
+/* Corner handles */
+.resize-edge.top-left {
+    top: -6px;
+    left: -6px;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
+}
+
+.resize-edge.top-right {
+    top: -6px;
+    right: -6px;
+    width: 16px;
+    height: 16px;
+    cursor: nesw-resize;
+}
+
+.resize-edge.bottom-left {
+    bottom: -6px;
+    left: -6px;
+    width: 16px;
+    height: 16px;
+    cursor: nesw-resize;
+}
+
+.resize-edge.bottom-right {
+    bottom: -6px;
+    right: -6px;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
 }
 
 /* --- GENERIC CARD STYLING (Centered & Compact) --- */
@@ -464,6 +573,228 @@
     background: var(--danger);
     color: white;
     box-shadow: 0 0 20px rgba(255, 42, 42, 0.4);
+}
+
+/* === NEW STREAMING WIDGETS === */
+
+/* Controller Widget */
+.controller-widget {
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem;
+    height: 100%;
+    min-height: 150px;
+}
+
+.controller-widget .card-header {
+    justify-content: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.controller-widget .status-badge {
+    margin-left: auto;
+    font-size: 0.6rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+
+.controller-widget .status-badge.connected {
+    background: rgba(0, 255, 136, 0.15);
+    color: #00ff88;
+    border: 1px solid rgba(0, 255, 136, 0.3);
+}
+
+.controller-widget .status-badge.disconnected {
+    background: rgba(255, 200, 50, 0.15);
+    color: #ffc832;
+    border: 1px solid rgba(255, 200, 50, 0.3);
+}
+
+.controller-preview {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100px;
+    overflow: hidden;
+}
+
+/* Client Widget */
+.client-widget {
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem;
+}
+
+.client-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.client-name {
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--primary);
+    text-align: center;
+    padding: 0.5rem 0;
+}
+
+.client-stats {
+    display: flex;
+    justify-content: space-around;
+    gap: 0.5rem;
+}
+
+.client-stats .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+}
+
+.client-stats .stat .label {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.client-stats .stat .value {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.client-stats .stat .value.quality-excellent {
+    color: #00ff88;
+}
+
+.client-stats .stat .value.quality-good {
+    color: #88ff00;
+}
+
+.client-stats .stat .value.quality-fair {
+    color: #ffcc00;
+}
+
+.client-stats .stat .value.quality-poor {
+    color: #ff8800;
+}
+
+.client-stats .stat .value.quality-critical {
+    color: #ff4444;
+}
+
+/* Quality Widget */
+.quality-widget {
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem;
+}
+
+.quality-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+}
+
+.quality-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 30px;
+}
+
+.quality-bars .bar {
+    width: 8px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.1);
+    transition: all 0.3s;
+}
+
+.quality-bars .bar:nth-child(1) {
+    height: 6px;
+}
+
+.quality-bars .bar:nth-child(2) {
+    height: 12px;
+}
+
+.quality-bars .bar:nth-child(3) {
+    height: 18px;
+}
+
+.quality-bars .bar:nth-child(4) {
+    height: 24px;
+}
+
+.quality-bars .bar:nth-child(5) {
+    height: 30px;
+}
+
+.quality-bars .bar.active {
+    background: var(--primary);
+    box-shadow: 0 0 8px var(--primary);
+}
+
+.quality-indicator.excellent .bar.active {
+    background: #00ff88;
+    box-shadow: 0 0 8px #00ff88;
+}
+
+.quality-indicator.good .bar.active {
+    background: #88ff00;
+    box-shadow: 0 0 8px #88ff00;
+}
+
+.quality-indicator.fair .bar.active {
+    background: #ffcc00;
+    box-shadow: 0 0 8px #ffcc00;
+}
+
+.quality-indicator.poor .bar.active {
+    background: #ff8800;
+    box-shadow: 0 0 8px #ff8800;
+}
+
+.quality-indicator.critical .bar.active {
+    background: #ff4444;
+    box-shadow: 0 0 8px #ff4444;
+}
+
+.quality-label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--primary);
+}
+
+.quality-indicator.excellent .quality-label {
+    color: #00ff88;
+}
+
+.quality-indicator.good .quality-label {
+    color: #88ff00;
+}
+
+.quality-indicator.fair .quality-label {
+    color: #ffcc00;
+}
+
+.quality-indicator.poor .quality-label {
+    color: #ff8800;
+}
+
+.quality-indicator.critical .quality-label {
+    color: #ff4444;
 }
 
 /* Response */

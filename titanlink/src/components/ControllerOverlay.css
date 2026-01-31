@@ -1,35 +1,29 @@
-/* Controller Overlay - TitanLink "Cyber-Funk" Design v3 */
-/* Tweaked for Spacing and Clean D-Pad */
+/* Controller Overlay 2D - TitanLink Cyber Design */
 
 .controller-overlay {
-    /* Main Chassis */
-    background:
-        linear-gradient(135deg, rgba(8, 8, 10, 0.95) 0%, rgba(16, 18, 22, 0.9) 100%);
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 180px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(8, 8, 10, 0.95) 0%, rgba(16, 18, 22, 0.9) 100%);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-left: 2px solid var(--accent-cyan);
-    border-right: 2px solid var(--accent-cyan);
+    border-left: 2px solid var(--accent-cyan, #00f2ff);
+    border-right: 2px solid var(--accent-cyan, #00f2ff);
     border-radius: 12px;
+    overflow: hidden;
 
-    /* Dimensions - Widened for Max Spacing */
-    width: 360px;
-    height: 230px;
-    padding: 0;
-
-    /* Effects */
+    /* Glow effect */
     box-shadow:
         0 10px 40px rgba(0, 0, 0, 0.6),
         0 0 0 1px rgba(0, 0, 0, 0.5),
-        inset 0 0 20px rgba(0, 240, 255, 0.05);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-
-    /* Layout */
-    position: relative;
-    user-select: none;
-    overflow: visible;
+        inset 0 0 30px rgba(0, 240, 255, 0.05);
 }
 
-/* scanline decor */
+/* Scanline overlay */
 .controller-overlay::after {
     content: '';
     position: absolute;
@@ -40,402 +34,147 @@
     background: repeating-linear-gradient(0deg,
             transparent 0px,
             transparent 2px,
-            rgba(0, 0, 0, 0.2) 3px);
+            rgba(0, 0, 0, 0.1) 3px);
     pointer-events: none;
     border-radius: 12px;
     opacity: 0.3;
 }
 
-.controller-overlay.disconnected {
-    width: 200px;
-    height: 120px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    background: rgba(10, 10, 12, 0.9);
-}
-
-.controller-overlay.disconnected .controller-icon {
-    font-size: 24px;
-    color: var(--accent-amber);
-    animation: glitch 1s infinite alternate;
-}
-
-.controller-overlay.disconnected .controller-status {
-    font-size: 10px;
-    font-weight: bold;
-    color: var(--metal-light);
-    font-family: var(--font-mono);
-    letter-spacing: 0.1em;
-}
-
-@keyframes glitch {
-    0% {
-        transform: skew(0deg);
-        opacity: 0.8;
-    }
-
-    20% {
-        transform: skew(-10deg);
-        opacity: 1;
-    }
-
-    40% {
-        transform: skew(10deg);
-        opacity: 0.8;
-    }
-
-    100% {
-        transform: skew(0deg);
-        opacity: 1;
-    }
-}
-
-/* --- CONTROLLER VISUALS --- */
-.controller-visual {
-    position: relative;
-    width: 100%;
-    height: 100%;
-}
-
-/* --- TRIGGERS (L2/R2) --- top corners */
-.trigger-bar {
+/* Corner accents */
+.controller-overlay::before {
+    content: '';
     position: absolute;
-    top: 0;
-    width: 100px;
-    /* Wider */
-    height: 24px;
-    background: #050505;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    overflow: hidden;
-    z-index: 2;
-    transform: skewX(-10deg);
-}
-
-.trigger-label {
-    position: absolute;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--font-display);
-    font-weight: 800;
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.3);
-    z-index: 3;
-    transform: skewX(10deg);
-}
-
-.trigger-l {
-    left: 0px;
-    border-radius: 12px 0 12px 0;
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.trigger-r {
-    right: 0px;
-    border-radius: 0 12px 0 12px;
-    transform: skewX(10deg);
-    border-left: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.trigger-r .trigger-label {
-    transform: skewX(-10deg);
-}
-
-.trigger-val {
-    height: 100%;
-    background: var(--accent-cyan);
-    box-shadow: 0 0 15px var(--accent-cyan);
-    width: 0%;
-    opacity: 0.6;
-}
-
-/* --- BUMPERS (L1/R1) --- */
-.bumper {
-    position: absolute;
-    top: 36px;
-    /* Increased top spacing */
-    width: 90px;
-    height: 24px;
-    background: rgba(30, 32, 35, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.4);
-    font-family: var(--font-mono);
-    font-weight: 700;
-    font-size: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 2;
-    clip-path: polygon(10% 0, 100% 0, 100% 100%, 0 100%);
-}
-
-.bumper-l {
-    left: 20px;
-    clip-path: polygon(0 0, 90% 0, 100% 100%, 0 100%);
-}
-
-.bumper-r {
-    right: 20px;
-    clip-path: polygon(10% 0, 100% 0, 100% 100%, 0 100%);
-}
-
-.bumper.active {
-    background: var(--accent-cyan);
-    color: #000;
-    border-color: transparent;
-    box-shadow: 0 0 10px var(--accent-cyan-glow);
-}
-
-
-/* --- LEFT STICK (Upper Left) --- */
-.stick-l {
-    left: 60px;
-    /* Shift right */
-    top: 75px;
-    /* Shift down */
-}
-
-/* --- RIGHT STICK (Lower Right) --- */
-.stick-r {
-    right: 80px;
-    /* Shift left towards center a bit */
-    bottom: 30px;
-}
-
-/* --- FACE BUTTONS (Upper Right) --- */
-.face-buttons {
-    position: absolute;
-    top: 70px;
-    /* Shift down */
-    right: 50px;
-    /* Shift Right more? */
-    /* Right stick is at right:80px. Buttons should be right: 40px? 
-       If buttons are at right:40px, stick is further LEFT (80px). Correct (Stick is closer to center).
-    */
-    right: 40px;
-    width: 70px;
-    height: 70px;
-}
-
-/* --- D-PAD (Lower Left) --- */
-.dpad {
-    position: absolute;
-    bottom: 30px;
-    left: 60px;
-    /* Shift left or align with L stick? Stick is 60px left. Align vertical. */
-    transform: translateX(-50%);
-    width: 64px;
-    height: 64px;
-    background: radial-gradient(circle, #222, #111);
-    border-radius: 50%;
-    /* Circular Dish */
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.8);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-/* --- D-PAD BUTTONS --- */
-.dpad-btn {
-    position: absolute;
-    background: transparent;
-    border: none;
-    transition: all 0.05s;
+    top: 8px;
+    left: 8px;
     width: 20px;
     height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 2px;
-}
-
-.dpad-u {
-    top: 6px;
-    left: 50%;
-    transform: translateX(-50%);
-    height: 16px;
-    background: rgba(255, 255, 255, 0.08);
-}
-
-.dpad-d {
-    bottom: 6px;
-    left: 50%;
-    transform: translateX(-50%);
-    height: 16px;
-    background: rgba(255, 255, 255, 0.08);
-}
-
-.dpad-l {
-    left: 6px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 16px;
-    background: rgba(255, 255, 255, 0.08);
-}
-
-.dpad-r {
-    right: 6px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 16px;
-    background: rgba(255, 255, 255, 0.08);
-}
-
-/* Center Button REMOVED as requested */
-.dpad-c {
-    display: none;
-}
-
-.dpad-btn.active {
-    background: var(--accent-cyan);
-    box-shadow: 0 0 10px var(--accent-cyan);
+    border-left: 2px solid var(--accent-cyan, #00f2ff);
+    border-top: 2px solid var(--accent-cyan, #00f2ff);
+    border-top-left-radius: 6px;
+    opacity: 0.4;
     z-index: 1;
 }
 
-/* --- STICK COMMON --- */
-.stick-area {
-    width: 52px;
-    height: 52px;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.8);
+/* Disconnected state */
+.controller-overlay.disconnected {
+    gap: 12px;
+}
+
+.controller-overlay.disconnected .controller-icon {
+    font-size: 32px;
+    animation: pulse-icon 2s infinite;
+    filter: grayscale(0.5);
+}
+
+.controller-overlay.disconnected .controller-status {
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    color: var(--accent-amber, #ffb300);
+    animation: blink 1.5s infinite;
+}
+
+@keyframes pulse-icon {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 0.7;
+    }
+
+    50% {
+        transform: scale(1.1);
+        opacity: 1;
+    }
+}
+
+@keyframes blink {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
+}
+
+/* Connected state */
+.controller-overlay.connected {
+    padding: 15px;
+}
+
+/* SVG Controller */
+.controller-svg {
+    width: 100%;
+    height: auto;
+    max-width: 420px;
+    filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.5));
+}
+
+/* Status badge */
+.controller-status-badge {
     position: absolute;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.stick-area::before {
-    content: '';
-    position: absolute;
-    width: 60%;
-    height: 60%;
-    border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.stick-head {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #444, #000);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    position: relative;
-    z-index: 2;
-}
-
-.stick-head.clicked {
-    background: var(--accent-cyan);
-    box-shadow: 0 0 15px var(--accent-cyan);
-}
-
-/* --- FACE BUTTONS --- */
-.face-btn {
-    position: absolute;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: rgba(40, 44, 50, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--font-display);
-    font-size: 10px;
-    color: #888;
-    transition: all 0.05s;
-}
-
-.btn-y {
-    top: 0;
-    left: 24px;
-    color: #fa0;
-    border-color: rgba(255, 170, 0, 0.3);
-}
-
-.btn-x {
-    top: 24px;
-    left: 0;
-    color: #55f;
-    border-color: rgba(85, 85, 255, 0.3);
-}
-
-.btn-b {
-    top: 24px;
-    left: 48px;
-    color: #f55;
-    border-color: rgba(255, 85, 85, 0.3);
-}
-
-.btn-a {
-    top: 48px;
-    left: 24px;
-    color: #5f5;
-    border-color: rgba(85, 255, 85, 0.3);
-}
-
-.face-btn.active {
-    transform: scale(0.9);
-    filter: brightness(1.5);
-    background: currentColor;
-    border-color: transparent;
-    box-shadow: 0 0 15px currentColor;
-    color: #000 !important;
-}
-
-/* --- CENTER BUTTONS --- */
-.center-stack {
-    position: absolute;
-    top: 50%;
+    bottom: 10px;
     left: 50%;
-    transform: translate(-50%, -50%);
-    display: flex;
-    gap: 15px;
-    align-items: center;
-}
-
-.center-btn {
-    width: 16px;
-    height: 16px;
-    background: none;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 8px;
+    transform: translateX(-50%);
     display: flex;
     align-items: center;
-    justify-content: center;
-    transform: rotate(45deg);
+    gap: 8px;
+    padding: 5px 12px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    backdrop-filter: blur(8px);
+    z-index: 10;
 }
 
-.center-btn>* {
-    transform: rotate(-45deg);
+.controller-status-badge.connected {
+    border-color: rgba(0, 242, 255, 0.3);
+    color: var(--accent-cyan, #00f2ff);
 }
 
-.center-btn.active {
-    background: #fff;
-    color: #000;
-    box-shadow: 0 0 10px #fff;
-}
-
-.guide-btn {
-    width: 30px;
-    height: 30px;
-    font-size: 12px;
+.controller-status-badge.connected .status-dot {
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
-    transform: none;
-    border: 2px solid rgba(255, 255, 255, 0.2);
+    background: var(--accent-cyan, #00f2ff);
+    box-shadow: 0 0 8px var(--accent-cyan, #00f2ff);
+    animation: pulse-dot 1.5s infinite;
 }
 
-.guide-btn.active {
-    background: var(--accent-cyan);
-    color: #000;
-    box-shadow: 0 0 20px var(--accent-cyan);
+@keyframes pulse-dot {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(0.8);
+        opacity: 0.6;
+    }
+}
+
+.status-text {
+    text-transform: uppercase;
+}
+
+/* Responsive */
+@media (max-width: 400px) {
+    .controller-overlay.connected {
+        padding: 10px;
+    }
+
+    .controller-status-badge {
+        font-size: 8px;
+        padding: 4px 10px;
+    }
 }
