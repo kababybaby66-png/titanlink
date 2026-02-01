@@ -136,37 +136,41 @@ function App() {
         setCurrentView('settings');
     }, []);
 
-    const handleHostSession = useCallback(async (displayId: string) => {
+    const startHardwareCapture = async (displayId: string): Promise<void> => {
+        if (!settings.useHardwareCapture || !window.electronAPI?.hardwareCapture) return;
+
+        console.log('[App] Starting hardware capture...');
+        const displayIndex = parseInt(displayId.split(':')[1]) || 0;
+
         try {
-            // Create virtual controller first
-            if (window.electronAPI?.controller) {
-                await window.electronAPI.controller.createVirtual();
-            }
+            const started = await window.electronAPI.hardwareCapture.start({
+                displayIndex,
+                fps: settings.fps,
+                bitrate: settings.bitrate,
+                useHardwareEncoder: true
+            });
 
-            // Pass settings to startHosting
-            const callbacks = createWebRTCCallbacks();
-            const sessionCode = await webrtcService.startHosting(displayId, callbacks);
-
-            // Start hardware capture if enabled
-            if (settings.useHardwareCapture && window.electronAPI?.hardwareCapture) {
-                console.log('[App] Starting hardware capture pipeline...');
-
-                // Find display index (native addon uses 0-based index)
-                // displayId is usually like 'screen:0:0' or something from desktopCapturer
-                const displayIndex = parseInt(displayId.split(':')[1]) || 0;
-
-                await window.electronAPI.hardwareCapture.start({
-                    displayIndex,
-                    fps: settings.fps,
-                    bitrate: settings.bitrate,
-                    useHardwareEncoder: true
-                });
-
-                // Listen for frames and forward to WebRTC
+            if (started) {
+                console.log('[App] ✓ Hardware capture started');
                 window.electronAPI.hardwareCapture.onFrame((frame: any) => {
                     webrtcService.sendVideoFrame(frame);
                 });
+            } else {
+                console.warn('[App] Hardware capture unavailable, using WebRTC fallback');
             }
+        } catch (e) {
+            console.error('[App] Hardware capture failed:', e);
+        }
+    };
+
+    const handleHostSession = useCallback(async (displayId: string) => {
+        try {
+            await window.electronAPI?.controller?.createVirtual();
+
+            const callbacks = createWebRTCCallbacks();
+            const sessionCode = await webrtcService.startHosting(displayId, callbacks);
+
+            await startHardwareCapture(displayId);
 
             setSessionState({
                 sessionCode,
@@ -181,7 +185,7 @@ function App() {
             setError(message);
             throw err;
         }
-    }, [createWebRTCCallbacks]);
+    }, [createWebRTCCallbacks, settings]);
 
     const handleConnectToHost = useCallback(async (sessionCode: string) => {
         try {
