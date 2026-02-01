@@ -911,18 +911,26 @@ public class AudioDeviceHelper {
     // ============================================
 
     ipcMain.handle('hardware-capture:is-supported', async () => {
-        return await hardwareCaptureService.getEncoderSupport();
+        const support = await hardwareCaptureService.getEncoderSupport();
+        console.log('[Main] Hardware encoder support:', support);
+        return support;
     });
 
     ipcMain.handle('hardware-capture:get-displays', async () => {
-        return await hardwareCaptureService.getDisplays();
+        const displays = await hardwareCaptureService.getDisplays();
+        console.log('[Main] Available displays for capture:', displays);
+        return displays;
     });
 
     ipcMain.handle('hardware-capture:start', async (_event, settings) => {
-        return hardwareCaptureService.start(settings);
+        console.log('[Main] Starting hardware capture with settings:', settings);
+        const result = hardwareCaptureService.start(settings);
+        console.log('[Main] Hardware capture start result:', result);
+        return result;
     });
 
     ipcMain.handle('hardware-capture:stop', async () => {
+        console.log('[Main] Stopping hardware capture');
         return hardwareCaptureService.stop();
     });
 
