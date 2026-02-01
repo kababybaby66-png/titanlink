@@ -168,6 +168,11 @@ class WebRTCService {
     private frameCount: number = 0;
     private lastFpsUpdate: number = 0;
 
+    // Video freeze detection
+    private lastVideoFrameTime: number = 0;
+    private videoFreezeCheckInterval: ReturnType<typeof setInterval> | null = null;
+    private static readonly VIDEO_FREEZE_THRESHOLD_MS = 5000; // 5 seconds without frames = frozen
+
     constructor() {
         this.peerId = uuidv4().substring(0, 8);
     }
@@ -274,6 +279,14 @@ class WebRTCService {
             clearInterval(this.latencyInterval);
             this.latencyInterval = null;
         }
+
+        if (this.videoFreezeCheckInterval) {
+            clearInterval(this.videoFreezeCheckInterval);
+            this.videoFreezeCheckInterval = null;
+        }
+
+        // Reset video frame tracking
+        this.lastVideoFrameTime = 0;
 
         if (this.inputChannel) {
             this.inputChannel.close();
@@ -711,9 +724,38 @@ class WebRTCService {
             console.log('[WebRTC] ICE gathering state:', this.peerConnection?.iceGatheringState);
         };
 
-        // Log ICE connection state changes  
+        // Monitor ICE connection state - this detects network path issues
         this.peerConnection.oniceconnectionstatechange = () => {
-            console.log('[WebRTC] ICE connection state:', this.peerConnection?.iceConnectionState);
+            const iceState = this.peerConnection?.iceConnectionState;
+            console.log('[WebRTC] ICE connection state:', iceState);
+
+            if (iceState === 'disconnected') {
+                // ICE path temporarily lost - attempt recovery
+                console.warn('[WebRTC] ICE disconnected - attempting recovery in 3s...');
+                setTimeout(() => {
+                    if (this.peerConnection?.iceConnectionState === 'disconnected' && this.role === 'host') {
+                        console.log('[WebRTC] ICE still disconnected, initiating ICE restart...');
+                        this.attemptIceRestart().catch(e => {
+                            console.error('[WebRTC] ICE restart failed:', e);
+                        });
+                    }
+                }, 3000);
+            } else if (iceState === 'failed') {
+                // ICE path completely failed
+                console.error('[WebRTC] ICE connection failed - attempting last-resort restart');
+                if (this.role === 'host') {
+                    this.attemptIceRestart().catch(e => {
+                        console.error('[WebRTC] Last-resort ICE restart failed:', e);
+                        this.callbacks?.onPeerDisconnected();
+                    });
+                } else {
+                    // Client should notify user
+                    console.error('[WebRTC] Connection to host lost');
+                    this.callbacks?.onPeerDisconnected();
+                }
+            } else if (iceState === 'connected' || iceState === 'completed') {
+                console.log('[WebRTC] ✓ ICE connection established/recovered');
+            }
         };
 
         this.peerConnection.onicecandidate = (event) => {
@@ -775,6 +817,24 @@ class WebRTCService {
 
         this.peerConnection.ontrack = (event) => {
             console.log('[WebRTC] Received track:', event.track.kind, 'id:', event.track.id);
+
+            // Monitor track state for unexpected stops
+            event.track.onended = () => {
+                console.warn(`[WebRTC] Track ended unexpectedly: ${event.track.kind}`);
+                if (event.track.kind === 'video') {
+                    // Video stopped but we might still be connected
+                    console.warn('[WebRTC] Video track ended - stream may have frozen');
+                }
+            };
+
+            event.track.onmute = () => {
+                console.warn(`[WebRTC] Track muted: ${event.track.kind}`);
+            };
+
+            event.track.onunmute = () => {
+                console.log(`[WebRTC] Track unmuted: ${event.track.kind}`);
+            };
+
             if (event.track.kind === 'audio') {
                 console.log('[WebRTC] Audio track received! Audio streaming is now available.');
             }
@@ -1095,9 +1155,25 @@ class WebRTCService {
                             this.actualFps = Math.round((framesDelta / timeDelta) * 1000);
                             this.frameCount = framesDecoded;
                             this.lastFpsUpdate = now;
+
+                            // Update last video frame time if we're receiving frames
+                            if (framesDelta > 0) {
+                                this.lastVideoFrameTime = now;
+                            }
                         } else if (this.lastFpsUpdate === 0) {
                             this.frameCount = framesDecoded;
                             this.lastFpsUpdate = now;
+                            this.lastVideoFrameTime = now;
+                        }
+
+                        // Video freeze detection (only for client receiving video)
+                        if (this.role === 'client' && this.lastVideoFrameTime > 0) {
+                            const timeSinceLastFrame = now - this.lastVideoFrameTime;
+                            if (timeSinceLastFrame > WebRTCService.VIDEO_FREEZE_THRESHOLD_MS) {
+                                console.warn(`[WebRTC] Video frozen for ${Math.round(timeSinceLastFrame / 1000)}s - connection may be degraded`);
+                                // Reset to avoid repeated warnings
+                                this.lastVideoFrameTime = now;
+                            }
                         }
                     }
                 });
