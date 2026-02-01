@@ -17,6 +17,7 @@ import { Duplex } from 'stream';
 import { DriverManager } from './services/DriverManager';
 import { VirtualControllerService } from './services/VirtualControllerService';
 import { selfHostedTurnService } from './services/SelfHostedTurnService';
+import { hardwareCaptureService } from './services/HardwareCaptureService';
 import type { DisplayInfo, GamepadInputState } from '../shared/types/ipc';
 
 // Keep a global reference of the window object
@@ -905,8 +906,39 @@ public class AudioDeviceHelper {
         else console.log(prefix, message);
     });
 
+    // ============================================
+    // Hardware Capture Handlers
+    // ============================================
+
+    ipcMain.handle('hardware-capture:is-supported', async () => {
+        return await hardwareCaptureService.getEncoderSupport();
+    });
+
+    ipcMain.handle('hardware-capture:get-displays', async () => {
+        return await hardwareCaptureService.getDisplays();
+    });
+
+    ipcMain.handle('hardware-capture:start', async (_event, settings) => {
+        return hardwareCaptureService.start(settings);
+    });
+
+    ipcMain.handle('hardware-capture:stop', async () => {
+        return hardwareCaptureService.stop();
+    });
+
+    ipcMain.handle('hardware-capture:is-active', async () => {
+        return hardwareCaptureService.isCaptureActive();
+    });
+
     ipcMain.on('update:restart-and-install', () => {
         autoUpdater.quitAndInstall();
+    });
+
+    // Forward native capture frames to renderer
+    hardwareCaptureService.on('frame', (frame) => {
+        if (mainWindow) {
+            mainWindow.webContents.send('hardware-capture:frame', frame);
+        }
     });
 }
 

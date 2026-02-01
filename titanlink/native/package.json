@@ -1,0 +1,30 @@
+{
+    "name": "titanlink-capture",
+    "version": "0.1.0",
+    "description": "Ultra-low latency screen capture with DXGI + NVENC",
+    "main": "index.js",
+    "types": "index.d.ts",
+    "napi": {
+        "name": "titanlink-capture",
+        "triples": {
+            "defaults": false,
+            "additional": [
+                "x86_64-pc-windows-msvc"
+            ]
+        }
+    },
+    "scripts": {
+        "build": "napi build --platform --release",
+        "build:debug": "napi build --platform",
+        "prepublishOnly": "napi prepublish -t npm",
+        "test": "node test.js"
+    },
+    "devDependencies": {
+        "@napi-rs/cli": "^2.18.0"
+    },
+    "files": [
+        "index.js",
+        "index.d.ts",
+        "*.node"
+    ]
+}

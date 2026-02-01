@@ -123,7 +123,7 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
     // -- DRAG & DROP STATE --
     // Note: 'controller', 'client', 'quality' will only render when streaming is active
     const [panels, setPanels] = useState<{ left: string[], right: string[] }>({
-        left: ['latency', 'region', 'protocol', 'audio', 'client', 'quality'],
+        left: ['latency', 'region', 'protocol', 'audio', 'client', 'quality', 'hardware'],
         right: ['reactor', 'resources', 'controller', 'logs', 'stopbtn']
     });
 
@@ -327,6 +327,32 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
                         </div>
                         <div className="card-value">UDP/P2P</div>
                         <span className="badge-secure">SECURE</span>
+                    </GlassCard>
+                );
+            case 'hardware':
+                const [hwSupport, setHwSupport] = useState<any>({ nvenc: false, software: false });
+                useEffect(() => {
+                    if (window.electronAPI?.hardwareCapture) {
+                        window.electronAPI.hardwareCapture.isSupported().then(setHwSupport);
+                    }
+                }, []);
+                return (
+                    <GlassCard className="info-card hardware-status-card">
+                        <div className="card-header">
+                            <span className="material-symbols-outlined icon">bolt</span>
+                            <span className="title">HARDWARE</span>
+                        </div>
+                        <div className="hw-status-grid">
+                            <div className={`hw-item ${hwSupport.nvenc ? 'active' : 'inactive'}`}>
+                                <span className="label">NVENC</span>
+                                <span className="status-dot"></span>
+                            </div>
+                            <div className={`hw-item ${hwSupport.software ? 'active' : 'inactive'}`}>
+                                <span className="label">SW_CAP</span>
+                                <span className="status-dot"></span>
+                            </div>
+                        </div>
+                        <div className="card-sub">PIPELINE: DXGI_DD</div>
                     </GlassCard>
                 );
             case 'audio':

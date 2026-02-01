@@ -871,6 +871,52 @@
 }
 
 /* Response */
+/* Hardware Status Widget */
+.hw-status-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.hw-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    border-left: 2px solid transparent;
+}
+
+.hw-item .label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--metal-chrome);
+}
+
+.hw-item .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #333;
+}
+
+.hw-item.active {
+    border-left-color: var(--accent-cyan);
+    background: rgba(0, 240, 255, 0.05);
+}
+
+.hw-item.active .status-dot {
+    background: var(--accent-cyan);
+    box-shadow: 0 0 10px var(--accent-cyan);
+}
+
+.hw-item.inactive {
+    opacity: 0.5;
+}
+
 @media (max-width: 1100px) {
     .host-lobby-grid {
         grid-template-columns: 200px 1fr;

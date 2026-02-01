@@ -44,6 +44,7 @@ export interface StreamSettings {
     audioQualityMode: 'game' | 'voice'; // 'game' disables echo cancellation
     vsync: boolean;
     iceRestart: boolean;
+    useHardwareCapture: boolean;
 }
 
 export const DEFAULT_SETTINGS: StreamSettings = {
@@ -57,6 +58,7 @@ export const DEFAULT_SETTINGS: StreamSettings = {
     audioQualityMode: 'game',
     vsync: false,
     iceRestart: true,
+    useHardwareCapture: true, // Default to true for performance
 };
 
 // ============================================

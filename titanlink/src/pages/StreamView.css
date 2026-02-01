@@ -498,3 +498,51 @@
     font-size: 12px;
     color: #aaa;
 }
+
+/* --- HARDWARE ACCELERATION STYLES --- */
+.stream-video.hardware-accelerated {
+    background: #000;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+}
+
+.hw-accel-badge {
+    position: absolute;
+    top: 86px;
+    /* Below dock */
+    right: 20px;
+    background: rgba(0, 255, 255, 0.1);
+    border: 1px solid rgba(0, 255, 255, 0.3);
+    color: #0ff;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    backdrop-filter: blur(10px);
+    z-index: 100;
+    text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+    animation: pulse-border-hw 2s infinite;
+    pointer-events: none;
+}
+
+.hw-accel-badge .material-symbols-outlined {
+    font-size: 14px;
+}
+
+@keyframes pulse-border-hw {
+    0% {
+        border-color: rgba(0, 255, 255, 0.3);
+    }
+
+    50% {
+        border-color: rgba(0, 255, 255, 0.8);
+    }
+
+    100% {
+        border-color: rgba(0, 255, 255, 0.3);
+    }
+}

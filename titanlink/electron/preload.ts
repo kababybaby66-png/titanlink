@@ -110,6 +110,32 @@ const electronAPI = {
             return () => { ipcRenderer.removeListener('audio:vbcable-progress', listener); };
         },
     },
+
+    // ============================================
+    // Hardware Capture APIs (DXGI + NVENC)
+    // ============================================
+    hardwareCapture: {
+        isSupported: (): Promise<{ nvenc: boolean; amf: boolean; quicksync: boolean; software: boolean }> =>
+            ipcRenderer.invoke('hardware-capture:is-supported'),
+
+        getDisplays: (): Promise<any[]> =>
+            ipcRenderer.invoke('hardware-capture:get-displays'),
+
+        start: (settings: { displayIndex: number; fps: number; bitrate: number; useHardwareEncoder: boolean }): Promise<boolean> =>
+            ipcRenderer.invoke('hardware-capture:start', settings),
+
+        stop: (): Promise<boolean> =>
+            ipcRenderer.invoke('hardware-capture:stop'),
+
+        isActive: (): Promise<boolean> =>
+            ipcRenderer.invoke('hardware-capture:is-active'),
+
+        onFrame: (callback: (frame: { frameNumber: number; timestampUs: bigint; isKeyframe: boolean; data: Buffer }) => void) => {
+            const listener = (_event: any, frame: any) => callback(frame);
+            ipcRenderer.on('hardware-capture:frame', listener);
+            return () => { ipcRenderer.removeListener('hardware-capture:frame', listener); };
+        },
+    },
 };
 
 // Type-safe API exposure

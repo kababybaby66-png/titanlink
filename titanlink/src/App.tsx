@@ -113,6 +113,10 @@ function App() {
                 window.electronAPI.controller.sendInput(input);
             }
         },
+        onVideoFrameReceived: (frame: any) => {
+            // Forward hardware decoded frame to StreamView for WebCodecs
+            window.dispatchEvent(new CustomEvent('titanlink:hardware-frame', { detail: frame }));
+        }
     }), []);
 
     const handleStartHosting = useCallback(async () => {
@@ -142,6 +146,27 @@ function App() {
             // Pass settings to startHosting
             const callbacks = createWebRTCCallbacks();
             const sessionCode = await webrtcService.startHosting(displayId, callbacks);
+
+            // Start hardware capture if enabled
+            if (settings.useHardwareCapture && window.electronAPI?.hardwareCapture) {
+                console.log('[App] Starting hardware capture pipeline...');
+
+                // Find display index (native addon uses 0-based index)
+                // displayId is usually like 'screen:0:0' or something from desktopCapturer
+                const displayIndex = parseInt(displayId.split(':')[1]) || 0;
+
+                await window.electronAPI.hardwareCapture.start({
+                    displayIndex,
+                    fps: settings.fps,
+                    bitrate: settings.bitrate,
+                    useHardwareEncoder: true
+                });
+
+                // Listen for frames and forward to WebRTC
+                window.electronAPI.hardwareCapture.onFrame((frame: any) => {
+                    webrtcService.sendVideoFrame(frame);
+                });
+            }
 
             setSessionState({
                 sessionCode,
@@ -181,6 +206,10 @@ function App() {
 
         if (window.electronAPI?.controller) {
             await window.electronAPI.controller.destroyVirtual();
+        }
+
+        if (window.electronAPI?.hardwareCapture) {
+            await window.electronAPI.hardwareCapture.stop();
         }
 
         setVideoStream(null);

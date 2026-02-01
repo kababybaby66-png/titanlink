@@ -8,6 +8,7 @@ import { FloatingWindow } from '../components/ui/FloatingWindow';
 import { QuickMenu } from '../components/QuickMenu';
 import './StreamView.css';
 import { CyberButton } from '../components/CyberButton';
+import { WebCodecsDecoder } from '../services/WebCodecsDecoder';
 
 interface StreamViewProps {
     sessionState: SessionState;
@@ -25,6 +26,10 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
     const [currentInput, setCurrentInput] = useState<GamepadInputState | null>(null);
     const overlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastGuidePress = useRef<number>(0);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const decoderRef = useRef<WebCodecsDecoder | null>(null);
+    const [isHardwareMode, setIsHardwareMode] = useState(false);
+    const [hwFps, setHwFps] = useState(0);
 
     // Audio state
     const [volume, setVolume] = useState(100);
@@ -40,6 +45,7 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
     useEffect(() => {
         if (videoRef.current && videoStream) {
             console.log('[StreamView] Attaching video stream to element', videoStream.id);
+            setIsHardwareMode(false); // Default to false when a media stream is received
 
             // Check video tracks
             const videoTracks = videoStream.getVideoTracks();
@@ -68,6 +74,30 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
             }
         }
     }, [videoStream]);
+
+    // Handle Hardware Accelerated Frames
+    useEffect(() => {
+        if (sessionState.role !== 'client' || !canvasRef.current) return;
+
+        // Initialize decoder if not already done
+        if (!decoderRef.current && canvasRef.current) {
+            decoderRef.current = new WebCodecsDecoder(canvasRef.current, (fps) => {
+                setHwFps(fps);
+            });
+        }
+
+        const handleHardwareFrame = (e: CustomEvent<any>) => {
+            if (!isHardwareMode) setIsHardwareMode(true);
+            decoderRef.current?.decode(e.detail);
+        };
+
+        window.addEventListener('titanlink:hardware-frame' as any, handleHardwareFrame);
+        return () => {
+            window.removeEventListener('titanlink:hardware-frame' as any, handleHardwareFrame);
+            decoderRef.current?.destroy();
+            decoderRef.current = null;
+        };
+    }, [sessionState.role, isHardwareMode]);
 
     // Poll connection quality metrics
     useEffect(() => {
@@ -296,13 +326,28 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
             onMouseMove={handleMouseMove}
         >
             <div className="stream-video-wrapper">
-                <video
-                    ref={videoRef}
-                    className="stream-video"
-                    autoPlay
-                    playsInline
-                    muted={sessionState.role === 'host' ? true : isMuted} // Host always muted to prevent feedback, client uses mute state
-                />
+                {isHardwareMode ? (
+                    <canvas
+                        ref={canvasRef}
+                        className="stream-video hardware-accelerated"
+                    />
+                ) : (
+                    <video
+                        ref={videoRef}
+                        className="stream-video"
+                        autoPlay
+                        playsInline
+                        muted={sessionState.role === 'host' ? true : isMuted}
+                    />
+                )}
+
+                {isHardwareMode && (
+                    <div className="hw-accel-badge">
+                        <span className="material-symbols-outlined">bolt</span>
+                        HARDWARE ACCELERATED
+                    </div>
+                )}
+
                 {sessionState.role === 'host' && (
                     <div className="host-broadcast-indicator">
                         <div className="broadcast-icon">📡</div>

@@ -115,6 +115,7 @@ export interface WebRTCServiceCallbacks {
     onLatencyUpdate?: (latencyMs: number) => void;
     onStreamReceived?: (stream: MediaStream) => void;
     onInputReceived?: (input: GamepadInputState) => void;
+    onVideoFrameReceived?: (frame: { frameNumber: number; timestampUs: bigint; isKeyframe: boolean; data: Uint8Array }) => void;
 }
 
 export interface ConnectionQuality {
@@ -131,6 +132,7 @@ class WebRTCService {
     private ws: WebSocket | null = null;
     private peerConnection: RTCPeerConnection | null = null;
     private inputChannel: RTCDataChannel | null = null;
+    private videoChannel: RTCDataChannel | null = null;
     private sessionCode: string = '';
     private peerId: string = '';
     private role: 'host' | 'client' | null = null;
@@ -782,11 +784,9 @@ class WebRTCService {
         };
 
         this.peerConnection.ondatachannel = (event) => {
-            if (event.channel.label === 'input') {
-                this.setupInputChannel(event.channel);
-            }
+            console.log('[WebRTC] Native data channel remote created:', event.channel.label);
+            this.setupDataChannel(event.channel);
         };
-
         // Add media tracks when hosting
         if (this.role === 'host' && this.mediaStream) {
             // Add video track with sender reference for adaptive bitrate
@@ -840,32 +840,103 @@ class WebRTCService {
             priority: 'high',
         } as RTCDataChannelInit);
 
+        // CREATE VIDEO DATA CHANNEL (For Hardware Accelerated Streaming)
+        this.videoChannel = this.peerConnection.createDataChannel('video', {
+            ordered: true,         // Frames must arrive in order for H.264
+            maxRetransmits: 0,     // Don't retry lost frames to avoid head-of-line blocking
+            negotiated: true,
+            id: 1,                 // Different from input channel
+            priority: 'high',      // High priority for video data
+        } as RTCDataChannelInit);
+
         // Set buffered amount low threshold to 0 for immediate sending
         this.inputChannel.bufferedAmountLowThreshold = 0;
+        this.videoChannel.bufferedAmountLowThreshold = 0; // Also for video channel
 
-        this.setupInputChannel(this.inputChannel);
+        this.setupDataChannel(this.inputChannel);
+        this.setupDataChannel(this.videoChannel);
     }
 
-    private setupInputChannel(channel: RTCDataChannel): void {
-        console.log('[WebRTC] Setting up input channel (Host side)');
-        this.inputChannel = channel;
-        channel.binaryType = 'arraybuffer';
+    private setupDataChannel(channel: RTCDataChannel): void {
+        channel.binaryType = 'arraybuffer'; // Ensure binary type is set for all data channels
 
-        channel.onmessage = (event) => {
-            // console.log('[WebRTC] Data channel msg:', event.data.byteLength);
-            if (event.data instanceof ArrayBuffer && event.data.byteLength === GAMEPAD_PACKET_SIZE) {
-                const input = decodeGamepadInput(event.data);
-                // console.log('[WebRTC] Input decoded:', input.buttons);
-                this.callbacks?.onInputReceived?.(input);
-                window.electronAPI?.controller.sendInput(input);
-            } else {
-                console.warn('[WebRTC] Invalid input packet size:', event.data.byteLength, 'Expected:', GAMEPAD_PACKET_SIZE);
+        channel.onopen = () => {
+            console.log(`[WebRTC] Data channel "${channel.label}" opened`);
+            if (channel.label === 'input') {
+                this.inputChannel = channel; // Assign to inputChannel if it's the input channel
+            } else if (channel.label === 'video') {
+                this.videoChannel = channel; // Assign to videoChannel if it's the video channel
             }
         };
 
-        channel.onopen = () => {
-            console.log('Input channel opened (host)');
+        channel.onclose = () => {
+            console.log(`[WebRTC] Data channel "${channel.label}" closed`);
         };
+
+        channel.onmessage = (event) => {
+            if (channel.label === 'input') {
+                // console.log('[WebRTC] Data channel msg:', event.data.byteLength);
+                if (event.data instanceof ArrayBuffer && event.data.byteLength === GAMEPAD_PACKET_SIZE) {
+                    const input = decodeGamepadInput(event.data);
+                    // console.log('[WebRTC] Input decoded:', input.buttons);
+                    this.callbacks?.onInputReceived?.(input);
+                    window.electronAPI?.controller.sendInput(input);
+                } else {
+                    console.warn('[WebRTC] Invalid input packet size:', event.data.byteLength, 'Expected:', GAMEPAD_PACKET_SIZE);
+                }
+            } else if (channel.label === 'video') {
+                // Client receives video frame from host
+                this.handleIncomingVideoFrame(event.data);
+            }
+        };
+    }
+
+    /**
+     * Handle binary video frame received over DataChannel
+     */
+    private handleIncomingVideoFrame(data: ArrayBuffer): void {
+        // Simple protocol: [4b frameNum][8b timestampUs][1b isKeyframe][data...]
+        const view = new DataView(data);
+        const frameNumber = view.getUint32(0);
+        const timestampUs = view.getBigUint64(4);
+        const isKeyframe = view.getUint8(12) === 1;
+        const frameData = new Uint8Array(data, 13);
+
+        this.callbacks?.onVideoFrameReceived?.({
+            frameNumber,
+            timestampUs,
+            isKeyframe,
+            data: frameData,
+        });
+    }
+
+    /**
+     * Send hardware-encoded frame to peer
+     */
+    public sendVideoFrame(frame: { frameNumber: number; timestampUs: bigint; isKeyframe: boolean; data: Uint8Array | Buffer }): void {
+        if (!this.videoChannel || this.videoChannel.readyState !== 'open') return;
+
+        // Protocol: [4b frameNum][8b timestampUs][1b isKeyframe][data...]
+        const buffer = new ArrayBuffer(13 + frame.data.length);
+        const view = new DataView(buffer);
+        view.setUint32(0, frame.frameNumber);
+        view.setBigUint64(4, frame.timestampUs);
+        view.setUint8(12, frame.isKeyframe ? 1 : 0);
+
+        const dataArr = new Uint8Array(buffer);
+        dataArr.set(new Uint8Array(frame.data), 13);
+
+        try {
+            this.videoChannel.send(buffer);
+        } catch (e) {
+            console.error('[WebRTC] Failed to send video frame:', e);
+        }
+    }
+
+    private setupVideoChannel(channel: RTCDataChannel): void {
+        console.log('[WebRTC] Setting up video channel (Client side)');
+        this.videoChannel = channel;
+        this.setupDataChannel(channel);
     }
 
     private async handlePeerJoined(peerId: string): Promise<void> {
