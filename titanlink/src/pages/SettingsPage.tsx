@@ -55,7 +55,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                                     <span className="desc">Use GPU for encoding/decoding</span>
                                 </div>
                                 <label className="cyber-switch">
-                                    <input type="checkbox" defaultChecked />
+                                    <input
+                                        type="checkbox"
+                                        checked={localSettings.useHardwareCapture}
+                                        onChange={(e) => updateSetting('useHardwareCapture', e.target.checked)}
+                                    />
                                     <span className="slider"></span>
                                 </label>
                             </div>

@@ -141,6 +141,7 @@ class WebRTCService {
     private latencyInterval: ReturnType<typeof setInterval> | null = null;
     private dynamicIceServers: RTCIceServer[] | null = null;
     private hasLoggedConnectionStats = false;
+    private useHardwareCapture = false;
     private hasAudioTrack = false;
     private previousPacketsLost = 0;
     private previousPacketsReceived = 0;
@@ -204,7 +205,8 @@ class WebRTCService {
         }
     }
 
-    async startHosting(displayId: string, callbacks: WebRTCServiceCallbacks, useDirect: boolean = false): Promise<string> {
+    async startHosting(displayId: string, callbacks: WebRTCServiceCallbacks, useDirect: boolean = false, useHardwareCapture: boolean = false): Promise<string> {
+        this.useHardwareCapture = useHardwareCapture;
         this.callbacks = callbacks;
         this.role = 'host';
         this.sessionCode = this.generateSessionCode();
@@ -851,7 +853,7 @@ class WebRTCService {
         if (this.role === 'host' && this.mediaStream) {
             // Add video track with sender reference for adaptive bitrate
             const videoTrack = this.mediaStream.getVideoTracks()[0];
-            if (videoTrack) {
+            if (videoTrack && !this.useHardwareCapture) {
                 console.log('[WebRTC] Adding video track to peer connection');
 
                 // LOW LATENCY: Set content hint to 'motion' for fast motion optimization

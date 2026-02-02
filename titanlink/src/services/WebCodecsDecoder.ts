@@ -2,7 +2,6 @@
  * WebCodecs Decoder - Hardware-accelerated H.264 decoding
  */
 
-const H264_BASELINE_CODEC = 'avc1.42E01F'; // Baseline Profile, Level 3.1
 const FPS_UPDATE_INTERVAL_MS = 1000;
 
 export class WebCodecsDecoder {
@@ -33,28 +32,50 @@ export class WebCodecsDecoder {
         });
     }
 
+    // Try High Profile (6400xx), Main Profile (4d00xx), then Baseline (4200xx)
+    // Level 3.1 (1F) is usually sufficient for 1080p
+    private readonly CODEC_PREFERENCES = [
+        'avc1.640028', // High Profile, Level 4.0 (for 1080p60)
+        'avc1.4D0028', // Main Profile, Level 4.0
+        'avc1.42E028', // Baseline Profile, Level 4.0
+        'avc1.64001F', // High Profile, Level 3.1
+        'avc1.4D001F', // Main Profile, Level 3.1
+        'avc1.42E01F', // Baseline Profile, Level 3.1
+    ];
+
+    private isConfiguring = false;
+
     private async configure(width: number, height: number): Promise<void> {
-        if (!this.decoder) return;
+        if (!this.decoder || this.isConfiguring || this.isConfigured) return;
 
-        const config: VideoDecoderConfig = {
-            codec: H264_BASELINE_CODEC,
-            hardwareAcceleration: 'prefer-hardware',
-            optimizeForLatency: true,
-        };
+        this.isConfiguring = true;
+        console.log(`[WebCodecs] Configuring decoder for ${width}x${height}...`);
 
-        try {
-            const { supported } = await VideoDecoder.isConfigSupported(config);
-            if (!supported) {
-                console.error('[WebCodecs] Config not supported');
-                return;
+        for (const codec of this.CODEC_PREFERENCES) {
+            const config: VideoDecoderConfig = {
+                codec,
+                hardwareAcceleration: 'prefer-hardware',
+                optimizeForLatency: true,
+                codedWidth: width,
+                codedHeight: height,
+            };
+
+            try {
+                const { supported } = await VideoDecoder.isConfigSupported(config);
+                if (supported) {
+                    console.log(`[WebCodecs] Selected codec: ${codec}`);
+                    this.decoder.configure(config);
+                    this.isConfigured = true;
+                    this.isConfiguring = false;
+                    return;
+                }
+            } catch (e) {
+                console.warn(`[WebCodecs] Codec ${codec} check failed:`, e);
             }
-
-            this.decoder.configure(config);
-            this.isConfigured = true;
-            console.log(`[WebCodecs] Configured: ${width}x${height}`);
-        } catch (e) {
-            console.error('[WebCodecs] Configure failed:', e);
         }
+
+        console.error('[WebCodecs] No supported H.264 codec found');
+        this.isConfiguring = false;
     }
 
     public decode(frame: { frameNumber: number; timestampUs: bigint; isKeyframe: boolean; data: Uint8Array }): void {

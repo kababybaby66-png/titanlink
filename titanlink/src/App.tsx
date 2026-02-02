@@ -167,10 +167,28 @@ function App() {
         try {
             await window.electronAPI?.controller?.createVirtual();
 
-            const callbacks = createWebRTCCallbacks();
-            const sessionCode = await webrtcService.startHosting(displayId, callbacks);
+            // Check if hardware capture is supported (NVENC or software fallback)
+            let hwSupported = false;
+            if (window.electronAPI?.hardwareCapture) {
+                try {
+                    const support = await window.electronAPI.hardwareCapture.isSupported();
+                    hwSupported = support.nvenc || support.software;
+                    console.log('[App] Hardware capture support:', support);
+                } catch (e) {
+                    console.warn('[App] Failed to check hardware support:', e);
+                }
+            }
 
-            await startHardwareCapture(displayId);
+            // Prioritize hardware capture if supported and enabled in settings
+            const useHardware = hwSupported && settings.useHardwareCapture;
+            console.log(`[App] Using hardware capture: ${useHardware} (Supported: ${hwSupported}, Enabled: ${settings.useHardwareCapture})`);
+
+            const callbacks = createWebRTCCallbacks();
+            const sessionCode = await webrtcService.startHosting(displayId, callbacks, false, useHardware);
+
+            if (useHardware) {
+                await startHardwareCapture(displayId);
+            }
 
             setSessionState({
                 sessionCode,
