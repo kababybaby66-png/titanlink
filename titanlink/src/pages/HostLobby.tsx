@@ -5,8 +5,8 @@ import type { DisplayInfo, SystemStats, GamepadInputState } from '../../shared/t
 import { GlassCard } from '../components/ui/GlassCard';
 import { StatusVisualizer } from '../components/StatusVisualizer';
 import { ControllerOverlay } from '../components/ControllerOverlay';
-import { AudioSetupModal } from '../components/AudioSetupModal';
-import { webrtcService } from '../services/WebRTCService';
+import { AudioBanner } from '../components/AudioBanner';
+import { udpStreamService } from '../services/UDPStreamService';
 import './HostLobby.css';
 
 interface HostLobbyProps {
@@ -106,8 +106,12 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
     const [currentInput, setCurrentInput] = useState<GamepadInputState | null>(null);
     const [showControllerOverlay, setShowControllerOverlay] = useState(true);
 
-    // Audio setup modal state
-    const [showAudioSetupModal, setShowAudioSetupModal] = useState(false);
+    // Audio banner state - dismissable, remembers user preference
+    const [showAudioBanner, setShowAudioBanner] = useState(() => {
+        // Check if user previously dismissed the banner
+        return localStorage.getItem('titanlink-audio-banner-dismissed') !== 'true';
+    });
+    const [audioInstalled, setAudioInstalled] = useState(false);
 
     // Connection quality metrics
     const [connectionQuality, setConnectionQuality] = useState({
@@ -189,13 +193,10 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
         if (!isStreaming) return;
 
         const interval = setInterval(() => {
-            const quality = webrtcService.getConnectionQuality();
-            setConnectionQuality({
-                latency: quality.latency,
-                packetLoss: quality.packetLoss,
-                jitter: quality.jitter,
-                networkQuality: quality.networkQuality,
-            });
+            // UDP service doesn't yet track these metrics the same way
+            // TODO: Implement connection quality tracking in UDPStreamService
+            const quality = { latency: 0, packetLoss: 0, jitter: 0, networkQuality: 'excellent' };
+            setConnectionQuality(quality);
         }, 1000);
 
         return () => clearInterval(interval);
@@ -211,11 +212,9 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
             addLog('Session Created successfully');
 
             // Check if audio was captured - if not, show the audio setup modal
-            const hasAudio = webrtcService.getConnectionQuality().hasAudio;
-            if (!hasAudio) {
-                addLog('[WARN] Audio capture failed - showing setup options');
-                setTimeout(() => setShowAudioSetupModal(true), 500);
-            }
+            // UDP service manages audio internally
+            // const hasAudio = udpStreamService.getConnectionQuality().hasAudio;
+            // Audio status handled by inline banner - no auto-popup
         } catch (err) {
             setLocalError(err instanceof Error ? err.message : 'Failed');
             addLog('[ERROR] Init failed');
@@ -358,7 +357,7 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
             case 'audio':
                 // Audio status widget - only show when hosting
                 if (!isHosting) return null;
-                const hasAudio = webrtcService.getConnectionQuality().hasAudio;
+                const hasAudio = audioInstalled;
                 return (
                     <GlassCard className={`audio-widget ${hasAudio ? 'active' : 'inactive'}`}>
                         <div className="card-header">
@@ -367,16 +366,31 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
                             </span>
                             <span className="title">AUDIO</span>
                             <span className={`status-badge ${hasAudio ? 'connected' : 'disconnected'}`}>
-                                {hasAudio ? 'ACTIVE' : 'DISABLED'}
+                                {hasAudio ? 'ACTIVE' : 'SETUP NEEDED'}
                             </span>
                         </div>
-                        {!hasAudio && (
+                        {!hasAudio && showAudioBanner && (
+                            <AudioBanner
+                                isVisible={showAudioBanner}
+                                onDismiss={() => {
+                                    setShowAudioBanner(false);
+                                    localStorage.setItem('titanlink-audio-banner-dismissed', 'true');
+                                    addLog('[AUDIO] Setup dismissed - can reinstall from settings');
+                                }}
+                                onInstall={() => {
+                                    setAudioInstalled(true);
+                                    setShowAudioBanner(false);
+                                    addLog('[AUDIO] VB-Cable installed successfully');
+                                }}
+                            />
+                        )}
+                        {!hasAudio && !showAudioBanner && (
                             <button
-                                className="audio-fix-btn"
-                                onClick={() => setShowAudioSetupModal(true)}
+                                className="audio-fix-btn compact"
+                                onClick={() => setShowAudioBanner(true)}
                             >
                                 <span className="material-symbols-outlined">settings</span>
-                                Fix Audio
+                                Setup Audio
                             </button>
                         )}
                     </GlassCard>
@@ -600,14 +614,7 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
                 })}
             </aside>
 
-            {/* Audio Setup Modal */}
-            <AudioSetupModal
-                isOpen={showAudioSetupModal}
-                onClose={() => setShowAudioSetupModal(false)}
-                onInstallComplete={() => {
-                    addLog('[AUDIO] VB-Cable installed successfully');
-                }}
-            />
+            {/* Audio banner is now inline in the widget */}
         </div>
     );
 }

@@ -5,6 +5,10 @@
 mod capture;
 mod encoder;
 mod pipeline;
+mod network;  // Custom UDP protocol
+
+// Re-export NetworkClient for NAPI-RS bindings
+pub use network::NetworkClient;
 
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::ThreadSafeCallContext;

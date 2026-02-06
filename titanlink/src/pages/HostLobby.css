@@ -870,6 +870,17 @@
     font-size: 1rem;
 }
 
+.audio-fix-btn.compact {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.7rem;
+    background: rgba(0, 200, 255, 0.05);
+    margin-top: 0.5rem;
+}
+
+.audio-fix-btn.compact:hover {
+    background: rgba(0, 200, 255, 0.15);
+}
+
 /* Response */
 /* Hardware Status Widget */
 .hw-status-grid {

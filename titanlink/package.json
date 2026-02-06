@@ -16,7 +16,9 @@
         "electron:dev": "npm run dev",
         "electron:build": "npm run build && electron-builder",
         "typecheck": "tsc --noEmit",
-        "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+        "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+        "build:native": "cd native && npm install && npm run build",
+        "postinstall": "npm run build:native"
     },
     "dependencies": {
         "@fontsource/jetbrains-mono": "^5.2.8",

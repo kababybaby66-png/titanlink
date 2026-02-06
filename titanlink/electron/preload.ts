@@ -141,7 +141,13 @@ const electronAPI = {
 // Type-safe API exposure
 export type ElectronAPI = typeof electronAPI;
 
-contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+// Expose API based on isolation state
+if (process.contextIsolated) {
+    contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+} else {
+    // When nodeIntegration is on and contextIsolation is off
+    window.electronAPI = electronAPI;
+}
 
 // Also expose for TypeScript type checking in renderer
 declare global {

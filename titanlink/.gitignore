@@ -34,3 +34,7 @@ progress.md
 SkillMaker.md
 ProblemSolver.md
 Design.md
+
+# Native build artifacts
+native/target/
+native/*.node

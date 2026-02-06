@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import type { SessionState } from '../App';
-import { webrtcService } from '../services/WebRTCService';
+import { udpStreamService } from '../services/UDPStreamService';
 import { setButton, XBOX_BUTTONS, isButtonPressed } from '../../shared/types/ipc';
 import type { GamepadInputState } from '../../shared/types/ipc';
 import { ControllerOverlay } from '../components/ControllerOverlay';
@@ -12,12 +12,11 @@ import { WebCodecsDecoder } from '../services/WebCodecsDecoder';
 
 interface StreamViewProps {
     sessionState: SessionState;
-    videoStream: MediaStream | null;
     onDisconnect: () => void;
 }
 
-export function StreamView({ sessionState, videoStream, onDisconnect }: StreamViewProps) {
-    const videoRef = useRef<HTMLVideoElement>(null);
+export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
+    // videoRef removed - pure canvas rendering for UDP
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [showOverlay, setShowOverlay] = useState(true);
     const [controllerConnected, setControllerConnected] = useState(false);
@@ -41,39 +40,8 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
     const [jitter, setJitter] = useState(0);
     const [actualFps, setActualFps] = useState(0);
 
-    // Attach video stream to video element
-    useEffect(() => {
-        if (videoRef.current && videoStream) {
-            console.log('[StreamView] Attaching video stream to element', videoStream.id);
-            setIsHardwareMode(false); // Default to false when a media stream is received
+    // WebRTC MediaStream handling removed - pure WebCodecs path used
 
-            // Check video tracks
-            const videoTracks = videoStream.getVideoTracks();
-            console.log(`[StreamView] Stream has ${videoTracks.length} video tracks`);
-            videoTracks.forEach(t => console.log(`[StreamView] Video Track ${t.id}: enabled=${t.enabled}, muted=${t.muted}, state=${t.readyState}`));
-
-            // Check audio tracks
-            const audioTracks = videoStream.getAudioTracks();
-            console.log(`[StreamView] Stream has ${audioTracks.length} audio tracks`);
-            audioTracks.forEach(t => console.log(`[StreamView] Audio Track ${t.id}: enabled=${t.enabled}, muted=${t.muted}, state=${t.readyState}`));
-
-            // Set audio availability
-            setHasAudio(audioTracks.length > 0);
-
-            videoRef.current.srcObject = videoStream;
-
-            videoRef.current.play().catch(e => {
-                console.error('[StreamView] Auto-play failed:', e);
-            });
-
-            // Monitor track unexpected ending
-            if (videoTracks[0]) {
-                videoTracks[0].onended = () => {
-                    console.warn('[StreamView] Video track ended unexpectedly');
-                };
-            }
-        }
-    }, [videoStream]);
 
     // Handle Hardware Accelerated Frames
     useEffect(() => {
@@ -102,22 +70,26 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
     // Poll connection quality metrics
     useEffect(() => {
         const interval = setInterval(() => {
-            const quality = webrtcService.getConnectionQuality();
+            // UDP service doesn't track connection quality the same way as WebRTC yet
+            // This will be implemented in the UDPStreamService
+            const quality = { packetLoss: 0, jitter: 0, hasAudio: false };
             setPacketLoss(quality.packetLoss);
             setJitter(quality.jitter);
             setHasAudio(quality.hasAudio || hasAudio); // Keep true if we detected audio
-            setActualFps(webrtcService.getActualFps());
+            // FPS tracking not yet implemented in UDP service
+            // setActualFps(60);
         }, 500); // LOW LATENCY: Poll faster for responsive stats
 
         return () => clearInterval(interval);
     }, [hasAudio]);
 
     // Handle volume changes
-    useEffect(() => {
-        if (videoRef.current) {
-            videoRef.current.volume = isMuted ? 0 : volume / 100;
-        }
-    }, [volume, isMuted]);
+    // Audio volume handling - TODO for UDP audio
+    // useEffect(() => {
+    //     if (videoRef.current) {
+    //         videoRef.current.volume = isMuted ? 0 : volume / 100;
+    //     }
+    // }, [volume, isMuted]);
 
     // Toggle mute with M key
     const handleMuteToggle = useCallback(() => {
@@ -218,7 +190,7 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
 
                 if (stateKey !== lastInputState) {
                     lastInputState = stateKey;
-                    webrtcService.sendInput(input);
+                    udpStreamService.sendInput(input);
                 }
             } else {
                 setControllerConnected(false);
@@ -326,20 +298,10 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
             onMouseMove={handleMouseMove}
         >
             <div className="stream-video-wrapper">
-                {isHardwareMode ? (
-                    <canvas
-                        ref={canvasRef}
-                        className="stream-video hardware-accelerated"
-                    />
-                ) : (
-                    <video
-                        ref={videoRef}
-                        className="stream-video"
-                        autoPlay
-                        playsInline
-                        muted={sessionState.role === 'host' ? true : isMuted}
-                    />
-                )}
+                <canvas
+                    ref={canvasRef}
+                    className="stream-video hardware-accelerated"
+                />
 
                 {isHardwareMode && (
                     <div className="hw-accel-badge">
@@ -438,7 +400,7 @@ export function StreamView({ sessionState, videoStream, onDisconnect }: StreamVi
                                 </div>
                                 <div className="stat-row">
                                     <span className="label">Resolution</span>
-                                    <span className="value">{videoRef.current?.videoWidth}x{videoRef.current?.videoHeight}</span>
+                                    <span className="value">{canvasRef.current?.width}x{canvasRef.current?.height}</span>
                                 </div>
                                 <div className="stat-row">
                                     <span className="label">Packet Loss</span>

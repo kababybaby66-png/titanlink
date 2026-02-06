@@ -1,0 +1,175 @@
+/* AudioBanner.css - Minimal inline audio setup banner */
+
+.audio-banner {
+    background: linear-gradient(135deg, rgba(255, 170, 50, 0.08) 0%, rgba(255, 100, 50, 0.04) 100%);
+    border: 1px solid rgba(255, 170, 50, 0.25);
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin-top: 12px;
+    animation: bannerSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes bannerSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.audio-banner-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Icon */
+.audio-banner-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    background: rgba(255, 170, 50, 0.1);
+    border-radius: 10px;
+}
+
+.audio-banner-icon .material-symbols-outlined {
+    font-size: 20px;
+    color: #ffaa32;
+}
+
+.audio-banner-icon.success {
+    background: rgba(0, 255, 136, 0.1);
+}
+
+.audio-banner-icon.success .material-symbols-outlined {
+    color: #00ff88;
+}
+
+.audio-banner-icon.error {
+    background: rgba(255, 68, 102, 0.1);
+}
+
+.audio-banner-icon.error .material-symbols-outlined {
+    color: #ff4466;
+}
+
+/* Spinner */
+.audio-banner-spinner {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    border: 2px solid rgba(0, 242, 255, 0.2);
+    border-top-color: var(--primary, #00f2ff);
+    border-radius: 50%;
+    animation: bannerSpin 0.8s linear infinite;
+}
+
+@keyframes bannerSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Text */
+.audio-banner-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.audio-banner-title {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 2px;
+}
+
+.audio-banner-title.success {
+    color: #00ff88;
+}
+
+.audio-banner-title.error {
+    color: #ff4466;
+}
+
+.audio-banner-subtitle {
+    display: block;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Progress bar */
+.audio-banner-progress {
+    height: 4px;
+    background: rgba(0, 242, 255, 0.15);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 6px;
+}
+
+.audio-banner-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary, #00f2ff), #00ff88);
+    border-radius: 2px;
+    transition: width 0.3s ease-out;
+}
+
+/* Actions */
+.audio-banner-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* Buttons */
+.audio-banner-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+}
+
+.audio-banner-btn .material-symbols-outlined {
+    font-size: 16px;
+}
+
+.audio-banner-btn.primary {
+    background: linear-gradient(135deg, var(--primary, #00f2ff), #0088ff);
+    color: #000;
+}
+
+.audio-banner-btn.primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 242, 255, 0.3);
+}
+
+.audio-banner-btn.primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.audio-banner-btn.secondary {
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.6);
+    padding: 8px;
+}
+
+.audio-banner-btn.secondary:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+}
