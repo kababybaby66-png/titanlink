@@ -48,14 +48,32 @@ export class HardwareCaptureService extends EventEmitter {
         const isDev = !app.isPackaged;
         const binaryName = `titanlink-capture.${process.platform}-${process.arch}-msvc.node`;
 
-        return isDev
-            ? path.join(app.getAppPath(), 'native', binaryName)
-            : path.join(process.resourcesPath, 'bin/titanlink-capture.node');
+        if (isDev) {
+            // Try common dev layouts
+            const appPath = app.getAppPath();
+            const candidates = [
+                path.join(appPath, 'native', binaryName),
+                path.join(appPath, '..', 'native', binaryName),
+                path.join(process.cwd(), 'native', binaryName)
+            ];
+
+            for (const cand of candidates) {
+                if (fs.existsSync(cand)) {
+                    console.log(`${LOG_PREFIX} Dev mode - Found native binder at: ${cand}`);
+                    return cand;
+                }
+            }
+
+            console.warn(`${LOG_PREFIX} Dev mode - Could not find native binder in candidates. Defaulting to: ${candidates[0]}`);
+            return candidates[0];
+        } else {
+            // In production, the native folder is copied to resources/native/
+            return path.join(process.resourcesPath, 'native', binaryName);
+        }
     }
 
     private loadNativeAddon(): void {
         const binaryPath = this.getBinaryPath();
-        console.log(`${LOG_PREFIX} Loading from: ${binaryPath}`);
 
         if (!fs.existsSync(binaryPath)) {
             console.error(`${LOG_PREFIX} Native addon not found at: ${binaryPath}`);
@@ -64,9 +82,13 @@ export class HardwareCaptureService extends EventEmitter {
 
         try {
             this.native = require(binaryPath);
-            console.log(`${LOG_PREFIX} ${this.native.healthCheck()}`);
+            if (this.native && typeof this.native.healthCheck === 'function') {
+                console.log(`${LOG_PREFIX} Loaded successfully: ${this.native.healthCheck()}`);
+            } else {
+                console.warn(`${LOG_PREFIX} Native addon loaded but missing healthCheck()`);
+            }
         } catch (e) {
-            console.error(`${LOG_PREFIX} Failed to load:`, e);
+            console.error(`${LOG_PREFIX} Failed to load native addon:`, e);
         }
     }
 
