@@ -14,14 +14,81 @@
 // Import NetworkClient from native addon
 import type { NetworkClient as NetworkClientType } from '../../../native';
 
-// Use require with absolute path for runtime loading of native module in Electron
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const path = require('path');
-const nativePath = path.join(process.cwd(), 'native');
-const { NetworkClient } = require(nativePath);
-
 // Re-export type for usage in class
 type NetworkClient = NetworkClientType;
+
+// Native module will be loaded lazily to avoid top-level require crashes in production
+let NativeNetworkClient: typeof NetworkClientType | null = null;
+let nativeLoadError: Error | null = null;
+
+/**
+ * Lazily load the native module (only when needed)
+ * This prevents top-level require crashes in production builds
+ */
+function getNativeNetworkClient(): typeof NetworkClientType {
+    if (nativeLoadError) {
+        throw nativeLoadError;
+    }
+
+    if (NativeNetworkClient) {
+        return NativeNetworkClient;
+    }
+
+    try {
+        // Check if we're in Electron renderer with nodeIntegration
+        if (typeof window !== 'undefined' && (window as any).require) {
+            const electronRequire = (window as any).require;
+            const path = electronRequire('path');
+
+            // Build list of possible paths for the native module
+            const possiblePaths: string[] = [];
+
+            // Production path: resources/native (extraResources)
+            if (typeof process !== 'undefined' && (process as any).resourcesPath) {
+                possiblePaths.push(path.join((process as any).resourcesPath, 'native'));
+            }
+
+            // Development paths
+            possiblePaths.push(
+                path.join(process.cwd(), 'native'),
+                path.join(__dirname, '..', '..', '..', 'native'),
+            );
+
+            console.log('[SmartConnection] Trying native module paths:', possiblePaths);
+
+            for (const nativePath of possiblePaths) {
+                try {
+                    const native = electronRequire(nativePath);
+                    if (native && native.NetworkClient) {
+                        NativeNetworkClient = native.NetworkClient;
+                        console.log('[SmartConnection] Native module loaded from:', nativePath);
+                        return NativeNetworkClient!;
+                    }
+                } catch (e) {
+                    // Try next path
+                }
+            }
+        }
+
+        // Fallback: try Node.js require (for main process or dev mode)
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const path = require('path');
+        const nativePath = path.join(process.cwd(), 'native');
+        const native = require(nativePath);
+
+        if (native && native.NetworkClient) {
+            NativeNetworkClient = native.NetworkClient;
+            console.log('[SmartConnection] Native module loaded (Node.js require)');
+            return NativeNetworkClient!;
+        }
+
+        throw new Error('NetworkClient not found in native module');
+    } catch (error) {
+        nativeLoadError = error as Error;
+        console.error('[SmartConnection] Failed to load native module:', error);
+        throw error;
+    }
+}
 
 export enum ConnectionMode {
     DISCONNECTED = 'disconnected',
@@ -99,7 +166,8 @@ export class SmartConnectionManager {
         const relayPort = config.relayPort || 5000;
         const p2pTimeoutMs = config.p2pTimeoutMs || 500;
 
-        const relayClient = new NetworkClient();
+        const NetworkClientClass = getNativeNetworkClient();
+        const relayClient = new NetworkClientClass();
         this.relayClient = relayClient;
         relayClient.startListening(this.handlePacket.bind(this));
         await relayClient.connect(config.relayIp, relayPort, config.sessionId);
@@ -110,7 +178,7 @@ export class SmartConnectionManager {
         // If peer IP provided, attempt P2P
         if (config.peerIp) {
             const peerPort = config.peerPort || 5000;
-            const p2pClient = new NetworkClient();
+            const p2pClient = new NetworkClientClass();
             this.p2pClient = p2pClient;
 
             try {

@@ -2,7 +2,7 @@
  * TitanLink - Main App Component
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Titlebar } from './components/Titlebar';
 import { BackgroundEffects } from './components/BackgroundEffects';
 import { LandingPage } from './pages/LandingPage';
@@ -12,9 +12,30 @@ import { StreamView } from './pages/StreamView';
 import { SettingsPage } from './pages/SettingsPage';
 import { ControllerTest } from './pages/ControllerTest';
 import { DriverWarning } from './components/DriverWarning';
-import { udpStreamService } from './services/UDPStreamService';
+// LAZY IMPORT: udpStreamService is loaded dynamically to prevent production build crashes
+// import { udpStreamService } from './services/UDPStreamService';
 import type { DriverCheckResult, ConnectionState, PeerInfo, StreamSettings } from '../shared/types/ipc';
 import { DEFAULT_SETTINGS } from '../shared/types/ipc';
+
+// Lazy-loaded UDP service reference
+let udpStreamServiceInstance: any = null;
+
+/**
+ * Get the UDP stream service (lazy-loaded to prevent production crashes)
+ */
+async function getUdpStreamService() {
+    if (!udpStreamServiceInstance) {
+        try {
+            const module = await import('./services/UDPStreamService');
+            udpStreamServiceInstance = module.udpStreamService;
+            console.log('[App] UDP Stream Service loaded successfully');
+        } catch (error) {
+            console.error('[App] Failed to load UDP Stream Service:', error);
+            throw error;
+        }
+    }
+    return udpStreamServiceInstance;
+}
 
 type AppView = 'landing' | 'host-lobby' | 'client-connect' | 'streaming' | 'settings' | 'controller-test';
 
@@ -71,7 +92,10 @@ function App() {
 
     // Update service settings when they change
     useEffect(() => {
-        udpStreamService.updateSettings(settings);
+        // Only update if service is already loaded (don't force load just for settings)
+        if (udpStreamServiceInstance) {
+            udpStreamServiceInstance.updateSettings(settings);
+        }
     }, [settings]);
 
     // Handle navigation based on connection state
@@ -184,7 +208,8 @@ function App() {
             console.log(`[App] Using hardware capture: ${useHardware} (Supported: ${hwSupported}, Enabled: ${settings.useHardwareCapture})`);
 
             const callbacks = createUDPCallbacks();
-            const sessionCode = await udpStreamService.startHosting(displayId, callbacks, false, useHardware);
+            const udpService = await getUdpStreamService();
+            const sessionCode = await udpService.startHosting(displayId, callbacks, false, useHardware);
 
             if (useHardware) {
                 await startHardwareCapture(displayId);
@@ -208,7 +233,8 @@ function App() {
     const handleConnectToHost = useCallback(async (sessionCode: string) => {
         try {
             const callbacks = createUDPCallbacks();
-            await udpStreamService.connectToHost(sessionCode, callbacks);
+            const udpService = await getUdpStreamService();
+            await udpService.connectToHost(sessionCode, callbacks);
 
             setSessionState({
                 sessionCode,
@@ -223,8 +249,10 @@ function App() {
     }, [createUDPCallbacks]);
 
     const handleBackToLanding = useCallback(async () => {
-        // Cleanup
-        await udpStreamService.disconnect();
+        // Cleanup - only disconnect if service was loaded
+        if (udpStreamServiceInstance) {
+            await udpStreamServiceInstance.disconnect();
+        }
 
         if (window.electronAPI?.controller) {
             await window.electronAPI.controller.destroyVirtual();

@@ -88,6 +88,16 @@
                     "!bin/**",
                     "!feeder-src/**"
                 ]
+            },
+            {
+                "from": "native/",
+                "to": "native/",
+                "filter": [
+                    "index.js",
+                    "index.d.ts",
+                    "*.node",
+                    "package.json"
+                ]
             }
         ],
         "win": {

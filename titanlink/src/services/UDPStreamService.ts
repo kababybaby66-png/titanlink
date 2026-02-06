@@ -368,28 +368,28 @@ export class UDPStreamService {
         console.log('[UDPStreamService] Starting hardware capture for display:', displayId);
 
         try {
-            // Load native addon using require with absolute path (same as SmartConnectionManager)
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
-            const path = require('path');
-            const nativePath = path.join(process.cwd(), 'native');
-            const native = require(nativePath);
-
-            if (!native || !native.startCapture) {
-                throw new Error('Native capture module loaded but startCapture not available');
-            }
-
-            // Start hardware capture
-            native.startCapture(
-                {
-                    displayIndex: parseInt(displayId) || 0,
+            // Use electronAPI which properly handles native module loading in production
+            if (window.electronAPI?.hardwareCapture?.start) {
+                const displayIndex = parseInt(displayId) || 0;
+                const started = await window.electronAPI.hardwareCapture.start({
+                    displayIndex,
                     fps: this.settings.fps || 60,
                     bitrate: (this.settings.bitrate || 10) * 1_000_000,
                     useHardwareEncoder: true,
-                },
-                this.handleEncodedFrame.bind(this)
-            );
+                });
 
-            console.log('[UDPStreamService] Hardware capture started');
+                if (started) {
+                    console.log('[UDPStreamService] Hardware capture started via electronAPI');
+
+                    // Register frame handler
+                    window.electronAPI.hardwareCapture.onFrame((frame: any) => {
+                        this.handleEncodedFrame(frame);
+                    });
+                    return;
+                }
+            }
+
+            throw new Error('Hardware capture not available via electronAPI');
         } catch (error) {
             console.error('[UDPStreamService] Failed to start hardware capture:', error);
 
