@@ -12,7 +12,7 @@ import { StreamView } from './pages/StreamView';
 import { SettingsPage } from './pages/SettingsPage';
 import { ControllerTest } from './pages/ControllerTest';
 import { DriverWarning } from './components/DriverWarning';
-import { webrtcService } from './services/WebRTCService';
+import { udpStreamService } from './services/UDPStreamService';
 import type { DriverCheckResult, ConnectionState, PeerInfo, StreamSettings } from '../shared/types/ipc';
 import { DEFAULT_SETTINGS } from '../shared/types/ipc';
 
@@ -36,7 +36,8 @@ function App() {
     });
     const [driverStatus, setDriverStatus] = useState<DriverCheckResult | null>(null);
     const [showDriverWarning, setShowDriverWarning] = useState(false);
-    const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
+    // videoStream removed - UDP protocol uses pure canvas
+
     const [error, setError] = useState<string | null>(null);
 
     // Check driver status on mount
@@ -70,7 +71,7 @@ function App() {
 
     // Update service settings when they change
     useEffect(() => {
-        webrtcService.updateSettings(settings);
+        udpStreamService.updateSettings(settings);
     }, [settings]);
 
     // Handle navigation based on connection state
@@ -82,7 +83,7 @@ function App() {
     }, [sessionState.connectionState, sessionState.role]);
 
     // Create WebRTC callbacks
-    const createWebRTCCallbacks = useCallback(() => ({
+    const createUDPCallbacks = useCallback(() => ({
         onStateChange: (state: ConnectionState) => {
             setSessionState(prev => ({ ...prev, connectionState: state }));
         },
@@ -94,14 +95,13 @@ function App() {
         },
         onError: (errorMsg: string) => {
             setError(errorMsg);
-            console.error('WebRTC Error:', errorMsg);
+            console.error('[UDP Protocol] Error:', errorMsg);
         },
         onLatencyUpdate: (latency: number) => {
             setSessionState(prev => ({ ...prev, latency }));
         },
-        onStreamReceived: (stream: MediaStream) => {
-            setVideoStream(stream);
-        },
+        // onStreamReceived removed - UDP uses onVideoFrameReceived
+
         onInputReceived: (input: any) => {
             // console.log('[App] Input received', input.timestamp);
             // Forward input to StreamView for visualization
@@ -153,7 +153,7 @@ function App() {
             if (started) {
                 console.log('[App] ✓ Hardware capture started');
                 window.electronAPI.hardwareCapture.onFrame((frame: any) => {
-                    webrtcService.sendVideoFrame(frame);
+                    // udpStreamService.sendVideoFrame(frame); // Handled internally by UDPStreamService
                 });
             } else {
                 console.warn('[App] Hardware capture unavailable, using WebRTC fallback');
@@ -183,8 +183,8 @@ function App() {
             const useHardware = hwSupported && settings.useHardwareCapture;
             console.log(`[App] Using hardware capture: ${useHardware} (Supported: ${hwSupported}, Enabled: ${settings.useHardwareCapture})`);
 
-            const callbacks = createWebRTCCallbacks();
-            const sessionCode = await webrtcService.startHosting(displayId, callbacks, false, useHardware);
+            const callbacks = createUDPCallbacks();
+            const sessionCode = await udpStreamService.startHosting(displayId, callbacks, false, useHardware);
 
             if (useHardware) {
                 await startHardwareCapture(displayId);
@@ -203,12 +203,12 @@ function App() {
             setError(message);
             throw err;
         }
-    }, [createWebRTCCallbacks, settings]);
+    }, [createUDPCallbacks, settings]);
 
     const handleConnectToHost = useCallback(async (sessionCode: string) => {
         try {
-            const callbacks = createWebRTCCallbacks();
-            await webrtcService.connectToHost(sessionCode, callbacks);
+            const callbacks = createUDPCallbacks();
+            await udpStreamService.connectToHost(sessionCode, callbacks);
 
             setSessionState({
                 sessionCode,
@@ -220,11 +220,11 @@ function App() {
             setError(message);
             throw err;
         }
-    }, [createWebRTCCallbacks]);
+    }, [createUDPCallbacks]);
 
     const handleBackToLanding = useCallback(async () => {
         // Cleanup
-        await webrtcService.disconnect();
+        await udpStreamService.disconnect();
 
         if (window.electronAPI?.controller) {
             await window.electronAPI.controller.destroyVirtual();
@@ -234,7 +234,8 @@ function App() {
             await window.electronAPI.hardwareCapture.stop();
         }
 
-        setVideoStream(null);
+        // setVideoStream(null); // Removed
+
         setSessionState({
             sessionCode: '',
             role: null,
@@ -283,7 +284,6 @@ function App() {
                 return (
                     <StreamView
                         sessionState={sessionState}
-                        videoStream={videoStream}
                         onDisconnect={handleBackToLanding}
                     />
                 );
