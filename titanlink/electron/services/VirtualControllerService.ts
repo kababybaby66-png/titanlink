@@ -111,19 +111,21 @@ export class VirtualControllerService {
      */
     async destroyController(): Promise<void> {
         try {
-            if (this.feederProcess) {
+            const process = this.feederProcess;
+            if (process) {
+                // Remove reference immediately to prevent race conditions
+                this.feederProcess = null;
+
                 // Send quit command
-                this.feederProcess.stdin?.write('QUIT\n');
+                process.stdin?.write('QUIT\n');
 
                 // Give it a moment to clean up
                 await new Promise(resolve => setTimeout(resolve, 100));
 
                 // Force kill if still running
-                if (!this.feederProcess.killed) {
-                    this.feederProcess.kill();
+                if (!process.killed) {
+                    process.kill();
                 }
-
-                this.feederProcess = null;
             }
 
             this.isConnected = false;
