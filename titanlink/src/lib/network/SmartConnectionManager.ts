@@ -20,72 +20,97 @@ type NetworkClient = NetworkClientType;
 // Native module will be loaded lazily to avoid top-level require crashes in production
 let NativeNetworkClient: typeof NetworkClientType | null = null;
 let nativeLoadError: Error | null = null;
+let nativeLoadAttempted = false;
+
+/**
+ * Check if native module is supported on this platform
+ * Currently only Windows x64 is supported
+ */
+function isNativeModuleSupported(): boolean {
+    return typeof process !== 'undefined' &&
+        process.platform === 'win32' &&
+        process.arch === 'x64';
+}
 
 /**
  * Lazily load the native module (only when needed)
  * This prevents top-level require crashes in production builds
  */
 function getNativeNetworkClient(): typeof NetworkClientType {
+    // Return cached error
     if (nativeLoadError) {
         throw nativeLoadError;
     }
 
+    // Return cached module
     if (NativeNetworkClient) {
         return NativeNetworkClient;
     }
 
+    // Check platform support first
+    if (!isNativeModuleSupported()) {
+        nativeLoadError = new Error(
+            `Native network module is not available on ${process.platform}-${process.arch}. ` +
+            `Hardware capture requires Windows x64. The app will use WebRTC fallback.`
+        );
+        console.warn('[SmartConnection]', nativeLoadError.message);
+        throw nativeLoadError;
+    }
+
+    // Only attempt load once
+    if (nativeLoadAttempted) {
+        throw new Error('Native module load already failed');
+    }
+    nativeLoadAttempted = true;
+
     try {
-        // Check if we're in Electron renderer with nodeIntegration
-        if (typeof window !== 'undefined' && (window as any).require) {
-            const electronRequire = (window as any).require;
-            const path = electronRequire('path');
+        // We're in Electron renderer with nodeIntegration
+        // Use window.require which is available in Electron's renderer
+        if (typeof window === 'undefined' || !(window as any).require) {
+            throw new Error('Native module can only be loaded in Electron renderer');
+        }
 
-            // Build list of possible paths for the native module
-            const possiblePaths: string[] = [];
+        const electronRequire = (window as any).require;
+        const path = electronRequire('path');
 
-            // Production path: resources/native (extraResources)
-            if (typeof process !== 'undefined' && (process as any).resourcesPath) {
-                possiblePaths.push(path.join((process as any).resourcesPath, 'native'));
-            }
+        // Build list of possible paths for the native module
+        const possiblePaths: string[] = [];
 
-            // Development paths
-            possiblePaths.push(
-                path.join(process.cwd(), 'native'),
-                path.join(__dirname, '..', '..', '..', 'native'),
-            );
+        // Production path: resources/native (extraResources)
+        if (typeof process !== 'undefined' && (process as any).resourcesPath) {
+            possiblePaths.push(path.join((process as any).resourcesPath, 'native'));
+        }
 
-            console.log('[SmartConnection] Trying native module paths:', possiblePaths);
+        // Development paths
+        if (typeof process !== 'undefined' && process.cwd) {
+            possiblePaths.push(path.join(process.cwd(), 'native'));
+        }
 
-            for (const nativePath of possiblePaths) {
-                try {
-                    const native = electronRequire(nativePath);
-                    if (native && native.NetworkClient) {
-                        NativeNetworkClient = native.NetworkClient;
-                        console.log('[SmartConnection] Native module loaded from:', nativePath);
-                        return NativeNetworkClient!;
-                    }
-                } catch (e) {
-                    // Try next path
+        // Relative path from current file
+        if (typeof __dirname !== 'undefined') {
+            possiblePaths.push(path.join(__dirname, '..', '..', '..', 'native'));
+        }
+
+        console.log('[SmartConnection] Trying native module paths:', possiblePaths);
+
+        for (const nativePath of possiblePaths) {
+            try {
+                const native = electronRequire(nativePath);
+                if (native && native.NetworkClient) {
+                    NativeNetworkClient = native.NetworkClient;
+                    console.log('[SmartConnection] Native module loaded from:', nativePath);
+                    return NativeNetworkClient!;
                 }
+            } catch (e) {
+                // Try next path
+                console.debug('[SmartConnection] Path failed:', nativePath, (e as Error).message);
             }
         }
 
-        // Fallback: try Node.js require (for main process or dev mode)
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const path = require('path');
-        const nativePath = path.join(process.cwd(), 'native');
-        const native = require(nativePath);
-
-        if (native && native.NetworkClient) {
-            NativeNetworkClient = native.NetworkClient;
-            console.log('[SmartConnection] Native module loaded (Node.js require)');
-            return NativeNetworkClient!;
-        }
-
-        throw new Error('NetworkClient not found in native module');
+        throw new Error('NetworkClient not found in any native module path');
     } catch (error) {
         nativeLoadError = error as Error;
-        console.error('[SmartConnection] Failed to load native module:', error);
+        console.error('[SmartConnection] Failed to load native module:', (error as Error).message);
         throw error;
     }
 }
