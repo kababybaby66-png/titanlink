@@ -151,6 +151,14 @@ export interface ConnectionStats {
 }
 
 export class SmartConnectionManager {
+    /**
+     * Check if the native UDP protocol is supported on this platform
+     * Returns true only on Windows x64
+     */
+    static isSupported(): boolean {
+        return isNativeModuleSupported();
+    }
+
     private p2pClient?: NetworkClient;
     private relayClient?: NetworkClient;
     private currentMode: ConnectionMode = ConnectionMode.DISCONNECTED;

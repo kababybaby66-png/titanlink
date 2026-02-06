@@ -21,9 +21,28 @@ import { DEFAULT_SETTINGS } from '../shared/types/ipc';
 let udpStreamServiceInstance: any = null;
 
 /**
+ * Check if native UDP protocol is available on this platform
+ */
+function isUdpProtocolSupported(): boolean {
+    return typeof process !== 'undefined' &&
+        process.platform === 'win32' &&
+        process.arch === 'x64';
+}
+
+/**
  * Get the UDP stream service (lazy-loaded to prevent production crashes)
+ * Throws if platform is not supported (Windows x64 only)
  */
 async function getUdpStreamService() {
+    if (!isUdpProtocolSupported()) {
+        const platform = typeof process !== 'undefined' ? `${process.platform}-${process.arch}` : 'unknown';
+        throw new Error(
+            `This version of TitanLink requires Windows x64 for the low-latency streaming protocol. ` +
+            `Your platform: ${platform}. ` +
+            `Cross-platform support (WebRTC fallback) is coming in a future update.`
+        );
+    }
+
     if (!udpStreamServiceInstance) {
         try {
             const module = await import('./services/UDPStreamService');
