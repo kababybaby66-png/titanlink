@@ -68,6 +68,7 @@ wss.on('connection', (ws) => {
 
             if (message.type === 'create-session') {
                 const sessionCode = message.sessionCode;
+                const sessionId = message.sessionId; // UDP session ID for relay
                 const hostId = message.hostId;
 
                 if (!sessionCode || !hostId) {
@@ -82,6 +83,7 @@ wss.on('connection', (ws) => {
 
                 sessions.set(sessionCode, {
                     hostId,
+                    sessionId, // Store for relay to clients
                     hostConnId: connId,
                     clients: new Map(),
                     createdAt: Date.now(),
@@ -116,7 +118,13 @@ wss.on('connection', (ws) => {
                 conn.peerId = clientId;
 
                 console.log('Client', clientId, 'joined session:', sessionCode);
-                ws.send(JSON.stringify({ type: 'session-joined', data: { hostId: session.hostId } }));
+                ws.send(JSON.stringify({
+                    type: 'session-joined',
+                    data: {
+                        hostId: session.hostId,
+                        sessionId: session.sessionId // Include sessionId for UDP connection
+                    }
+                }));
 
                 // Notify host
                 const hostConn = connections.get(session.hostConnId);

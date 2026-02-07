@@ -275,6 +275,7 @@ export class UDPStreamService {
         this.ws.send(JSON.stringify({
             type: 'create-session',
             sessionCode: this.sessionCode,
+            sessionId: this.sessionId, // Send sessionId for relay to clients
             hostId: hostId,
         }));
     }
@@ -284,14 +285,57 @@ export class UDPStreamService {
             throw new Error('Signaling not connected');
         }
 
-        // Generate a unique client ID
-        const clientId = `client-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        const ws = this.ws; // Capture reference for closure
 
-        this.ws.send(JSON.stringify({
-            type: 'join-session',
-            sessionCode: this.sessionCode,
-            clientId: clientId,
-        }));
+        return new Promise((resolve, reject) => {
+            // Generate a unique client ID
+            const clientId = `client-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+            let timeout: ReturnType<typeof setTimeout>;
+
+            // Set up one-time handler for the response
+            const handleResponse = (event: MessageEvent) => {
+                try {
+                    const message = JSON.parse(event.data);
+
+                    if (message.type === 'session-joined') {
+                        this.sessionId = message.data.sessionId;
+                        console.log('[UDPStreamService] Joined session, received sessionId:', this.sessionId);
+                        ws.removeEventListener('message', handleResponse);
+                        clearTimeout(timeout);
+                        resolve();
+                    } else if (message.type === 'session-not-found') {
+                        ws.removeEventListener('message', handleResponse);
+                        clearTimeout(timeout);
+                        reject(new Error('Session not found'));
+                    } else if (message.type === 'error') {
+                        ws.removeEventListener('message', handleResponse);
+                        clearTimeout(timeout);
+                        const errorMsg = typeof message.data === 'string'
+                            ? message.data
+                            : (message.data?.message || 'Unknown error');
+                        reject(new Error(errorMsg));
+                    }
+                    // Other message types are handled by handleSignalingMessage
+                } catch (error) {
+                    // Ignore parse errors for other messages
+                }
+            };
+
+            ws.addEventListener('message', handleResponse);
+
+            // Set a timeout for join response
+            timeout = setTimeout(() => {
+                ws.removeEventListener('message', handleResponse);
+                reject(new Error('Join session timeout'));
+            }, 10000);
+
+            ws.send(JSON.stringify({
+                type: 'join-session',
+                sessionCode: this.sessionCode,
+                clientId: clientId,
+            }));
+        });
     }
 
     private handleSignalingMessage(event: MessageEvent): void {
