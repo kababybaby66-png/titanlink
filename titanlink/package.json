@@ -17,6 +17,9 @@
         "electron:build": "npm run build && electron-builder",
         "typecheck": "tsc --noEmit",
         "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+        "test": "vitest",
+        "test:ui": "vitest --ui",
+        "test:coverage": "vitest --coverage",
         "build:native": "cd native && npm install && npm run build",
         "postinstall": "npm run build:native"
     },
@@ -37,6 +40,9 @@
         "uuid": "^9.0.1"
     },
     "devDependencies": {
+        "@testing-library/jest-dom": "^6.1.5",
+        "@testing-library/react": "^14.1.2",
+        "@testing-library/user-event": "^14.5.1",
         "@types/adm-zip": "^0.5.7",
         "@types/node": "^20.10.0",
         "@types/react": "^18.2.45",
@@ -45,6 +51,7 @@
         "@typescript-eslint/eslint-plugin": "^6.14.0",
         "@typescript-eslint/parser": "^6.14.0",
         "@vitejs/plugin-react": "^4.2.1",
+        "@vitest/ui": "^1.1.0",
         "concurrently": "^8.2.2",
         "cross-env": "^7.0.3",
         "electron": "^28.0.0",
@@ -52,10 +59,12 @@
         "eslint": "^8.55.0",
         "eslint-plugin-react-hooks": "^4.6.0",
         "eslint-plugin-react-refresh": "^0.4.5",
+        "jsdom": "^23.0.1",
         "typescript": "^5.3.3",
         "vite": "^5.0.7",
         "vite-plugin-electron": "^0.28.0",
         "vite-plugin-electron-renderer": "^0.14.5",
+        "vitest": "^1.1.0",
         "wait-on": "^7.2.0"
     },
     "build": {

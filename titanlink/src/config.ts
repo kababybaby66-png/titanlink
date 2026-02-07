@@ -36,10 +36,13 @@ export const CONFIG = {
             credential: 'openrelayproject',
         },
         // ExpressTurn - Free tier (limited bandwidth)
+        // NOTE: These are PUBLIC fallback credentials for the free tier
+        // They are rate-limited and shared across all users
+        // For production, configure your own TURN server via .env (TURN_SERVER_URL)
         {
             urls: 'turn:relay1.expressturn.com:3478',
-            username: 'efJ7UPKR7XCHQHP7PX',
-            credential: 'aWxr2yjJi7K17W2J',
+            username: process.env.EXPRESSTURN_USERNAME || 'efJ7UPKR7XCHQHP7PX',
+            credential: process.env.EXPRESSTURN_CREDENTIAL || 'aWxr2yjJi7K17W2J',
         },
     ],
 

@@ -48,27 +48,42 @@ export class HardwareCaptureService extends EventEmitter {
         const isDev = !app.isPackaged;
         const binaryName = `titanlink-capture.${process.platform}-${process.arch}-msvc.node`;
 
+        console.log(`${LOG_PREFIX} === Path Resolution Debug ===`);
+        console.log(`${LOG_PREFIX} isDev: ${isDev}`);
+        console.log(`${LOG_PREFIX} binaryName: ${binaryName}`);
+
         if (isDev) {
             // Try common dev layouts
             const appPath = app.getAppPath();
+            const cwd = process.cwd();
+
+            console.log(`${LOG_PREFIX} app.getAppPath(): ${appPath}`);
+            console.log(`${LOG_PREFIX} process.cwd(): ${cwd}`);
+
             const candidates = [
                 path.join(appPath, 'native', binaryName),
                 path.join(appPath, '..', 'native', binaryName),
-                path.join(process.cwd(), 'native', binaryName)
+                path.join(cwd, 'native', binaryName),
+                path.join(__dirname, '..', '..', 'native', binaryName), // From electron/services/ to root
             ];
 
+            console.log(`${LOG_PREFIX} Checking candidates:`);
             for (const cand of candidates) {
-                if (fs.existsSync(cand)) {
-                    console.log(`${LOG_PREFIX} Dev mode - Found native binder at: ${cand}`);
+                const exists = fs.existsSync(cand);
+                console.log(`${LOG_PREFIX}   ${exists ? '✓' : '✗'} ${cand}`);
+                if (exists) {
+                    console.log(`${LOG_PREFIX} ✅ Found native binary at: ${cand}`);
                     return cand;
                 }
             }
 
-            console.warn(`${LOG_PREFIX} Dev mode - Could not find native binder in candidates. Defaulting to: ${candidates[0]}`);
+            console.warn(`${LOG_PREFIX} ⚠️ Could not find native binary in any candidate. Defaulting to: ${candidates[0]}`);
             return candidates[0];
         } else {
             // In production, the native folder is copied to resources/native/
-            return path.join(process.resourcesPath, 'native', binaryName);
+            const prodPath = path.join(process.resourcesPath, 'native', binaryName);
+            console.log(`${LOG_PREFIX} Production path: ${prodPath}`);
+            return prodPath;
         }
     }
 

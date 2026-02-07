@@ -179,32 +179,6 @@ function App() {
         setCurrentView('settings');
     }, []);
 
-    const startHardwareCapture = async (displayId: string): Promise<void> => {
-        if (!settings.useHardwareCapture || !window.electronAPI?.hardwareCapture) return;
-
-        console.log('[App] Starting hardware capture...');
-        const displayIndex = parseInt(displayId.split(':')[1]) || 0;
-
-        try {
-            const started = await window.electronAPI.hardwareCapture.start({
-                displayIndex,
-                fps: settings.fps,
-                bitrate: settings.bitrate,
-                useHardwareEncoder: true
-            });
-
-            if (started) {
-                console.log('[App] ✓ Hardware capture started');
-                window.electronAPI.hardwareCapture.onFrame((frame: any) => {
-                    // udpStreamService.sendVideoFrame(frame); // Handled internally by UDPStreamService
-                });
-            } else {
-                console.warn('[App] Hardware capture unavailable, using WebRTC fallback');
-            }
-        } catch (e) {
-            console.error('[App] Hardware capture failed:', e);
-        }
-    };
 
     const handleHostSession = useCallback(async (displayId: string) => {
         try {
@@ -228,11 +202,9 @@ function App() {
 
             const callbacks = createUDPCallbacks();
             const udpService = await getUdpStreamService();
-            const sessionCode = await udpService.startHosting(displayId, callbacks, false, useHardware);
 
-            if (useHardware) {
-                await startHardwareCapture(displayId);
-            }
+            // UDPStreamService will handle hardware capture initialization internally
+            const sessionCode = await udpService.startHosting(displayId, callbacks, false, useHardware);
 
             setSessionState({
                 sessionCode,

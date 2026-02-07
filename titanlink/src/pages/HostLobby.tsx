@@ -6,8 +6,10 @@ import { GlassCard } from '../components/ui/GlassCard';
 import { StatusVisualizer } from '../components/StatusVisualizer';
 import { ControllerOverlay } from '../components/ControllerOverlay';
 import { AudioBanner } from '../components/AudioBanner';
+import { HardwareStatusWidget } from '../components/HardwareStatusWidget';
 import { udpStreamService } from '../services/UDPStreamService';
 import './HostLobby.css';
+
 
 interface HostLobbyProps {
     sessionState: SessionState;
@@ -160,7 +162,9 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
                 try {
                     const s = await window.electronAPI.system.getStats();
                     setStats(s);
-                } catch (e) { }
+                } catch (error) {
+                    console.warn('[Stats] Failed to get system stats:', error);
+                }
             }
         }, 1000);
         return () => clearInterval(interval);
@@ -329,31 +333,7 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
                     </GlassCard>
                 );
             case 'hardware':
-                const [hwSupport, setHwSupport] = useState<any>({ nvenc: false, software: false });
-                useEffect(() => {
-                    if (window.electronAPI?.hardwareCapture) {
-                        window.electronAPI.hardwareCapture.isSupported().then(setHwSupport);
-                    }
-                }, []);
-                return (
-                    <GlassCard className="info-card hardware-status-card">
-                        <div className="card-header">
-                            <span className="material-symbols-outlined icon">bolt</span>
-                            <span className="title">HARDWARE</span>
-                        </div>
-                        <div className="hw-status-grid">
-                            <div className={`hw-item ${hwSupport.nvenc ? 'active' : 'inactive'}`}>
-                                <span className="label">NVENC</span>
-                                <span className="status-dot"></span>
-                            </div>
-                            <div className={`hw-item ${hwSupport.software ? 'active' : 'inactive'}`}>
-                                <span className="label">SW_CAP</span>
-                                <span className="status-dot"></span>
-                            </div>
-                        </div>
-                        <div className="card-sub">PIPELINE: DXGI_DD</div>
-                    </GlassCard>
-                );
+                return <HardwareStatusWidget />;
             case 'audio':
                 // Audio status widget - only show when hosting
                 if (!isHosting) return null;
