@@ -483,8 +483,6 @@ export class UDPStreamService {
             );
         }, 1000 / (this.settings.fps || 60));
     }
-
-    // encodeButtons method removed - input.buttons is already a bitfield
 }
 
 // Export singleton instance
