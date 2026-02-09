@@ -138,6 +138,8 @@ pub enum NV_ENC_DEVICE_TYPE {
     NV_ENC_DEVICE_TYPE_DIRECTX = 0,
     NV_ENC_DEVICE_TYPE_CUDA = 1,
     NV_ENC_DEVICE_TYPE_OPENGL = 2,
+    NV_ENC_DEVICE_TYPE_DIRECTX11 = 3,
+    NV_ENC_DEVICE_TYPE_DIRECTX12 = 4,
 }
 
 #[repr(u32)]
@@ -205,7 +207,8 @@ pub enum NV_ENC_PIC_FLAGS {
 // Structures - API Version
 // ============================================
 
-pub const NVENCAPI_MAJOR_VERSION: u32 = 12;
+// Use SDK 11.0 to ensure compatibility with slightly older drivers
+pub const NVENCAPI_MAJOR_VERSION: u32 = 11;
 pub const NVENCAPI_MINOR_VERSION: u32 = 0;
 
 pub const fn NVENCAPI_VERSION() -> u32 {
