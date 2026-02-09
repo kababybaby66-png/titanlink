@@ -480,14 +480,34 @@ fn create_d3d11_device() -> Result<*mut c_void> {
     use windows::Win32::Graphics::Dxgi::*;
 
     unsafe {
+        // Enumerate adapters to find NVIDIA GPU
+        let factory: IDXGIFactory1 = CreateDXGIFactory1()
+            .map_err(|e| anyhow!("Failed to create DXGI Factory: {}", e))?;
+
+        let mut adapter: Option<IDXGIAdapter1> = None;
+        let mut i = 0;
+
+        while let Ok(a) = factory.EnumAdapters1(i) {
+             let desc = a.GetDesc1().map_err(|e| anyhow!("Failed to get adapter desc: {}", e))?;
+             if desc.VendorId == 0x10DE { // NVIDIA
+                 adapter = Some(a);
+                 break;
+             }
+             i += 1;
+        }
+
+        let adapter = adapter.ok_or_else(|| anyhow!("No NVIDIA GPU found. NVENC requires an NVIDIA GPU."))?;
+
         let mut device: Option<ID3D11Device> = None;
         let mut context: Option<ID3D11DeviceContext> = None;
 
         let feature_levels = [D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0];
 
+        // Create device on the NVIDIA adapter
+        // Note: DriverType must be UNKNOWN when providing an adapter
         let result = D3D11CreateDevice(
-            None,
-            D3D_DRIVER_TYPE_HARDWARE,
+            &adapter,
+            D3D_DRIVER_TYPE_UNKNOWN,
             None,
             D3D11_CREATE_DEVICE_FLAG(0),
             Some(&feature_levels),
@@ -498,7 +518,7 @@ fn create_d3d11_device() -> Result<*mut c_void> {
         );
 
         if result.is_err() {
-            return Err(anyhow!("Failed to create D3D11 device"));
+            return Err(anyhow!("Failed to create D3D11 device on NVIDIA GPU"));
         }
 
         let device = device.ok_or_else(|| anyhow!("D3D11 device is null"))?;
