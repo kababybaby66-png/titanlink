@@ -204,7 +204,7 @@ impl NvencEncoder {
         let mut encoder: *mut c_void = ptr::null_mut();
         let mut session_params = NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS::default();
         session_params.device = device;
-        session_params.deviceType = NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_DIRECTX11;
+        session_params.deviceType = NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_DIRECTX;
 
         let open_fn = api.nvEncOpenEncodeSessionEx
             .ok_or_else(|| anyhow!("nvEncOpenEncodeSessionEx not available"))?;
