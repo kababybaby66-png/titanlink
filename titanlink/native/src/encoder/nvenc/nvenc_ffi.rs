@@ -214,8 +214,8 @@ pub enum NV_ENC_PIC_FLAGS {
 // Structures - API Version
 // ============================================
 
-// Use SDK 12.0 to ensure compatibility with modern drivers and AV1 support
-pub const NVENCAPI_MAJOR_VERSION: u32 = 12;
+// Use SDK 10.0 for maximum compatibility (Drivers 445.87+)
+pub const NVENCAPI_MAJOR_VERSION: u32 = 10;
 pub const NVENCAPI_MINOR_VERSION: u32 = 0;
 
 pub const fn NVENCAPI_VERSION() -> u32 {
