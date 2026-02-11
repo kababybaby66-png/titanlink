@@ -63,6 +63,7 @@ pub struct CaptureSettings {
     pub fps: u32,
     pub bitrate: u32,
     pub use_hardware_encoder: bool,
+    pub codec: String, // "h264", "hevc", "av1"
 }
 
 impl Default for CaptureSettings {
@@ -72,6 +73,7 @@ impl Default for CaptureSettings {
             fps: 60,
             bitrate: 10_000_000,
             use_hardware_encoder: true,
+            codec: "h264".to_string(),
         }
     }
 }
@@ -100,7 +102,7 @@ pub fn start_capture(
 
     std::thread::spawn(move || {
         if let Err(e) = pipeline::run_capture_pipeline(settings, tsfn.clone()) {
-            eprintln!("[TitanLink] Pipeline error: {}", e);
+            eprintln!("[TitanLink] Pipeline error: {:?}", e);
         }
         CAPTURE_RUNNING.store(false, Ordering::SeqCst);
         tsfn.abort().ok();

@@ -24,6 +24,7 @@ export interface CaptureSettings {
   fps: number
   bitrate: number
   useHardwareEncoder: boolean
+  codec: string
 }
 export interface EncodedFrame {
   frameNumber: number

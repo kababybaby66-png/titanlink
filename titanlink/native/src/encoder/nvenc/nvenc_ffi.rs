@@ -77,6 +77,13 @@ pub const NV_ENC_CODEC_HEVC_GUID: GUID = GUID {
     Data4: [0x94, 0x25, 0xBD, 0xA9, 0x97, 0x5F, 0x76, 0x03],
 };
 
+pub const NV_ENC_CODEC_AV1_GUID: GUID = GUID {
+    Data1: 0x078F5783,
+    Data2: 0x059F,
+    Data3: 0x4B30,
+    Data4: [0xAD, 0x35, 0xAA, 0x79, 0xC4, 0x51, 0x65, 0x88],
+};
+
 // Preset GUIDs
 pub const NV_ENC_PRESET_P1_GUID: GUID = GUID {
     Data1: 0xFC0A8D3E,
@@ -207,8 +214,8 @@ pub enum NV_ENC_PIC_FLAGS {
 // Structures - API Version
 // ============================================
 
-// Use SDK 11.0 to ensure compatibility with slightly older drivers
-pub const NVENCAPI_MAJOR_VERSION: u32 = 11;
+// Use SDK 12.0 to ensure compatibility with modern drivers and AV1 support
+pub const NVENCAPI_MAJOR_VERSION: u32 = 12;
 pub const NVENCAPI_MINOR_VERSION: u32 = 0;
 
 pub const fn NVENCAPI_VERSION() -> u32 {
@@ -238,11 +245,34 @@ impl Default for NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS {
     fn default() -> Self {
         Self {
             version: NVENCAPI_STRUCT_VERSION(1),
-            deviceType: NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_DIRECTX,
+            deviceType: NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_DIRECTX11,
             device: std::ptr::null_mut(),
             reserved: std::ptr::null_mut(),
             apiVersion: NVENCAPI_VERSION(),
             reserved1: [0; 253],
+            reserved2: [std::ptr::null_mut(); 64],
+        }
+    }
+}
+
+// ============================================
+// Structures - Preset Config
+// ============================================
+
+#[repr(C)]
+pub struct NV_ENC_PRESET_CONFIG {
+    pub version: u32,
+    pub presetCfg: NV_ENC_CONFIG,
+    pub reserved1: [u32; 255],
+    pub reserved2: [*mut c_void; 64],
+}
+
+impl Default for NV_ENC_PRESET_CONFIG {
+    fn default() -> Self {
+        Self {
+            version: NVENCAPI_STRUCT_VERSION(4),
+            presetCfg: NV_ENC_CONFIG::default(),
+            reserved1: [0; 255],
             reserved2: [std::ptr::null_mut(); 64],
         }
     }
@@ -263,14 +293,6 @@ pub struct NV_ENC_INITIALIZE_PARAMS {
     pub darHeight: u32,
     pub frameRateNum: u32,
     pub frameRateDen: u32,
-    pub enableEncodeAsync: u32,
-    pub enablePTD: u32,
-    pub reportSliceOffsets: u32,
-    pub enableSubFrameWrite: u32,
-    pub enableExternalMEHints: u32,
-    pub enableMEOnlyMode: u32,
-    pub enableWeightedPrediction: u32,
-    pub enableOutputInVidmem: u32,
     pub reservedBitFields: u32,
     pub privDataSize: u32,
     pub privData: *mut c_void,
@@ -279,7 +301,8 @@ pub struct NV_ENC_INITIALIZE_PARAMS {
     pub maxEncodeHeight: u32,
     pub maxMEHintCountsPerBlock: [u32; 2],
     pub tuningInfo: NV_ENC_TUNING_INFO,
-    pub reserved: [u32; 287],
+    pub bufferFmt: NV_ENC_BUFFER_FORMAT,
+    pub reserved: [u32; 286],
     pub reserved2: [*mut c_void; 64],
 }
 
@@ -295,15 +318,7 @@ impl Default for NV_ENC_INITIALIZE_PARAMS {
             darHeight: 1080,
             frameRateNum: 60,
             frameRateDen: 1,
-            enableEncodeAsync: 0,
-            enablePTD: 1,
-            reportSliceOffsets: 0,
-            enableSubFrameWrite: 0,
-            enableExternalMEHints: 0,
-            enableMEOnlyMode: 0,
-            enableWeightedPrediction: 0,
-            enableOutputInVidmem: 0,
-            reservedBitFields: 0,
+            reservedBitFields: 2, // enablePTD = 1 (bit 1)
             privDataSize: 0,
             privData: std::ptr::null_mut(),
             encodeConfig: std::ptr::null_mut(),
@@ -311,7 +326,8 @@ impl Default for NV_ENC_INITIALIZE_PARAMS {
             maxEncodeHeight: 0,
             maxMEHintCountsPerBlock: [0; 2],
             tuningInfo: NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY,
-            reserved: [0; 287],
+            bufferFmt: NV_ENC_BUFFER_FORMAT::NV_ENC_BUFFER_FORMAT_ABGR,
+            reserved: [0; 286],
             reserved2: [std::ptr::null_mut(); 64],
         }
     }
@@ -325,14 +341,14 @@ impl Default for NV_ENC_INITIALIZE_PARAMS {
 pub struct NV_ENC_CONFIG {
     pub version: u32,
     pub profileGUID: GUID,
-    pub gopLength: u32,
-    pub frameIntervalP: i32,
+    pub encodeCodecConfig: NV_ENC_CODEC_CONFIG,
     pub monoChromeEncoding: u32,
+    pub frameIntervalP: i32,
+    pub gopLength: u32,
     pub frameFieldMode: u32,
     pub mvPrecision: u32,
     pub rcParams: NV_ENC_RC_PARAMS,
-    pub encodeCodecConfig: NV_ENC_CODEC_CONFIG,
-    pub reserved: [u32; 278],
+    pub reserved1: [u32; 255],
     pub reserved2: [*mut c_void; 64],
 }
 
@@ -341,14 +357,14 @@ impl Default for NV_ENC_CONFIG {
         Self {
             version: NVENCAPI_STRUCT_VERSION(8),
             profileGUID: NV_ENC_H264_PROFILE_BASELINE_GUID,
-            gopLength: 60,
-            frameIntervalP: 1,
+            encodeCodecConfig: NV_ENC_CODEC_CONFIG::default(),
             monoChromeEncoding: 0,
+            frameIntervalP: 0,
+            gopLength: 0,
             frameFieldMode: 0,
             mvPrecision: 0,
             rcParams: NV_ENC_RC_PARAMS::default(),
-            encodeCodecConfig: NV_ENC_CODEC_CONFIG::default(),
-            reserved: [0; 278],
+            reserved1: [0; 255],
             reserved2: [std::ptr::null_mut(); 64],
         }
     }
@@ -363,11 +379,7 @@ pub struct NV_ENC_RC_PARAMS {
     pub maxBitRate: u32,
     pub vbvBufferSize: u32,
     pub vbvInitialDelay: u32,
-    pub enableMinQP: u32,
-    pub enableMaxQP: u32,
-    pub enableInitialRCQP: u32,
-    pub enableAQ: u32,
-    pub reservedBitField1: u32,
+    pub reservedBitFields: u32,
     pub minQP: NV_ENC_QP,
     pub maxQP: NV_ENC_QP,
     pub initialRCQP: NV_ENC_QP,
@@ -389,18 +401,14 @@ pub struct NV_ENC_RC_PARAMS {
 impl Default for NV_ENC_RC_PARAMS {
     fn default() -> Self {
         Self {
-            version: 0,
+            version: NVENCAPI_STRUCT_VERSION(1),
             rateControlMode: NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CBR_LOWDELAY_HQ,
             constQP: NV_ENC_QP::default(),
             averageBitRate: 10_000_000,
             maxBitRate: 20_000_000,
             vbvBufferSize: 0,
             vbvInitialDelay: 0,
-            enableMinQP: 0,
-            enableMaxQP: 0,
-            enableInitialRCQP: 0,
-            enableAQ: 1,
-            reservedBitField1: 0,
+            reservedBitFields: 8, // enableAQ = 1 (bit 3)
             minQP: NV_ENC_QP::default(),
             maxQP: NV_ENC_QP::default(),
             initialRCQP: NV_ENC_QP::default(),
@@ -434,6 +442,7 @@ pub struct NV_ENC_QP {
 pub union NV_ENC_CODEC_CONFIG {
     pub h264Config: NV_ENC_CONFIG_H264,
     pub hevcConfig: NV_ENC_CONFIG_HEVC,
+    pub av1Config: NV_ENC_CONFIG_AV1,
     pub reserved: [u32; 256],
 }
 
@@ -448,27 +457,6 @@ impl Default for NV_ENC_CODEC_CONFIG {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct NV_ENC_CONFIG_H264 {
-    pub enableStereoMVC: u32,
-    pub hierarchicalPFrames: u32,
-    pub hierarchicalBFrames: u32,
-    pub outputBufferingPeriodSEI: u32,
-    pub outputPictureTimingSEI: u32,
-    pub outputAUD: u32,
-    pub disableSPSPPS: u32,
-    pub outputFramePackingSEI: u32,
-    pub outputRecoveryPointSEI: u32,
-    pub enableIntraRefresh: u32,
-    pub enableConstrainedEncoding: u32,
-    pub repeatSPSPPS: u32,
-    pub enableVFR: u32,
-    pub enableLTR: u32,
-    pub qpPrimeYZeroTransformBypassFlag: u32,
-    pub useConstrainedIntraPred: u32,
-    pub enableFillerDataInsertion: u32,
-    pub disableSVCPrefixNalu: u32,
-    pub enableScalabilityInfoSEI: u32,
-    pub singleSliceIntraRefresh: u32,
-    pub enableTimeCode: u32,
     pub reservedBitFields: u32,
     pub level: u32,
     pub idrPeriod: u32,
@@ -511,10 +499,36 @@ impl Default for NV_ENC_CONFIG_H264 {
 pub struct NV_ENC_CONFIG_HEVC {
     pub level: u32,
     pub tier: u32,
-    pub reserved: [u32; 254],
+    pub minQP: NV_ENC_QP,
+    pub maxQP: NV_ENC_QP,
+    pub constQP: NV_ENC_QP,
+    pub idrPeriod: u32,
+    pub gopLength: u32,
+    pub reservedBitFields: u32,
+    pub reserved: [u32; 244],
 }
 
 impl Default for NV_ENC_CONFIG_HEVC {
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct NV_ENC_CONFIG_AV1 {
+    pub level: u32,
+    pub tier: u32,
+    pub minQP: NV_ENC_QP,
+    pub maxQP: NV_ENC_QP,
+    pub constQP: NV_ENC_QP,
+    pub idrPeriod: u32,
+    pub gopLength: u32,
+    pub reservedBitFields: u32,
+    pub reserved: [u32; 244],
+}
+
+impl Default for NV_ENC_CONFIG_AV1 {
     fn default() -> Self {
         unsafe { std::mem::zeroed() }
     }
@@ -612,7 +626,6 @@ impl Default for NV_ENC_CREATE_BITSTREAM_BUFFER {
 #[repr(C)]
 pub struct NV_ENC_LOCK_INPUT_BUFFER {
     pub version: u32,
-    pub doNotWait: u32,
     pub reservedBitFields: u32,
     pub inputBuffer: NV_ENC_INPUT_PTR,
     pub bufferDataPtr: *mut c_void,
@@ -625,7 +638,6 @@ impl Default for NV_ENC_LOCK_INPUT_BUFFER {
     fn default() -> Self {
         Self {
             version: NVENCAPI_STRUCT_VERSION(1),
-            doNotWait: 0,
             reservedBitFields: 0,
             inputBuffer: std::ptr::null_mut(),
             bufferDataPtr: std::ptr::null_mut(),
@@ -643,9 +655,6 @@ impl Default for NV_ENC_LOCK_INPUT_BUFFER {
 #[repr(C)]
 pub struct NV_ENC_LOCK_BITSTREAM {
     pub version: u32,
-    pub doNotWait: u32,
-    pub ltrFrame: u32,
-    pub getRCStats: u32,
     pub reservedBitFields: u32,
     pub frameIdx: u32,
     pub hwEncodeStatus: u32,
@@ -676,9 +685,6 @@ impl Default for NV_ENC_LOCK_BITSTREAM {
     fn default() -> Self {
         Self {
             version: NVENCAPI_STRUCT_VERSION(2),
-            doNotWait: 0,
-            ltrFrame: 0,
-            getRCStats: 0,
             reservedBitFields: 0,
             frameIdx: 0,
             hwEncodeStatus: 0,
@@ -826,6 +832,85 @@ pub struct NV_ENC_PIC_PARAMS_HEVC {
 impl Default for NV_ENC_PIC_PARAMS_HEVC {
     fn default() -> Self {
         unsafe { std::mem::zeroed() }
+    }
+}
+
+// ============================================
+// Structures - Resource Registration & Mapping
+// ============================================
+
+#[repr(u32)]
+#[derive(Copy, Clone, Debug)]
+pub enum NV_ENC_INPUT_RESOURCE_TYPE {
+    NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX = 0x0,
+    NV_ENC_INPUT_RESOURCE_TYPE_CUDAARRAY = 0x1,
+    NV_ENC_INPUT_RESOURCE_TYPE_CUDADEVICEPTR = 0x2,
+    NV_ENC_INPUT_RESOURCE_TYPE_OPENGL_TEX = 0x3,
+}
+
+#[repr(C)]
+pub struct NV_ENC_REGISTER_RESOURCE {
+    pub version: u32,
+    pub resourceType: NV_ENC_INPUT_RESOURCE_TYPE,
+    pub width: u32,
+    pub height: u32,
+    pub pitch: u32,
+    pub subResourceIndex: u32,
+    pub resourceToRegister: *mut c_void,
+    pub registeredResource: NV_ENC_REGISTERED_PTR,
+    pub bufferFormat: NV_ENC_BUFFER_FORMAT,
+    pub bufferUsage: u32,
+    pub encodeWidth: u32,
+    pub encodeHeight: u32,
+    pub reserved1: [u32; 249],
+    pub reserved2: [*mut c_void; 62],
+}
+
+impl Default for NV_ENC_REGISTER_RESOURCE {
+    fn default() -> Self {
+        Self {
+            version: NVENCAPI_STRUCT_VERSION(4),
+            resourceType: NV_ENC_INPUT_RESOURCE_TYPE::NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX,
+            width: 0,
+            height: 0,
+            pitch: 0,
+            subResourceIndex: 0,
+            resourceToRegister: std::ptr::null_mut(),
+            registeredResource: std::ptr::null_mut(),
+            bufferFormat: NV_ENC_BUFFER_FORMAT::NV_ENC_BUFFER_FORMAT_ARGB,
+            bufferUsage: 0,
+            encodeWidth: 0,
+            encodeHeight: 0,
+            reserved1: [0; 249],
+            reserved2: [std::ptr::null_mut(); 62],
+        }
+    }
+}
+
+#[repr(C)]
+pub struct NV_ENC_MAP_INPUT_RESOURCE {
+    pub version: u32,
+    pub subResourceIndex: u32,
+    pub inputResource: *mut c_void,
+    pub registeredResource: NV_ENC_REGISTERED_PTR,
+    pub mappedResource: NV_ENC_INPUT_PTR,
+    pub mappedBufferFmt: NV_ENC_BUFFER_FORMAT,
+    pub reserved1: [u32; 251],
+    pub reserved2: [*mut c_void; 63],
+}
+
+impl Default for NV_ENC_MAP_INPUT_RESOURCE {
+    fn default() -> Self {
+        Self {
+            version: NVENCAPI_STRUCT_VERSION(4),
+            subResourceIndex: 0,
+            inputResource: std::ptr::null_mut(),
+            registeredResource: std::ptr::null_mut(),
+            mappedResource: std::ptr::null_mut(),
+            mappedBufferFmt: NV_ENC_BUFFER_FORMAT::NV_ENC_BUFFER_FORMAT_ARGB,
+            reserved1: [0; 251],
+            reserved2: [std::ptr::null_mut(); 63],
+        }
     }
 }
 

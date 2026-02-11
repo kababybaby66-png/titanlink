@@ -420,10 +420,11 @@ export class UDPStreamService {
                     fps: this.settings.fps || 60,
                     bitrate: (this.settings.bitrate || 10) * 1_000_000,
                     useHardwareEncoder: true,
+                    codec: this.settings.codec || 'h264',
                 });
 
                 if (started) {
-                    console.log('[UDPStreamService] Hardware capture started via electronAPI');
+                    console.log(`[UDPStreamService] Hardware capture started (${this.settings.codec})`);
 
                     // Register frame handler
                     window.electronAPI.hardwareCapture.onFrame((frame: any) => {
@@ -452,10 +453,16 @@ export class UDPStreamService {
             return;
         }
 
+        // Map codec string to ID
+        // 1: H264, 2: HEVC, 3: AV1
+        let codecId = 1;
+        if (this.settings.codec === 'hevc') codecId = 2;
+        if (this.settings.codec === 'av1') codecId = 3;
+
         try {
             this.connectionManager.sendVideoFrame(
                 frame.frameNumber,
-                1, // H264 codec
+                codecId,
                 frame.isKeyframe,
                 frame.data,
             );

@@ -121,7 +121,7 @@ const electronAPI = {
         getDisplays: (): Promise<any[]> =>
             ipcRenderer.invoke('hardware-capture:get-displays'),
 
-        start: (settings: { displayIndex: number; fps: number; bitrate: number; useHardwareEncoder: boolean }): Promise<boolean> =>
+        start: (settings: { displayIndex: number; fps: number; bitrate: number; useHardwareEncoder: boolean; codec: string }): Promise<boolean> =>
             ipcRenderer.invoke('hardware-capture:start', settings),
 
         stop: (): Promise<boolean> =>

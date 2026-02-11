@@ -36,7 +36,7 @@ export interface StreamSettings {
     resolution: '1080p' | '720p' | '1440p' | '4k';
     fps: 30 | 60 | 120 | 144 | 240;
     bitrate: number; // in Mbps
-    codec: 'h264' | 'vp8' | 'vp9' | 'av1';
+    codec: 'h264' | 'hevc' | 'vp8' | 'vp9' | 'av1';
     // Advanced Settings
     bitrateMode: 'cbr' | 'vbr';
     audioBitrate: number; // in kbps (96-512)

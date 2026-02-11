@@ -23,6 +23,7 @@ interface CaptureSettings {
     fps: number;
     bitrate: number;
     useHardwareEncoder: boolean;
+    codec: string;
 }
 
 interface EncodedFrame {

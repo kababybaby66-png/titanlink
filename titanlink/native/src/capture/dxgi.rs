@@ -10,7 +10,7 @@ use windows::{
     core::Interface,
     Win32::{
         Graphics::{
-            Direct3D::D3D_DRIVER_TYPE_HARDWARE,
+            Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_UNKNOWN},
             Direct3D11::{
                 D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D,
                 D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_CPU_ACCESS_READ, D3D11_MAP_READ,
@@ -96,6 +96,13 @@ impl DxgiCapturer {
 
             // Get output description for dimensions
             let output_desc = output.GetDesc()?;
+            
+            // Log adapter description for debugging
+            let adapter_desc = adapter.GetDesc1()?;
+            let adapter_name = String::from_utf16_lossy(&adapter_desc.Description)
+                .trim_end_matches('\0')
+                .to_string();
+            println!("[DXGI] Initializing capture on adapter: {}", adapter_name);
 
             let width = (output_desc.DesktopCoordinates.right - output_desc.DesktopCoordinates.left) as u32;
             let height = (output_desc.DesktopCoordinates.bottom - output_desc.DesktopCoordinates.top) as u32;
@@ -103,9 +110,11 @@ impl DxgiCapturer {
             // Create D3D11 device
             let mut device = None;
             let mut context = None;
+            
+            // Try different driver types if UNKNOWN fails, though UNKNOWN with adapter is correct
             D3D11CreateDevice(
                 &adapter,
-                D3D_DRIVER_TYPE_HARDWARE,
+                D3D_DRIVER_TYPE_UNKNOWN,
                 None,
                 D3D11_CREATE_DEVICE_BGRA_SUPPORT,
                 None,
@@ -113,7 +122,7 @@ impl DxgiCapturer {
                 Some(&mut device),
                 None,
                 Some(&mut context),
-            )?;
+            ).context("Failed to create D3D11 device")?;
 
             let device = device.ok_or_else(|| anyhow!("Failed to create D3D11 device"))?;
             let context = context.ok_or_else(|| anyhow!("Failed to create D3D11 context"))?;
@@ -122,9 +131,32 @@ impl DxgiCapturer {
             let output1: IDXGIOutput1 = output.cast()
                 .context("Failed to cast to IDXGIOutput1")?;
 
-            // Create output duplication
-            let duplication = output1.DuplicateOutput(&device)
-                .context("Failed to create output duplication")?;
+            // Create output duplication with retry mechanism
+            // DuplicateOutput can fail transiently due to mode changes, secure desktop, etc.
+            let mut duplication = None;
+            let mut last_error = None;
+
+            for attempt in 1..=3 {
+                match output1.DuplicateOutput(&device) {
+                    Ok(dup) => {
+                        duplication = Some(dup);
+                        break;
+                    }
+                    Err(e) => {
+                        println!("[DXGI] DuplicateOutput attempt {} failed: {:?}", attempt, e);
+                        // specific error handling if needed
+                        if attempt < 3 {
+                            std::thread::sleep(std::time::Duration::from_millis(100));
+                        }
+                        last_error = Some(e);
+                    }
+                }
+            }
+
+            let duplication = duplication.ok_or_else(|| {
+                let e = last_error.unwrap();
+                anyhow!("Failed to create output duplication after 3 attempts. Error: {:?}", e)
+            })?;
 
             // Create staging texture for CPU read (only used if we need software encoding)
             let staging_desc = D3D11_TEXTURE2D_DESC {

@@ -195,9 +195,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                                         value={localSettings.codec}
                                         onChange={(e) => updateSetting('codec', e.target.value as any)}
                                     >
-                                        <option value="h265">H.265 (HEVC)</option>
                                         <option value="h264">H.264 (AVC)</option>
-                                        <option value="vp9">VP9 (AV1)</option>
+                                        <option value="hevc">H.265 (HEVC)</option>
+                                        <option value="av1">AV1 (Next Gen)</option>
+                                        <option value="vp9">VP9</option>
                                     </select>
                                 </div>
                             </div>

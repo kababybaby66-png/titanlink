@@ -86,6 +86,8 @@ pub struct NvencConfig {
     pub b_frames: u32,
     /// Preset (lower = faster, higher = quality)
     pub preset: NvencPreset,
+    /// Codec selection
+    pub codec: VideoCodec,
     /// H264 profile
     pub profile: H264Profile,
     /// Rate control mode
@@ -101,8 +103,27 @@ impl Default for NvencConfig {
             gop_length: 120,          // Keyframe every 2 seconds at 60fps
             b_frames: 0,              // No B-frames for low latency
             preset: NvencPreset::LowLatencyHighPerformance,
+            codec: VideoCodec::H264,
             profile: H264Profile::Baseline,
             rate_control: RateControl::CbrLowDelay,
+        }
+    }
+}
+
+/// Video codec selection
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum VideoCodec {
+    H264,
+    HEVC,
+    AV1,
+}
+
+impl VideoCodec {
+    fn to_guid(&self) -> GUID {
+        match self {
+            VideoCodec::H264 => NV_ENC_CODEC_H264_GUID,
+            VideoCodec::HEVC => NV_ENC_CODEC_HEVC_GUID,
+            VideoCodec::AV1 => NV_ENC_CODEC_AV1_GUID,
         }
     }
 }
@@ -214,8 +235,64 @@ impl NvencEncoder {
             return Err(anyhow!("Failed to open NVENC session: {}", status));
         }
 
-        // Initialize encoder
-        let mut enc_config = NV_ENC_CONFIG::default();
+        Self::init_encoder_session(api, encoder, width, height, config)
+    }
+
+    /// Create a new NVENC encoder sharing an existing D3D11 device (Zero-Copy)
+    pub fn new_from_device(
+        device: *mut c_void,
+        width: u32,
+        height: u32,
+        config: NvencConfig,
+    ) -> Result<Self> {
+        let api = init_api()?;
+        
+        // Open encode session with existing device
+        let mut encoder: *mut c_void = ptr::null_mut();
+        let mut session_params = NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS::default();
+        session_params.device = device;
+        session_params.deviceType = NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_DIRECTX11;
+
+        let open_fn = api.nvEncOpenEncodeSessionEx
+            .ok_or_else(|| anyhow!("nvEncOpenEncodeSessionEx not available"))?;
+
+        let status = unsafe { open_fn(&mut session_params, &mut encoder) };
+        if status != NV_ENC_SUCCESS {
+            return Err(anyhow!("Failed to open NVENC session with existing device: {}", status));
+        }
+
+        Self::init_encoder_session(api, encoder, width, height, config)
+    }
+
+    /// Common initialization logic
+    fn init_encoder_session(
+        api: &'static NV_ENCODE_API_FUNCTION_LIST,
+        encoder: *mut c_void,
+        width: u32,
+        height: u32,
+        config: NvencConfig,
+    ) -> Result<Self> {
+        // Fetch preset configuration from driver
+        let get_preset_fn = api.nvEncGetEncodePresetConfigEx
+            .ok_or_else(|| anyhow!("nvEncGetEncodePresetConfigEx not available"))?;
+
+        let mut preset_config = NV_ENC_PRESET_CONFIG::default();
+        let status = unsafe {
+            get_preset_fn(
+                encoder,
+                config.codec.to_guid(),
+                config.preset.to_guid(),
+                NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY,
+                &mut preset_config as *mut _ as *mut c_void,
+            )
+        };
+
+        if status != NV_ENC_SUCCESS {
+            return Err(anyhow!("Failed to get preset configuration: {}", status));
+        }
+
+        // Initialize encoder based on preset settings
+        let mut enc_config = preset_config.presetCfg;
         enc_config.profileGUID = config.profile.to_guid();
         enc_config.gopLength = config.gop_length;
         enc_config.frameIntervalP = 1; // No B-frames
@@ -224,17 +301,25 @@ impl NvencEncoder {
         enc_config.rcParams.maxBitRate = config.max_bitrate;
         enc_config.rcParams.lowDelayKeyFrameScale = 1;
 
-        // Configure H.264 specific settings for low latency
+        // Configure codec specific settings for low latency
         unsafe {
-            enc_config.encodeCodecConfig.h264Config.idrPeriod = config.gop_length;
-            enc_config.encodeCodecConfig.h264Config.repeatSPSPPS = 1;
-            enc_config.encodeCodecConfig.h264Config.maxNumRefFrames = 1;
-            enc_config.encodeCodecConfig.h264Config.sliceMode = 0;
-            enc_config.encodeCodecConfig.h264Config.sliceModeData = 0;
+            match config.codec {
+                VideoCodec::H264 => {
+                    enc_config.encodeCodecConfig.h264Config.idrPeriod = config.gop_length;
+                    enc_config.encodeCodecConfig.h264Config.reservedBitFields |= 1 << 11; // repeatSPSPPS = 1
+                    enc_config.encodeCodecConfig.h264Config.maxNumRefFrames = 1;
+                }
+                VideoCodec::HEVC => {
+                    enc_config.encodeCodecConfig.hevcConfig.idrPeriod = config.gop_length;
+                }
+                VideoCodec::AV1 => {
+                    enc_config.encodeCodecConfig.av1Config.idrPeriod = config.gop_length;
+                }
+            }
         }
 
         let mut init_params = NV_ENC_INITIALIZE_PARAMS::default();
-        init_params.encodeGUID = NV_ENC_CODEC_H264_GUID;
+        init_params.encodeGUID = config.codec.to_guid();
         init_params.presetGUID = config.preset.to_guid();
         init_params.encodeWidth = width;
         init_params.encodeHeight = height;
@@ -242,7 +327,7 @@ impl NvencEncoder {
         init_params.darHeight = height;
         init_params.frameRateNum = config.framerate;
         init_params.frameRateDen = 1;
-        init_params.enablePTD = 1;
+        init_params.reservedBitFields = 2; // enablePTD = 1
         init_params.encodeConfig = &mut enc_config;
         init_params.tuningInfo = NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY;
 
@@ -254,7 +339,7 @@ impl NvencEncoder {
             return Err(anyhow!("Failed to initialize NVENC encoder: {}", status));
         }
 
-        // Create input buffer (ARGB format - we'll convert BGRA on CPU or use ABGR)
+        // Create input buffer (ARGB format)
         let mut input_buffer_params = NV_ENC_CREATE_INPUT_BUFFER::default();
         input_buffer_params.width = width;
         input_buffer_params.height = height;
@@ -288,6 +373,139 @@ impl NvencEncoder {
             width,
             height,
             initialized: true,
+        })
+    }
+
+    /// Encode a D3D11 texture directly (Zero-Copy)
+    pub fn encode_texture(&mut self, texture: *mut c_void, force_keyframe: bool) -> Result<EncodedPacket> {
+        if !self.initialized {
+            return Err(anyhow!("Encoder not initialized"));
+        }
+
+        let start = std::time::Instant::now();
+        let api = init_api()?;
+        
+        let is_keyframe = force_keyframe || (self.frame_number % self.config.gop_length == 0);
+
+        // Register texture as input resource
+        let mut reg_res = NV_ENC_REGISTER_RESOURCE::default();
+        reg_res.resourceType = NV_ENC_INPUT_RESOURCE_TYPE::NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX;
+        reg_res.width = self.width;
+        reg_res.height = self.height;
+        reg_res.pitch = self.width * 4;
+        reg_res.resourceToRegister = texture;
+        reg_res.bufferFormat = NV_ENC_BUFFER_FORMAT::NV_ENC_BUFFER_FORMAT_ARGB; // DXGI is usually B8G8R8A8
+
+        let register_fn = api.nvEncRegisterResource
+            .ok_or_else(|| anyhow!("nvEncRegisterResource not available"))?;
+
+        let status = unsafe { register_fn(self.encoder, &mut reg_res as *mut _ as *mut c_void) };
+        if status != NV_ENC_SUCCESS {
+            return Err(anyhow!("Failed to register resource: {}", status));
+        }
+
+        let registered_resource = reg_res.registeredResource;
+
+        // Map resource
+        let mut map_res = NV_ENC_MAP_INPUT_RESOURCE::default();
+        map_res.registeredResource = registered_resource;
+
+        let map_fn = api.nvEncMapInputResource
+            .ok_or_else(|| anyhow!("nvEncMapInputResource not available"))?;
+            
+        let status = unsafe { map_fn(self.encoder, &mut map_res as *mut _ as *mut c_void) };
+        if status != NV_ENC_SUCCESS {
+             let _ = unsafe { (api.nvEncUnregisterResource.unwrap())(self.encoder, registered_resource) };
+             return Err(anyhow!("Failed to map resource: {}", status));
+        }
+
+        // Encode
+        let mut pic_params = NV_ENC_PIC_PARAMS::default();
+        pic_params.inputWidth = self.width;
+        pic_params.inputHeight = self.height;
+        pic_params.inputPitch = self.width * 4;
+        // USE MAPPED BUFFER
+        pic_params.inputBuffer = map_res.mappedResource;
+        pic_params.outputBitstream = self.output_buffer;
+        pic_params.bufferFmt = NV_ENC_BUFFER_FORMAT::NV_ENC_BUFFER_FORMAT_ARGB;
+        pic_params.frameIdx = self.frame_number;
+        pic_params.inputTimeStamp = self.frame_number as u64;
+
+        if is_keyframe {
+            pic_params.encodePicFlags = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEIDR as u32
+                | NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_OUTPUT_SPSPPS as u32;
+        }
+
+        let encode_fn = api.nvEncEncodePicture
+            .ok_or_else(|| anyhow!("nvEncEncodePicture not available"))?;
+
+        let status = unsafe { encode_fn(self.encoder, &mut pic_params) };
+        
+        // Always unmap and unregister even if encode fails
+        let unmap_fn = api.nvEncUnmapInputResource.unwrap();
+        unsafe { unmap_fn(self.encoder, map_res.mappedResource) };
+        
+        let unreg_fn = api.nvEncUnregisterResource.unwrap();
+        unsafe { unreg_fn(self.encoder, registered_resource) };
+
+        if status != NV_ENC_SUCCESS {
+            return Err(anyhow!("Failed to encode frame: {}", status));
+        }
+
+        self.retrieve_bitstream(start, is_keyframe)
+    }
+
+    fn retrieve_bitstream(&mut self, start_time: std::time::Instant, request_keyframe: bool) -> Result<EncodedPacket> {
+        let api = init_api()?;
+        
+        // Lock bitstream to get output
+        let mut lock_bitstream = NV_ENC_LOCK_BITSTREAM::default();
+        lock_bitstream.outputBitstreamBuffer = self.output_buffer;
+
+        let lock_bitstream_fn = api.nvEncLockBitstream
+            .ok_or_else(|| anyhow!("nvEncLockBitstream not available"))?;
+
+        let status = unsafe { lock_bitstream_fn(self.encoder, &mut lock_bitstream) };
+        if status != NV_ENC_SUCCESS {
+            return Err(anyhow!("Failed to lock bitstream: {}", status));
+        }
+
+        // Copy encoded data
+        let encoded_data = unsafe {
+            std::slice::from_raw_parts(
+                lock_bitstream.bitstreamBufferPtr as *const u8,
+                lock_bitstream.bitstreamSizeInBytes as usize,
+            )
+            .to_vec()
+        };
+
+        let actual_keyframe = matches!(
+            lock_bitstream.pictureType,
+            NV_ENC_PIC_TYPE::NV_ENC_PIC_TYPE_IDR | NV_ENC_PIC_TYPE::NV_ENC_PIC_TYPE_I
+        );
+
+        // Unlock bitstream
+        let unlock_bitstream_fn = api.nvEncUnlockBitstream
+            .ok_or_else(|| anyhow!("nvEncUnlockBitstream not available"))?;
+
+        let status = unsafe { unlock_bitstream_fn(self.encoder, self.output_buffer) };
+        if status != NV_ENC_SUCCESS {
+            return Err(anyhow!("Failed to unlock bitstream: {}", status));
+        }
+
+        let encode_time_us = start_time.elapsed().as_micros() as u64;
+        let frame_number = self.frame_number;
+        self.frame_number += 1;
+
+        Ok(EncodedPacket {
+            frame_number,
+            timestamp_us: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros() as i64,
+            is_keyframe: actual_keyframe,
+            data: encoded_data,
+            encode_time_us,
         })
     }
 
@@ -327,11 +545,12 @@ impl NvencEncoder {
                     let src_idx = x * 4;
                     let dst_idx = x * 4;
                     
-                    // BGRA -> ABGR: swap positions
+                    // BGRA -> ABGR conversion
+                    // ABGR Layout in memory: [A] [B] [G] [R]
                     *dst_row.add(dst_idx + 0) = src_row[src_idx + 3]; // A
-                    *dst_row.add(dst_idx + 1) = src_row[src_idx + 2]; // R (was at +2 in BGR)
-                    *dst_row.add(dst_idx + 2) = src_row[src_idx + 1]; // G
-                    *dst_row.add(dst_idx + 3) = src_row[src_idx + 0]; // B
+                    *dst_row.add(dst_idx + 1) = src_row[src_idx + 0]; // B (Src: 0)
+                    *dst_row.add(dst_idx + 2) = src_row[src_idx + 1]; // G (Src: 1)
+                    *dst_row.add(dst_idx + 3) = src_row[src_idx + 2]; // R (Src: 2)
                 }
             }
         }
@@ -371,55 +590,9 @@ impl NvencEncoder {
             return Err(anyhow!("Failed to encode frame: {}", status));
         }
 
-        // Lock bitstream to get output
-        let mut lock_bitstream = NV_ENC_LOCK_BITSTREAM::default();
-        lock_bitstream.outputBitstreamBuffer = self.output_buffer;
 
-        let lock_bitstream_fn = api.nvEncLockBitstream
-            .ok_or_else(|| anyhow!("nvEncLockBitstream not available"))?;
 
-        let status = unsafe { lock_bitstream_fn(self.encoder, &mut lock_bitstream) };
-        if status != NV_ENC_SUCCESS {
-            return Err(anyhow!("Failed to lock bitstream: {}", status));
-        }
-
-        // Copy encoded data
-        let encoded_data = unsafe {
-            std::slice::from_raw_parts(
-                lock_bitstream.bitstreamBufferPtr as *const u8,
-                lock_bitstream.bitstreamSizeInBytes as usize,
-            )
-            .to_vec()
-        };
-
-        let actual_keyframe = matches!(
-            lock_bitstream.pictureType,
-            NV_ENC_PIC_TYPE::NV_ENC_PIC_TYPE_IDR | NV_ENC_PIC_TYPE::NV_ENC_PIC_TYPE_I
-        );
-
-        // Unlock bitstream
-        let unlock_bitstream_fn = api.nvEncUnlockBitstream
-            .ok_or_else(|| anyhow!("nvEncUnlockBitstream not available"))?;
-
-        let status = unsafe { unlock_bitstream_fn(self.encoder, self.output_buffer) };
-        if status != NV_ENC_SUCCESS {
-            return Err(anyhow!("Failed to unlock bitstream: {}", status));
-        }
-
-        let encode_time_us = start.elapsed().as_micros() as u64;
-        let frame_number = self.frame_number;
-        self.frame_number += 1;
-
-        Ok(EncodedPacket {
-            frame_number,
-            timestamp_us: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_micros() as i64,
-            is_keyframe: actual_keyframe,
-            data: encoded_data,
-            encode_time_us,
-        })
+        self.retrieve_bitstream(start, is_keyframe)
     }
 
     /// Force an IDR frame
