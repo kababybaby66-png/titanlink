@@ -45,6 +45,12 @@ export interface StreamSettings {
     vsync: boolean;
     iceRestart: boolean;
     useHardwareCapture: boolean;
+    // General Preferences
+    launchOnStartup: boolean;
+    enableUpnp: boolean;
+    immersiveMode: boolean;
+    preferredPort: number;
+    gamepadEmulation: 'xbox' | 'ds4' | 'disabled';
 }
 
 export const DEFAULT_SETTINGS: StreamSettings = {
@@ -59,6 +65,11 @@ export const DEFAULT_SETTINGS: StreamSettings = {
     vsync: false,
     iceRestart: true,
     useHardwareCapture: true, // Default to true for performance
+    launchOnStartup: false,
+    enableUpnp: true,
+    immersiveMode: true,
+    preferredPort: 8000,
+    gamepadEmulation: 'xbox',
 };
 
 // ============================================

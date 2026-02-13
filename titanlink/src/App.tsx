@@ -66,9 +66,26 @@ export interface SessionState {
     latency?: number;
 }
 
+const SETTINGS_STORAGE_KEY = 'titanlink_settings_v1';
+
 function App() {
     const [currentView, setCurrentView] = useState<AppView>('landing');
-    const [settings, setSettings] = useState<StreamSettings>(DEFAULT_SETTINGS);
+
+    // Initialize settings from localStorage if available
+    const [settings, setSettings] = useState<StreamSettings>(() => {
+        const saved = localStorage.getItem(SETTINGS_STORAGE_KEY);
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                console.log('[App] Loaded settings from storage:', parsed);
+                return { ...DEFAULT_SETTINGS, ...parsed };
+            } catch (e) {
+                console.error('[App] Failed to parse saved settings:', e);
+            }
+        }
+        return DEFAULT_SETTINGS;
+    });
+
     const [sessionState, setSessionState] = useState<SessionState>({
         sessionCode: '',
         role: null,
@@ -80,8 +97,10 @@ function App() {
 
     const [error, setError] = useState<string | null>(null);
 
-    // Sync settings to UDP service whenever they change
+    // Persist settings to localStorage and sync to UDP service whenever they change
     useEffect(() => {
+        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+
         if (udpStreamServiceInstance) {
             udpStreamServiceInstance.updateSettings(settings);
         }
@@ -115,14 +134,6 @@ function App() {
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
-
-    // Update service settings when they change
-    useEffect(() => {
-        // Only update if service is already loaded (don't force load just for settings)
-        if (udpStreamServiceInstance) {
-            udpStreamServiceInstance.updateSettings(settings);
-        }
-    }, [settings]);
 
     // Handle navigation based on connection state
     // Only clients go to streaming view - hosts stay on HostLobby

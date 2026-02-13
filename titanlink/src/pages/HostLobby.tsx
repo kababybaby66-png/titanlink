@@ -128,10 +128,24 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
 
     // -- DRAG & DROP STATE --
     // Note: 'controller', 'client', 'quality' will only render when streaming is active
-    const [panels, setPanels] = useState<{ left: string[], right: string[] }>({
-        left: ['latency', 'region', 'protocol', 'audio', 'client', 'quality', 'hardware'],
-        right: ['reactor', 'resources', 'controller', 'logs', 'stopbtn']
+    const [panels, setPanels] = useState<{ left: string[], right: string[] }>(() => {
+        const saved = localStorage.getItem('titanlink_lobby_layout');
+        if (saved) {
+            try {
+                return JSON.parse(saved);
+            } catch (e) {
+                console.error('[HostLobby] Failed to parse saved layout:', e);
+            }
+        }
+        return {
+            left: ['latency', 'region', 'protocol', 'audio', 'client', 'quality', 'hardware'],
+            right: ['reactor', 'resources', 'controller', 'logs', 'stopbtn']
+        };
     });
+
+    useEffect(() => {
+        localStorage.setItem('titanlink_lobby_layout', JSON.stringify(panels));
+    }, [panels]);
 
     const [draggedItem, setDraggedItem] = useState<string | null>(null);
     const [dragSourcePanel, setDragSourcePanel] = useState<'left' | 'right' | null>(null);

@@ -104,6 +104,11 @@ bool NvencEngine::Init(const EncoderSettings& settings, ComPtr<ID3D11Device> dev
     encConfig.rcParams.vbvBufferSize = settings.bitrate;
     encConfig.rcParams.lowDelayKeyFrameScale = 1; 
 
+    // Repeat SPS/PPS headers before every IDR frame (essential for mid-stream join)
+    encConfig.encodeCodecConfig.h264Config.repeatSPSPPS = 1;
+    encConfig.encodeCodecConfig.h264Config.idrPeriod = settings.fps * 2; // IDR every 2 seconds
+    encConfig.gopLength = settings.fps * 2;
+
     initParams.encodeConfig = &encConfig;
 
     status = m_nvenc.nvEncInitializeEncoder(m_encoder, &initParams);

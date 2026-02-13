@@ -47,16 +47,33 @@ export class UDPStreamService {
     // Settings
     private settings: StreamSettings = DEFAULT_SETTINGS;
 
-    // Oracle relay server (will be replaced with your actual Oracle VM IP)
-    private relayServerIp: string = '127.0.0.1'; // Localhost for testing, change to Oracle IP
+    // Oracle relay server (using actual Oracle VM IP)
+    private relayServerIp: string = '129.159.142.124';
     private relayServerPort: number = 5000;
 
     // Hardware capture integration
     private captureInterval: NodeJS.Timeout | null = null;
     private frameNumber: number = 0;
 
+    // Bitrate tracking
+    private bytesSentInLastSecond: number = 0;
+    private currentBitrateMbps: number = 0;
+    private bitrateInterval: NodeJS.Timeout | null = null;
+
     constructor() {
         console.log('[UDPStreamService] Initialized with custom UDP protocol');
+        this.startBitrateTimer();
+    }
+
+    private startBitrateTimer() {
+        this.bitrateInterval = setInterval(() => {
+            this.currentBitrateMbps = (this.bytesSentInLastSecond * 8) / (1024 * 1024);
+            this.bytesSentInLastSecond = 0;
+        }, 1000);
+    }
+
+    public getOutgoingBitrate(): number {
+        return this.currentBitrateMbps;
     }
 
     /**
@@ -496,13 +513,19 @@ export class UDPStreamService {
 
     private handleEncodedFrame(frame: {
         frameNumber: number;
-        timestampUs: number;
+        timestampUs: bigint | number;
         isKeyframe: boolean;
         data: Buffer;
     }): void {
         if (!this.connectionManager || !this.isConnected) {
             return;
         }
+
+        // Log occasionally for verification
+        if (frame.frameNumber % 60 === 0) {
+            console.log(`[UDPStreamService] Received frame ${frame.frameNumber} from native (size: ${frame.data.length}, key: ${frame.isKeyframe})`);
+        }
+
 
         // Map codec string to ID
         // 1: H264, 2: HEVC, 3: AV1
@@ -511,6 +534,7 @@ export class UDPStreamService {
         if (this.settings.codec === 'av1') codecId = 3;
 
         try {
+            this.bytesSentInLastSecond += frame.data.length;
             this.connectionManager.sendVideoFrame(
                 frame.frameNumber,
                 codecId,

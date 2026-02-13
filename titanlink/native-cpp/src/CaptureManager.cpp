@@ -78,23 +78,27 @@ void CaptureManager::CaptureLoop(EncoderSettings settings, uint32_t displayIndex
                 EncodedPacket packet;
                 if (encoder.EncodeFrame(frameTexture, timestamp, packet)) {
                     // Send to JS
-                    auto status = m_callback.BlockingCall([packet, frameCount](Napi::Env env, Napi::Function jsCallback) {
-                        // Create JS object: { frame_number, timestamp_us, is_keyframe, data }
-                        Napi::Object obj = Napi::Object::New(env);
-                        obj.Set("frame_number", Napi::Number::New(env, frameCount));
-                        obj.Set("timestamp_us", Napi::Number::New(env, (double)packet.timestamp));
-                        obj.Set("is_keyframe", Napi::Boolean::New(env, packet.isKeyFrame));
-                        
-                        // Buffer
-                        Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::Copy(env, packet.data.data(), packet.data.size());
-                        obj.Set("data", buffer);
-                        
-                        jsCallback.Call({ obj });
+                    // Use NonBlockingCall to avoid hanging the capture thread if JS is slow
+                    auto status = m_callback.NonBlockingCall([packet, frameCount](Napi::Env env, Napi::Function jsCallback) {
+                        try {
+                            // Create JS object: { frameNumber, timestampUs, isKeyframe, data }
+                            Napi::Object obj = Napi::Object::New(env);
+                            obj.Set("frameNumber", Napi::Number::New(env, (double)frameCount));
+                            obj.Set("timestampUs", Napi::BigInt::New(env, (uint64_t)packet.timestamp));
+                            obj.Set("isKeyframe", Napi::Boolean::New(env, packet.isKeyFrame));
+                            
+                            // Buffer - Copying is necessary as 'packet' is local to this lambda
+                            Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::Copy(env, packet.data.data(), packet.data.size());
+                            obj.Set("data", buffer);
+                            
+                            jsCallback.Call({ obj });
+                        } catch (const std::exception& e) {
+                            std::cerr << "[CPP] Exception in JS callback: " << e.what() << std::endl;
+                        }
                     });
                     
                     if (status != napi_ok) {
-                         // JS thread might be terminating
-                         // m_running = false; 
+                        // TS function might be closed
                     }
                     frameCount++;
                 } else {

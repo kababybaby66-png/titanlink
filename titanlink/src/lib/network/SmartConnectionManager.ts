@@ -206,9 +206,9 @@ export class SmartConnectionManager {
         await relayClient.connect(config.relayIp, relayPort, config.sessionId);
         await relayClient.sendHandshake();
 
-        console.log('[SmartConnection] Relay connection established');
+        console.log('[SmartConnection] Relay connection established (Priority 1)');
 
-        // If peer IP provided, attempt P2P
+        // If peer IP provided, attempt P2P in background but prioritize RELAY
         if (config.peerIp) {
             const peerPort = config.peerPort || 5000;
             const p2pClient = new NetworkClientClass();
@@ -219,24 +219,19 @@ export class SmartConnectionManager {
                 p2pClient.startListening(this.handlePacket.bind(this));
                 await p2pClient.sendHandshake();
 
-                console.log('[SmartConnection] P2P connection attempt started');
+                console.log('[SmartConnection] P2P background attempt started (Staying on RELAY)');
 
-                // Set timeout to switch to relay if P2P doesn't respond
-                this.p2pTimeout = setTimeout(() => {
-                    console.log('[SmartConnection] P2P timeout, switching to relay');
-                    this.switchToRelay();
-                }, p2pTimeoutMs);
-
-                // Assume P2P for now (will switch if timeout)
-                this.currentMode = ConnectionMode.P2P;
+                // We keep the P2P client alive but currentMode stays RELAY for priority 1 testing
+                // If the user wants to switch back to P2P priority later, they can remove this.
             } catch (error) {
-                console.warn('[SmartConnection] P2P connection failed:', error);
-                this.switchToRelay();
+                console.warn('[SmartConnection] P2P background attempt failed:', error);
             }
-        } else {
-            // No peer IP, use relay from start
-            this.switchToRelay();
         }
+
+        // Force switch to RELAY as priority 1
+        this.currentMode = ConnectionMode.RELAY;
+        this.stats.mode = ConnectionMode.RELAY;
+        console.log('[SmartConnection] Forcing RELAY mode (Priority 1)');
 
         this.stats.connectedAt = new Date();
         this.startKeepAlive();

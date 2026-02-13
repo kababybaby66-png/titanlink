@@ -45,7 +45,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                                     <span className="desc">Automatically initialize daemon on system boot</span>
                                 </div>
                                 <label className="cyber-switch">
-                                    <input type="checkbox" defaultChecked />
+                                    <input
+                                        type="checkbox"
+                                        checked={localSettings.launchOnStartup}
+                                        onChange={(e) => updateSetting('launchOnStartup', e.target.checked)}
+                                    />
                                     <span className="slider"></span>
                                 </label>
                             </div>
@@ -74,14 +78,23 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                                     <span className="desc">Automatically configure router ports</span>
                                 </div>
                                 <label className="cyber-switch">
-                                    <input type="checkbox" defaultChecked />
+                                    <input
+                                        type="checkbox"
+                                        checked={localSettings.enableUpnp}
+                                        onChange={(e) => updateSetting('enableUpnp', e.target.checked)}
+                                    />
                                     <span className="slider"></span>
                                 </label>
                             </div>
                             <div className="input-row">
                                 <div className="input-field">
                                     <label>Preferred Port</label>
-                                    <input type="text" className="cyber-input-sm" defaultValue="8000" />
+                                    <input
+                                        type="number"
+                                        className="cyber-input-sm"
+                                        value={localSettings.preferredPort}
+                                        onChange={(e) => updateSetting('preferredPort', parseInt(e.target.value) || 8000)}
+                                    />
                                 </div>
                                 <div className="input-field">
                                     <label>Bitrate Limit (Mbps)</label>
@@ -104,17 +117,25 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                                     <span className="desc">Pass Windows hotkeys (Alt+Tab) to host</span>
                                 </div>
                                 <label className="cyber-switch">
-                                    <input type="checkbox" defaultChecked />
+                                    <input
+                                        type="checkbox"
+                                        checked={localSettings.immersiveMode}
+                                        onChange={(e) => updateSetting('immersiveMode', e.target.checked)}
+                                    />
                                     <span className="slider"></span>
                                 </label>
                             </div>
                             <div className="input-row">
                                 <div className="input-field">
                                     <label>Gamepad Emulation</label>
-                                    <select className="cyber-select">
-                                        <option>Xbox 360 (ViGEm)</option>
-                                        <option>DualShock 4</option>
-                                        <option>Disabled</option>
+                                    <select
+                                        className="cyber-select"
+                                        value={localSettings.gamepadEmulation}
+                                        onChange={(e) => updateSetting('gamepadEmulation', e.target.value as any)}
+                                    >
+                                        <option value="xbox">Xbox 360 (ViGEm)</option>
+                                        <option value="ds4">DualShock 4</option>
+                                        <option value="disabled">Disabled</option>
                                     </select>
                                 </div>
                             </div>
