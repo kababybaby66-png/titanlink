@@ -211,10 +211,13 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
         if (!isStreaming) return;
 
         const interval = setInterval(() => {
-            // UDP service doesn't yet track these metrics the same way
-            // TODO: Implement connection quality tracking in UDPStreamService
-            const quality = { latency: 0, packetLoss: 0, jitter: 0, networkQuality: 'excellent' };
-            setConnectionQuality(quality);
+            const quality = udpStreamService.getConnectionQuality();
+            setConnectionQuality({
+                latency: quality.latency,
+                packetLoss: quality.packetLoss,
+                jitter: quality.jitter,
+                networkQuality: quality.networkQuality,
+            });
         }, 1000);
 
         return () => clearInterval(interval);

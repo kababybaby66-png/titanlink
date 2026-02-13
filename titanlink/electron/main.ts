@@ -625,6 +625,16 @@ function registerIpcHandlers() {
         return selfHostedTurnService.getStatus();
     });
 
+    // Launch on startup handler
+    ipcMain.handle('app:set-launch-on-startup', (_event, enabled: boolean) => {
+        app.setLoginItemSettings({
+            openAtLogin: enabled,
+            path: app.getPath('exe'),
+        });
+        console.log(`[Main] Launch on startup sets to: ${enabled}`);
+        return { success: true };
+    });
+
     // Force health check on all TURN servers
     ipcMain.handle('turn:run-health-check', async () => {
         await selfHostedTurnService.runHealthChecks();

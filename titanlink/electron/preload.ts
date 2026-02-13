@@ -31,6 +31,14 @@ const electronAPI = {
     },
 
     // ============================================
+    // Application APIs
+    // ============================================
+    app: {
+        setLaunchOnStartup: (enabled: boolean): Promise<{ success: boolean }> =>
+            ipcRenderer.invoke('app:set-launch-on-startup', enabled),
+    },
+
+    // ============================================
     // Controller APIs
     // ============================================
     controller: {

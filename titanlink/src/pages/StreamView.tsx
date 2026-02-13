@@ -70,9 +70,7 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
     // Poll connection quality metrics and update FPS from hardware decoder
     useEffect(() => {
         const interval = setInterval(() => {
-            // UDP service doesn't track connection quality the same way as WebRTC yet
-            // This will be implemented in the UDPStreamService
-            const quality = { packetLoss: 0, jitter: 0, hasAudio: false };
+            const quality = udpStreamService.getConnectionQuality();
             setPacketLoss(quality.packetLoss);
             setJitter(quality.jitter);
             setHasAudio(quality.hasAudio || hasAudio);

@@ -106,6 +106,14 @@ function App() {
         }
     }, [settings]);
 
+    // Sync system-level settings with Main process
+    useEffect(() => {
+        if (window.electronAPI?.app?.setLaunchOnStartup) {
+            window.electronAPI.app.setLaunchOnStartup(settings.launchOnStartup)
+                .catch(err => console.error('[App] Failed to set launch on startup:', err));
+        }
+    }, [settings.launchOnStartup]);
+
     // Check driver status on mount
     useEffect(() => {
         const checkDrivers = async () => {
