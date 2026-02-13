@@ -310,7 +310,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { NetworkClient, healthCheck, getEncoderSupport, getDisplays, startCapture, stopCapture, isCaptureRunning } = nativeBinding
+const { NetworkClient, healthCheck, getEncoderSupport, getDisplays, startCapture, stopCapture, isCaptureRunning, isAudioAvailable, startAudioCapture, stopAudioCapture } = nativeBinding
 
 module.exports.NetworkClient = NetworkClient
 module.exports.healthCheck = healthCheck
@@ -319,3 +319,6 @@ module.exports.getDisplays = getDisplays
 module.exports.startCapture = startCapture
 module.exports.stopCapture = stopCapture
 module.exports.isCaptureRunning = isCaptureRunning
+module.exports.isAudioAvailable = isAudioAvailable
+module.exports.startAudioCapture = startAudioCapture
+module.exports.stopAudioCapture = stopAudioCapture

@@ -1,11 +1,10 @@
 /// NAPI-RS bindings for TitanLink custom UDP protocol
 /// Exposes Rust networking to TypeScript/Electron
-
 use napi::bindgen_prelude::*;
-use napi::threadsafe_function::{ThreadsafeFunction, ErrorStrategy, ThreadsafeFunctionCallMode};
+use napi::threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
-use std::sync::{Arc, Mutex};
 use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
 
 use crate::network::*;
 
@@ -25,38 +24,40 @@ impl NetworkClient {
             reliable: Arc::new(Mutex::new(ReliableChannel::new(ReliableConfig::default()))),
         }
     }
-    
+
     /// Connect to remote peer (or relay server)
     #[napi]
     pub fn connect(&self, remote_ip: String, remote_port: u16, session_id: String) -> Result<()> {
-        let session_id_u64 = session_id.parse::<u64>()
+        let session_id_u64 = session_id
+            .parse::<u64>()
             .map_err(|_| Error::from_reason("Invalid session ID"))?;
-        
+
         let remote_addr: SocketAddr = format!("{}:{}", remote_ip, remote_port)
             .parse()
             .map_err(|_| Error::from_reason("Invalid remote address"))?;
-        
+
         let transport = UdpTransport::new("0.0.0.0:0", remote_addr, session_id_u64)
             .map_err(|e| Error::from_reason(format!("Failed to create transport: {}", e)))?;
-        
+
         *self.transport.lock().unwrap() = Some(transport);
-        
+
         Ok(())
     }
-    
+
     /// Send handshake to initiate session
     #[napi]
     pub fn send_handshake(&self) -> Result<()> {
         let mut transport_guard = self.transport.lock().unwrap();
         if let Some(transport) = transport_guard.as_mut() {
-            transport.send_handshake()
+            transport
+                .send_handshake()
                 .map_err(|e| Error::from_reason(format!("Failed to send handshake: {}", e)))?;
             Ok(())
         } else {
             Err(Error::from_reason("Not connected"))
         }
     }
-    
+
     /// Send video frame (fire-and-forget)
     #[napi]
     pub fn send_video_frame(
@@ -68,14 +69,15 @@ impl NetworkClient {
     ) -> Result<()> {
         let mut transport_guard = self.transport.lock().unwrap();
         if let Some(transport) = transport_guard.as_mut() {
-            transport.send_video_frame(frame_number, codec, is_keyframe, &frame_data)
+            transport
+                .send_video_frame(frame_number, codec, is_keyframe, &frame_data)
                 .map_err(|e| Error::from_reason(format!("Failed to send video frame: {}", e)))?;
             Ok(())
         } else {
             Err(Error::from_reason("Not connected"))
         }
     }
-    
+
     /// Send controller input (reliable)
     #[napi]
     pub fn send_controller_input(
@@ -101,28 +103,30 @@ impl NetworkClient {
                 left_trigger,
                 right_trigger,
             };
-            
-            transport.send_controller_input(input)
+
+            transport
+                .send_controller_input(input)
                 .map_err(|e| Error::from_reason(format!("Failed to send input: {}", e)))?;
             Ok(())
         } else {
             Err(Error::from_reason("Not connected"))
         }
     }
-    
+
     /// Send keep-alive packet
     #[napi]
     pub fn send_keep_alive(&self) -> Result<()> {
         let mut transport_guard = self.transport.lock().unwrap();
         if let Some(transport) = transport_guard.as_mut() {
-            transport.send_keep_alive()
+            transport
+                .send_keep_alive()
                 .map_err(|e| Error::from_reason(format!("Failed to send keep-alive: {}", e)))?;
             Ok(())
         } else {
             Err(Error::from_reason("Not connected"))
         }
     }
-    
+
     /// Disconnect and cleanup
     #[napi]
     pub fn disconnect(&self) -> Result<()> {
@@ -131,21 +135,24 @@ impl NetworkClient {
             transport.stop();
         }
         *transport_guard = None;
-        
+
         let mut reliable_guard = self.reliable.lock().unwrap();
         reliable_guard.clear();
-        
+
         Ok(())
     }
-    
+
     /// Start listening for incoming packets
     #[napi]
-    pub fn start_listening(&self, #[napi(ts_arg_type = "(data: Buffer) => void")] callback: JsFunction) -> Result<()> {
-        let tsfn: ThreadsafeFunction<Vec<u8>, ErrorStrategy::Fatal> = callback
-            .create_threadsafe_function(0, |ctx| Ok(vec![ctx.value]))?;
-            
+    pub fn start_listening(
+        &self,
+        #[napi(ts_arg_type = "(data: Buffer) => void")] callback: JsFunction,
+    ) -> Result<()> {
+        let tsfn: ThreadsafeFunction<Vec<u8>, ErrorStrategy::Fatal> =
+            callback.create_threadsafe_function(0, |ctx| Ok(vec![ctx.value]))?;
+
         let transport = self.transport.clone();
-        
+
         std::thread::spawn(move || {
             loop {
                 // Short scope for lock to allow sending
@@ -153,7 +160,7 @@ impl NetworkClient {
                     let mut guard = transport.lock().unwrap();
                     if let Some(transport) = guard.as_ref() {
                         if !transport.is_running() {
-                            return; 
+                            return;
                         }
                         transport.recv_packet().ok().flatten()
                     } else {
@@ -161,7 +168,7 @@ impl NetworkClient {
                         return;
                     }
                 };
-                
+
                 if let Some(packet) = packet_opt {
                     let bytes = packet.to_bytes();
                     tsfn.call(bytes, ThreadsafeFunctionCallMode::Blocking);
@@ -171,7 +178,7 @@ impl NetworkClient {
                 }
             }
         });
-        
+
         Ok(())
     }
 

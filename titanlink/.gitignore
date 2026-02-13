@@ -39,3 +39,5 @@ Design.md
 native/target/
 native/*.node
 !native/titanlink-capture.win32-x64-msvc.node
+native-cpp/build/
+native-cpp/*.node

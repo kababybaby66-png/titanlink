@@ -1,0 +1,14 @@
+{
+    "name": "titanlink-nvenc-cpp",
+    "version": "1.0.0",
+    "description": "NVENC Encoder Native Addon",
+    "main": "build/Release/titanlink-nvenc-cpp.node",
+    "scripts": {
+        "build": "node-gyp rebuild",
+        "clean": "node-gyp clean"
+    },
+    "dependencies": {
+        "node-addon-api": "^7.1.1"
+    },
+    "gypfile": true
+}

@@ -31,12 +31,7 @@ pub enum PixelFormat {
 
 impl CapturedFrame {
     /// Create a new frame with CPU data
-    pub fn new_cpu(
-        frame_number: u32,
-        width: u32,
-        height: u32,
-        data: Vec<u8>,
-    ) -> Self {
+    pub fn new_cpu(frame_number: u32, width: u32, height: u32, data: Vec<u8>) -> Self {
         Self {
             frame_number,
             timestamp: Instant::now(),
@@ -48,11 +43,7 @@ impl CapturedFrame {
     }
 
     /// Create a new frame without CPU data (GPU-only path)
-    pub fn new_gpu(
-        frame_number: u32,
-        width: u32,
-        height: u32,
-    ) -> Self {
+    pub fn new_gpu(frame_number: u32, width: u32, height: u32) -> Self {
         Self {
             frame_number,
             timestamp: Instant::now(),

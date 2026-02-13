@@ -76,6 +76,18 @@ export class UDPStreamService {
         this.sessionId = this.generateSessionId();
 
         console.log('[UDPStreamService] Starting host with session:', this.sessionCode);
+        console.log('[UDPStreamService] Active settings:', {
+            fps: this.settings.fps,
+            bitrate: this.settings.bitrate,
+            codec: this.settings.codec,
+            bitrateMode: this.settings.bitrateMode,
+            resolution: this.settings.resolution,
+            audioSampleRate: this.settings.audioSampleRate,
+            audioBitrate: this.settings.audioBitrate,
+            audioQualityMode: this.settings.audioQualityMode,
+            vsync: this.settings.vsync,
+            useHardwareCapture: this.settings.useHardwareCapture,
+        });
 
         // Connect to signaling to await client
         await this.connectToSignaling();
@@ -104,6 +116,9 @@ export class UDPStreamService {
         if (useHardwareCapture) {
             await this.startHardwareCapture(displayId);
         }
+
+        // Start audio capture (independent of video encoding method)
+        await this.startAudioCapture();
 
         this.callbacks.onStateChange('connected');
 
@@ -166,6 +181,12 @@ export class UDPStreamService {
             this.captureInterval = null;
         }
 
+        // Stop native capture (video + audio)
+        if (window.electronAPI?.hardwareCapture) {
+            window.electronAPI.hardwareCapture.stop().catch(console.error);
+            window.electronAPI.hardwareCapture.stopAudio().catch(console.error);
+        }
+
         if (this.connectionManager) {
             this.connectionManager.disconnect();
             this.connectionManager = null;
@@ -212,8 +233,9 @@ export class UDPStreamService {
      * Update stream settings
      */
     updateSettings(settings: StreamSettings): void {
+        const oldFps = this.settings.fps;
         this.settings = { ...this.settings, ...settings };
-        console.log('[UDPStreamService] Settings updated:', this.settings);
+        console.log('[UDPStreamService] Settings updated. FPS:', oldFps, '->', this.settings.fps, '. Full settings:', this.settings);
     }
 
     /**
@@ -421,6 +443,7 @@ export class UDPStreamService {
                     bitrate: (this.settings.bitrate || 10) * 1_000_000,
                     useHardwareEncoder: true,
                     codec: this.settings.codec || 'h264',
+                    bitrateMode: this.settings.bitrateMode || 'cbr',
                 });
 
                 if (started) {
@@ -430,6 +453,7 @@ export class UDPStreamService {
                     window.electronAPI.hardwareCapture.onFrame((frame: any) => {
                         this.handleEncodedFrame(frame);
                     });
+
                     return;
                 }
             }
@@ -440,6 +464,33 @@ export class UDPStreamService {
 
             // Fallback to simulated frames for testing
             this.startSimulatedCapture();
+        }
+    }
+
+    private async startAudioCapture(): Promise<void> {
+        try {
+            if (window.electronAPI?.hardwareCapture?.startAudio) {
+                const supported = await window.electronAPI.hardwareCapture.isAudioSupported();
+                if (supported) {
+                    console.log('[UDPStreamService] Starting native audio capture...');
+                    const started = await window.electronAPI.hardwareCapture.startAudio({
+                        sampleRate: this.settings.audioSampleRate || 48000,
+                        quality: this.settings.audioQualityMode || 'game'
+                    });
+
+                    if (started) {
+                        window.electronAPI.hardwareCapture.onAudioFrame((frame: any) => {
+                            // TODO: Send audio frame over UDP
+                            // For now just log occasionally to verify flow
+                            if (Math.random() < 0.01) {
+                                // console.log('[UDPStreamService] Audio frame:', frame.data.byteLength, 'bytes');
+                            }
+                        });
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('[UDPStreamService] Failed to start audio:', e);
         }
     }
 

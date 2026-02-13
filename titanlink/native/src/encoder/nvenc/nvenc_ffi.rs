@@ -1,5 +1,5 @@
 //! NVENC FFI Bindings
-//! 
+//!
 //! This module contains the raw FFI definitions for NVIDIA's NVENC API.
 //! Based on nvEncodeAPI.h from the NVIDIA Video Codec SDK.
 
@@ -214,16 +214,26 @@ pub enum NV_ENC_PIC_FLAGS {
 // Structures - API Version
 // ============================================
 
-// Use SDK 10.0 for maximum compatibility (Drivers 445.87+)
-pub const NVENCAPI_MAJOR_VERSION: u32 = 10;
+// Use SDK 13.0 for broad compatibility (matches installed header)
+pub const NVENCAPI_MAJOR_VERSION: u32 = 13;
 pub const NVENCAPI_MINOR_VERSION: u32 = 0;
 
+// Alternative versions for fallback
+pub const NVENCAPI_MAJOR_VERSION_FALLBACK: u32 = 12;
+pub const NVENCAPI_MINOR_VERSION_FALLBACK: u32 = 0;
+
+// NVENC version format: per NVIDIA header
+// #define NVENCAPI_VERSION (NVENCAPI_MAJOR_VERSION | (NVENCAPI_MINOR_VERSION << 24))
 pub const fn NVENCAPI_VERSION() -> u32 {
     NVENCAPI_MAJOR_VERSION | (NVENCAPI_MINOR_VERSION << 24)
 }
 
-pub const fn NVENCAPI_STRUCT_VERSION(ver: u32) -> u32 {
-    NVENCAPI_VERSION() | (ver << 16) | (0x7 << 28)
+pub const fn NVENCAPI_VERSION_FALLBACK() -> u32 {
+    NVENCAPI_MAJOR_VERSION_FALLBACK | (NVENCAPI_MINOR_VERSION_FALLBACK << 24)
+}
+
+pub const fn NVENCAPI_STRUCT_VERSION(ver: u32, size: u32) -> u32 {
+    ver | (size << 16) | (0x7 << 28)
 }
 
 // ============================================
@@ -244,7 +254,7 @@ pub struct NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS {
 impl Default for NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS {
     fn default() -> Self {
         Self {
-            version: NVENCAPI_STRUCT_VERSION(1),
+            version: NVENCAPI_STRUCT_VERSION(1, std::mem::size_of::<NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS>() as u32),
             deviceType: NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_DIRECTX11,
             device: std::ptr::null_mut(),
             reserved: std::ptr::null_mut(),
@@ -270,7 +280,7 @@ pub struct NV_ENC_PRESET_CONFIG {
 impl Default for NV_ENC_PRESET_CONFIG {
     fn default() -> Self {
         Self {
-            version: NVENCAPI_STRUCT_VERSION(4),
+            version: NVENCAPI_STRUCT_VERSION(4, std::mem::size_of::<NV_ENC_PRESET_CONFIG>() as u32),
             presetCfg: NV_ENC_CONFIG::default(),
             reserved1: [0; 255],
             reserved2: [std::ptr::null_mut(); 64],
@@ -309,7 +319,7 @@ pub struct NV_ENC_INITIALIZE_PARAMS {
 impl Default for NV_ENC_INITIALIZE_PARAMS {
     fn default() -> Self {
         Self {
-            version: NVENCAPI_STRUCT_VERSION(5),
+            version: NVENCAPI_STRUCT_VERSION(5, std::mem::size_of::<NV_ENC_INITIALIZE_PARAMS>() as u32),
             encodeGUID: NV_ENC_CODEC_H264_GUID,
             presetGUID: NV_ENC_PRESET_LOW_LATENCY_HP_GUID,
             encodeWidth: 1920,
@@ -355,7 +365,7 @@ pub struct NV_ENC_CONFIG {
 impl Default for NV_ENC_CONFIG {
     fn default() -> Self {
         Self {
-            version: NVENCAPI_STRUCT_VERSION(8),
+            version: NVENCAPI_STRUCT_VERSION(7, std::mem::size_of::<NV_ENC_CONFIG>() as u32),
             profileGUID: NV_ENC_H264_PROFILE_BASELINE_GUID,
             encodeCodecConfig: NV_ENC_CODEC_CONFIG::default(),
             monoChromeEncoding: 0,
@@ -401,7 +411,7 @@ pub struct NV_ENC_RC_PARAMS {
 impl Default for NV_ENC_RC_PARAMS {
     fn default() -> Self {
         Self {
-            version: NVENCAPI_STRUCT_VERSION(1),
+            version: NVENCAPI_STRUCT_VERSION(1, std::mem::size_of::<NV_ENC_RC_PARAMS>() as u32),
             rateControlMode: NV_ENC_PARAMS_RC_MODE::NV_ENC_PARAMS_RC_CBR_LOWDELAY_HQ,
             constQP: NV_ENC_QP::default(),
             averageBitRate: 10_000_000,
@@ -448,9 +458,7 @@ pub union NV_ENC_CODEC_CONFIG {
 
 impl Default for NV_ENC_CODEC_CONFIG {
     fn default() -> Self {
-        Self {
-            reserved: [0; 256],
-        }
+        Self { reserved: [0; 256] }
     }
 }
 
@@ -574,7 +582,7 @@ pub struct NV_ENC_CREATE_INPUT_BUFFER {
 impl Default for NV_ENC_CREATE_INPUT_BUFFER {
     fn default() -> Self {
         Self {
-            version: NVENCAPI_STRUCT_VERSION(1),
+            version: NVENCAPI_STRUCT_VERSION(1, std::mem::size_of::<NV_ENC_CREATE_INPUT_BUFFER>() as u32),
             width: 0,
             height: 0,
             memoryHeap: 0,
@@ -607,7 +615,7 @@ pub struct NV_ENC_CREATE_BITSTREAM_BUFFER {
 impl Default for NV_ENC_CREATE_BITSTREAM_BUFFER {
     fn default() -> Self {
         Self {
-            version: NVENCAPI_STRUCT_VERSION(1),
+            version: NVENCAPI_STRUCT_VERSION(1, std::mem::size_of::<NV_ENC_CREATE_BITSTREAM_BUFFER>() as u32),
             size: 0,
             memoryHeap: 0,
             reserved: 0,
@@ -637,7 +645,7 @@ pub struct NV_ENC_LOCK_INPUT_BUFFER {
 impl Default for NV_ENC_LOCK_INPUT_BUFFER {
     fn default() -> Self {
         Self {
-            version: NVENCAPI_STRUCT_VERSION(1),
+            version: NVENCAPI_STRUCT_VERSION(1, std::mem::size_of::<NV_ENC_LOCK_INPUT_BUFFER>() as u32),
             reservedBitFields: 0,
             inputBuffer: std::ptr::null_mut(),
             bufferDataPtr: std::ptr::null_mut(),
@@ -684,7 +692,7 @@ pub struct NV_ENC_LOCK_BITSTREAM {
 impl Default for NV_ENC_LOCK_BITSTREAM {
     fn default() -> Self {
         Self {
-            version: NVENCAPI_STRUCT_VERSION(2),
+            version: NVENCAPI_STRUCT_VERSION(2, std::mem::size_of::<NV_ENC_LOCK_BITSTREAM>() as u32),
             reservedBitFields: 0,
             frameIdx: 0,
             hwEncodeStatus: 0,
@@ -750,7 +758,7 @@ pub struct NV_ENC_PIC_PARAMS {
 impl Default for NV_ENC_PIC_PARAMS {
     fn default() -> Self {
         Self {
-            version: NVENCAPI_STRUCT_VERSION(6),
+            version: NVENCAPI_STRUCT_VERSION(6, std::mem::size_of::<NV_ENC_PIC_PARAMS>() as u32),
             inputWidth: 0,
             inputHeight: 0,
             inputPitch: 0,
@@ -790,9 +798,7 @@ pub union NV_ENC_CODEC_PIC_PARAMS {
 
 impl Default for NV_ENC_CODEC_PIC_PARAMS {
     fn default() -> Self {
-        Self {
-            reserved: [0; 256],
-        }
+        Self { reserved: [0; 256] }
     }
 }
 
@@ -869,7 +875,7 @@ pub struct NV_ENC_REGISTER_RESOURCE {
 impl Default for NV_ENC_REGISTER_RESOURCE {
     fn default() -> Self {
         Self {
-            version: NVENCAPI_STRUCT_VERSION(4),
+            version: NVENCAPI_STRUCT_VERSION(4, std::mem::size_of::<NV_ENC_REGISTER_RESOURCE>() as u32),
             resourceType: NV_ENC_INPUT_RESOURCE_TYPE::NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX,
             width: 0,
             height: 0,
@@ -902,7 +908,7 @@ pub struct NV_ENC_MAP_INPUT_RESOURCE {
 impl Default for NV_ENC_MAP_INPUT_RESOURCE {
     fn default() -> Self {
         Self {
-            version: NVENCAPI_STRUCT_VERSION(4),
+            version: NVENCAPI_STRUCT_VERSION(4, std::mem::size_of::<NV_ENC_MAP_INPUT_RESOURCE>() as u32),
             subResourceIndex: 0,
             inputResource: std::ptr::null_mut(),
             registeredResource: std::ptr::null_mut(),
@@ -922,57 +928,126 @@ impl Default for NV_ENC_MAP_INPUT_RESOURCE {
 pub struct NV_ENCODE_API_FUNCTION_LIST {
     pub version: u32,
     pub reserved: u32,
-    pub nvEncOpenEncodeSession: Option<unsafe extern "C" fn(*mut c_void, u32, *mut *mut c_void) -> NVENCSTATUS>,
+    pub nvEncOpenEncodeSession:
+        Option<unsafe extern "C" fn(*mut c_void, u32, *mut *mut c_void) -> NVENCSTATUS>,
     pub nvEncGetEncodeGUIDCount: Option<unsafe extern "C" fn(*mut c_void, *mut u32) -> NVENCSTATUS>,
-    pub nvEncGetEncodeProfileGUIDCount: Option<unsafe extern "C" fn(*mut c_void, GUID, *mut u32) -> NVENCSTATUS>,
-    pub nvEncGetEncodeProfileGUIDs: Option<unsafe extern "C" fn(*mut c_void, GUID, *mut GUID, u32, *mut u32) -> NVENCSTATUS>,
-    pub nvEncGetEncodeGUIDs: Option<unsafe extern "C" fn(*mut c_void, *mut GUID, u32, *mut u32) -> NVENCSTATUS>,
-    pub nvEncGetInputFormatCount: Option<unsafe extern "C" fn(*mut c_void, GUID, *mut u32) -> NVENCSTATUS>,
-    pub nvEncGetInputFormats: Option<unsafe extern "C" fn(*mut c_void, GUID, *mut NV_ENC_BUFFER_FORMAT, u32, *mut u32) -> NVENCSTATUS>,
-    pub nvEncGetEncodeCaps: Option<unsafe extern "C" fn(*mut c_void, GUID, *mut c_void, *mut i32) -> NVENCSTATUS>,
-    pub nvEncGetEncodePresetCount: Option<unsafe extern "C" fn(*mut c_void, GUID, *mut u32) -> NVENCSTATUS>,
-    pub nvEncGetEncodePresetGUIDs: Option<unsafe extern "C" fn(*mut c_void, GUID, *mut GUID, u32, *mut u32) -> NVENCSTATUS>,
-    pub nvEncGetEncodePresetConfig: Option<unsafe extern "C" fn(*mut c_void, GUID, GUID, *mut c_void) -> NVENCSTATUS>,
-    pub nvEncGetEncodePresetConfigEx: Option<unsafe extern "C" fn(*mut c_void, GUID, GUID, NV_ENC_TUNING_INFO, *mut c_void) -> NVENCSTATUS>,
-    pub nvEncInitializeEncoder: Option<unsafe extern "C" fn(*mut c_void, *mut NV_ENC_INITIALIZE_PARAMS) -> NVENCSTATUS>,
-    pub nvEncCreateInputBuffer: Option<unsafe extern "C" fn(*mut c_void, *mut NV_ENC_CREATE_INPUT_BUFFER) -> NVENCSTATUS>,
-    pub nvEncDestroyInputBuffer: Option<unsafe extern "C" fn(*mut c_void, NV_ENC_INPUT_PTR) -> NVENCSTATUS>,
-    pub nvEncCreateBitstreamBuffer: Option<unsafe extern "C" fn(*mut c_void, *mut NV_ENC_CREATE_BITSTREAM_BUFFER) -> NVENCSTATUS>,
-    pub nvEncDestroyBitstreamBuffer: Option<unsafe extern "C" fn(*mut c_void, NV_ENC_OUTPUT_PTR) -> NVENCSTATUS>,
-    pub nvEncEncodePicture: Option<unsafe extern "C" fn(*mut c_void, *mut NV_ENC_PIC_PARAMS) -> NVENCSTATUS>,
-    pub nvEncLockBitstream: Option<unsafe extern "C" fn(*mut c_void, *mut NV_ENC_LOCK_BITSTREAM) -> NVENCSTATUS>,
-    pub nvEncUnlockBitstream: Option<unsafe extern "C" fn(*mut c_void, NV_ENC_OUTPUT_PTR) -> NVENCSTATUS>,
-    pub nvEncLockInputBuffer: Option<unsafe extern "C" fn(*mut c_void, *mut NV_ENC_LOCK_INPUT_BUFFER) -> NVENCSTATUS>,
-    pub nvEncUnlockInputBuffer: Option<unsafe extern "C" fn(*mut c_void, NV_ENC_INPUT_PTR) -> NVENCSTATUS>,
+    pub nvEncGetEncodeProfileGUIDCount:
+        Option<unsafe extern "C" fn(*mut c_void, GUID, *mut u32) -> NVENCSTATUS>,
+    pub nvEncGetEncodeProfileGUIDs:
+        Option<unsafe extern "C" fn(*mut c_void, GUID, *mut GUID, u32, *mut u32) -> NVENCSTATUS>,
+    pub nvEncGetEncodeGUIDs:
+        Option<unsafe extern "C" fn(*mut c_void, *mut GUID, u32, *mut u32) -> NVENCSTATUS>,
+    pub nvEncGetInputFormatCount:
+        Option<unsafe extern "C" fn(*mut c_void, GUID, *mut u32) -> NVENCSTATUS>,
+    pub nvEncGetInputFormats: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            GUID,
+            *mut NV_ENC_BUFFER_FORMAT,
+            u32,
+            *mut u32,
+        ) -> NVENCSTATUS,
+    >,
+    pub nvEncGetEncodeCaps:
+        Option<unsafe extern "C" fn(*mut c_void, GUID, *mut c_void, *mut i32) -> NVENCSTATUS>,
+    pub nvEncGetEncodePresetCount:
+        Option<unsafe extern "C" fn(*mut c_void, GUID, *mut u32) -> NVENCSTATUS>,
+    pub nvEncGetEncodePresetGUIDs:
+        Option<unsafe extern "C" fn(*mut c_void, GUID, *mut GUID, u32, *mut u32) -> NVENCSTATUS>,
+    pub nvEncGetEncodePresetConfig:
+        Option<unsafe extern "C" fn(*mut c_void, GUID, GUID, *mut c_void) -> NVENCSTATUS>,
+    pub nvEncGetEncodePresetConfigEx: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            GUID,
+            GUID,
+            NV_ENC_TUNING_INFO,
+            *mut c_void,
+        ) -> NVENCSTATUS,
+    >,
+    pub nvEncInitializeEncoder:
+        Option<unsafe extern "C" fn(*mut c_void, *mut NV_ENC_INITIALIZE_PARAMS) -> NVENCSTATUS>,
+    pub nvEncCreateInputBuffer:
+        Option<unsafe extern "C" fn(*mut c_void, *mut NV_ENC_CREATE_INPUT_BUFFER) -> NVENCSTATUS>,
+    pub nvEncDestroyInputBuffer:
+        Option<unsafe extern "C" fn(*mut c_void, NV_ENC_INPUT_PTR) -> NVENCSTATUS>,
+    pub nvEncCreateBitstreamBuffer: Option<
+        unsafe extern "C" fn(*mut c_void, *mut NV_ENC_CREATE_BITSTREAM_BUFFER) -> NVENCSTATUS,
+    >,
+    pub nvEncDestroyBitstreamBuffer:
+        Option<unsafe extern "C" fn(*mut c_void, NV_ENC_OUTPUT_PTR) -> NVENCSTATUS>,
+    pub nvEncEncodePicture:
+        Option<unsafe extern "C" fn(*mut c_void, *mut NV_ENC_PIC_PARAMS) -> NVENCSTATUS>,
+    pub nvEncLockBitstream:
+        Option<unsafe extern "C" fn(*mut c_void, *mut NV_ENC_LOCK_BITSTREAM) -> NVENCSTATUS>,
+    pub nvEncUnlockBitstream:
+        Option<unsafe extern "C" fn(*mut c_void, NV_ENC_OUTPUT_PTR) -> NVENCSTATUS>,
+    pub nvEncLockInputBuffer:
+        Option<unsafe extern "C" fn(*mut c_void, *mut NV_ENC_LOCK_INPUT_BUFFER) -> NVENCSTATUS>,
+    pub nvEncUnlockInputBuffer:
+        Option<unsafe extern "C" fn(*mut c_void, NV_ENC_INPUT_PTR) -> NVENCSTATUS>,
     pub nvEncGetEncodeStats: Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
-    pub nvEncGetSequenceParams: Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
-    pub nvEncRegisterAsyncEvent: Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
-    pub nvEncUnregisterAsyncEvent: Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
-    pub nvEncMapInputResource: Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
-    pub nvEncUnmapInputResource: Option<unsafe extern "C" fn(*mut c_void, NV_ENC_REGISTERED_PTR) -> NVENCSTATUS>,
+    pub nvEncGetSequenceParams:
+        Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
+    pub nvEncRegisterAsyncEvent:
+        Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
+    pub nvEncUnregisterAsyncEvent:
+        Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
+    pub nvEncMapInputResource:
+        Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
+    pub nvEncUnmapInputResource:
+        Option<unsafe extern "C" fn(*mut c_void, NV_ENC_REGISTERED_PTR) -> NVENCSTATUS>,
     pub nvEncDestroyEncoder: Option<unsafe extern "C" fn(*mut c_void) -> NVENCSTATUS>,
     pub nvEncInvalidateRefFrames: Option<unsafe extern "C" fn(*mut c_void, u64) -> NVENCSTATUS>,
-    pub nvEncOpenEncodeSessionEx: Option<unsafe extern "C" fn(*mut NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS, *mut *mut c_void) -> NVENCSTATUS>,
-    pub nvEncRegisterResource: Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
-    pub nvEncUnregisterResource: Option<unsafe extern "C" fn(*mut c_void, NV_ENC_REGISTERED_PTR) -> NVENCSTATUS>,
-    pub nvEncReconfigureEncoder: Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
+    pub nvEncOpenEncodeSessionEx: Option<
+        unsafe extern "C" fn(
+            *mut NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS,
+            *mut *mut c_void,
+        ) -> NVENCSTATUS,
+    >,
+    pub nvEncRegisterResource:
+        Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
+    pub nvEncUnregisterResource:
+        Option<unsafe extern "C" fn(*mut c_void, NV_ENC_REGISTERED_PTR) -> NVENCSTATUS>,
+    pub nvEncReconfigureEncoder:
+        Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
     pub reserved1: *mut c_void,
     pub nvEncCreateMVBuffer: Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
-    pub nvEncDestroyMVBuffer: Option<unsafe extern "C" fn(*mut c_void, NV_ENC_OUTPUT_PTR) -> NVENCSTATUS>,
-    pub nvEncRunMotionEstimationOnly: Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
+    pub nvEncDestroyMVBuffer:
+        Option<unsafe extern "C" fn(*mut c_void, NV_ENC_OUTPUT_PTR) -> NVENCSTATUS>,
+    pub nvEncRunMotionEstimationOnly:
+        Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
     pub nvEncGetLastErrorString: Option<unsafe extern "C" fn(*mut c_void) -> *const i8>,
-    pub nvEncSetIOCudaStreams: Option<unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> NVENCSTATUS>,
-    pub nvEncGetEncodePresetGUIDsEx: Option<unsafe extern "C" fn(*mut c_void, GUID, NV_ENC_TUNING_INFO, *mut GUID, u32, *mut u32) -> NVENCSTATUS>,
-    pub nvEncGetSequenceParamEx: Option<unsafe extern "C" fn(*mut c_void, *mut NV_ENC_INITIALIZE_PARAMS, *mut c_void) -> NVENCSTATUS>,
-    pub nvEncRestoreEncoderState: Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
-    pub nvEncGetEncoderStateSize: Option<unsafe extern "C" fn(*mut c_void, *mut usize) -> NVENCSTATUS>,
+    pub nvEncSetIOCudaStreams:
+        Option<unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> NVENCSTATUS>,
+    pub nvEncGetEncodePresetGUIDsEx: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            GUID,
+            NV_ENC_TUNING_INFO,
+            *mut GUID,
+            u32,
+            *mut u32,
+        ) -> NVENCSTATUS,
+    >,
+    pub nvEncGetSequenceParamEx: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            *mut NV_ENC_INITIALIZE_PARAMS,
+            *mut c_void,
+        ) -> NVENCSTATUS,
+    >,
+    pub nvEncRestoreEncoderState:
+        Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> NVENCSTATUS>,
+    pub nvEncGetEncoderStateSize:
+        Option<unsafe extern "C" fn(*mut c_void, *mut usize) -> NVENCSTATUS>,
     pub reserved2: [*mut c_void; 277],
 }
 
 impl Default for NV_ENCODE_API_FUNCTION_LIST {
     fn default() -> Self {
         Self {
-            version: NVENCAPI_STRUCT_VERSION(2),
+            version: NVENCAPI_STRUCT_VERSION(2, std::mem::size_of::<NV_ENCODE_API_FUNCTION_LIST>() as u32),
             reserved: 0,
             nvEncOpenEncodeSession: None,
             nvEncGetEncodeGUIDCount: None,
@@ -1024,4 +1099,5 @@ impl Default for NV_ENCODE_API_FUNCTION_LIST {
 }
 
 // API Entry Point Type
-pub type NvEncodeAPICreateInstanceFn = unsafe extern "C" fn(*mut NV_ENCODE_API_FUNCTION_LIST) -> NVENCSTATUS;
+pub type NvEncodeAPICreateInstanceFn =
+    unsafe extern "C" fn(*mut NV_ENCODE_API_FUNCTION_LIST) -> NVENCSTATUS;

@@ -121,7 +121,7 @@ const electronAPI = {
         getDisplays: (): Promise<any[]> =>
             ipcRenderer.invoke('hardware-capture:get-displays'),
 
-        start: (settings: { displayIndex: number; fps: number; bitrate: number; useHardwareEncoder: boolean; codec: string }): Promise<boolean> =>
+        start: (settings: { displayIndex: number; fps: number; bitrate: number; useHardwareEncoder: boolean; codec: string; bitrateMode: string }): Promise<boolean> =>
             ipcRenderer.invoke('hardware-capture:start', settings),
 
         stop: (): Promise<boolean> =>
@@ -135,6 +135,42 @@ const electronAPI = {
             ipcRenderer.on('hardware-capture:frame', listener);
             return () => { ipcRenderer.removeListener('hardware-capture:frame', listener); };
         },
+
+        // Audio
+        isAudioSupported: (): Promise<boolean> =>
+            ipcRenderer.invoke('hardware-capture:audio-supported'),
+
+        startAudio: (settings: { sampleRate: number; quality: string }): Promise<boolean> =>
+            ipcRenderer.invoke('hardware-capture:start-audio', settings),
+
+        stopAudio: (): Promise<void> =>
+            ipcRenderer.invoke('hardware-capture:stop-audio'),
+
+        onAudioFrame: (callback: (frame: { data: Buffer; sampleRate: number; channels: number; bitsPerSample: number; frameCount: number; timestampUs: bigint }) => void) => {
+            const listener = (_event: any, frame: any) => callback(frame);
+            ipcRenderer.on('hardware-capture:audio-frame', listener);
+            return () => { ipcRenderer.removeListener('hardware-capture:audio-frame', listener); };
+        },
+    },
+
+    virtualDisplay: {
+        getStatus: (): Promise<{ installed: boolean; activeDisplays: number; displays: any[] }> =>
+            ipcRenderer.invoke('virtual-display:get-status'),
+
+        checkInstalled: (): Promise<boolean> =>
+            ipcRenderer.invoke('virtual-display:check-installed'),
+
+        install: (): Promise<{ success: boolean; message: string }> =>
+            ipcRenderer.invoke('virtual-display:install'),
+
+        create: (config: { width: number; height: number; refreshRate: number }): Promise<boolean> =>
+            ipcRenderer.invoke('virtual-display:create', config),
+
+        remove: (index: number): Promise<boolean> =>
+            ipcRenderer.invoke('virtual-display:remove', index),
+
+        removeAll: (): Promise<boolean> =>
+            ipcRenderer.invoke('virtual-display:remove-all'),
     },
 };
 

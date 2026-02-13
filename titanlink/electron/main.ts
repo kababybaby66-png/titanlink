@@ -12,12 +12,25 @@ import dotenv from 'dotenv';
 dotenv.config({ path: path.join(__dirname, '../.env') });
 console.log('[Main] Loading .env from:', path.join(__dirname, '../.env'));
 
+// FORCE DISCRETE GPU: Try to force usage of high-performance GPU
+// This is critical for NVENC availability on hybrid systems (Optimuss/Muxless)
+app.commandLine.appendSwitch('force_high_performance_gpu');
+// app.commandLine.appendSwitch('disable-gpu-sandbox'); // Use only if absolutely necessary
+
+// DEBUG: Log environment details to help diagnose native module issues
+console.log('[Main] === Environment Debug ===');
+console.log(`[Main] Platform: ${process.platform}, Arch: ${process.arch}`);
+console.log(`[Main] PATH: ${process.env.PATH}`);
+console.log(`[Main] System32 exists: ${require('fs').existsSync('C:\\Windows\\System32')}`);
+console.log('[Main] =========================');
+
 import { createServer, Server as HttpServer } from 'http';
 import { Duplex } from 'stream';
 import { DriverManager } from './services/DriverManager';
 import { VirtualControllerService } from './services/VirtualControllerService';
 import { selfHostedTurnService } from './services/SelfHostedTurnService';
 import { hardwareCaptureService } from './services/HardwareCaptureService';
+import { virtualDisplayService } from './services/VirtualDisplayService';
 import type { DisplayInfo, GamepadInputState } from '../shared/types/ipc';
 
 // Keep a global reference of the window object
@@ -948,6 +961,58 @@ public class AudioDeviceHelper {
             mainWindow.webContents.send('hardware-capture:frame', frame);
         }
     });
+
+    // Forward native audio frames to renderer
+    hardwareCaptureService.on('audio-frame', (frame) => {
+        if (mainWindow) {
+            mainWindow.webContents.send('hardware-capture:audio-frame', frame);
+        }
+    });
+
+    ipcMain.handle('hardware-capture:audio-supported', async () => {
+        return hardwareCaptureService.isAudioSupported();
+    });
+
+    ipcMain.handle('hardware-capture:start-audio', async (_event, settings) => {
+        console.log('[Main] Starting audio capture:', settings);
+        return hardwareCaptureService.startAudio(settings.sampleRate, settings.quality);
+    });
+
+    ipcMain.handle('hardware-capture:stop-audio', async () => {
+        console.log('[Main] Stopping audio capture');
+        return hardwareCaptureService.stopAudio();
+    });
+
+    // ============================================
+    // Virtual Display Driver Handlers
+    // ============================================
+
+    ipcMain.handle('virtual-display:get-status', async () => {
+        return virtualDisplayService.getStatus();
+    });
+
+    ipcMain.handle('virtual-display:check-installed', async () => {
+        return virtualDisplayService.checkInstallation();
+    });
+
+    ipcMain.handle('virtual-display:install', async () => {
+        return virtualDisplayService.installDriver();
+    });
+
+    ipcMain.handle('virtual-display:create', async (_event, config) => {
+        console.log('[Main] Creating virtual display:', config);
+        return virtualDisplayService.createDisplay(config);
+    });
+
+    ipcMain.handle('virtual-display:remove', async (_event, index) => {
+        console.log('[Main] Removing virtual display at index:', index);
+        return virtualDisplayService.removeDisplay(index);
+    });
+
+    ipcMain.handle('virtual-display:remove-all', async () => {
+        console.log('[Main] Removing all virtual displays');
+        return virtualDisplayService.removeAllDisplays();
+    });
 }
 
 // ============================================
@@ -978,6 +1043,7 @@ app.on('window-all-closed', () => {
 // Handle app shutdown gracefully
 app.on('before-quit', async () => {
     await virtualController?.destroyController();
+    await virtualDisplayService.cleanup();
 });
 
 // ============================================

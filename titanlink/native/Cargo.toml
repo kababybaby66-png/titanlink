@@ -25,6 +25,9 @@ windows = { version = "0.58", features = [
     "Win32_System_Threading",
     "Win32_System_LibraryLoader",
     "Win32_Security",
+    # WASAPI audio capture
+    "Win32_Media_Audio",
+    "Win32_System_Com",
 ]}
 
 # Async runtime for threaded capture

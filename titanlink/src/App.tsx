@@ -80,6 +80,13 @@ function App() {
 
     const [error, setError] = useState<string | null>(null);
 
+    // Sync settings to UDP service whenever they change
+    useEffect(() => {
+        if (udpStreamServiceInstance) {
+            udpStreamServiceInstance.updateSettings(settings);
+        }
+    }, [settings]);
+
     // Check driver status on mount
     useEffect(() => {
         const checkDrivers = async () => {
@@ -203,6 +210,9 @@ function App() {
             const callbacks = createUDPCallbacks();
             const udpService = await getUdpStreamService();
 
+            // Ensure service has latest settings
+            udpService.updateSettings(settings);
+
             // UDPStreamService will handle hardware capture initialization internally
             const sessionCode = await udpService.startHosting(displayId, callbacks, false, useHardware);
 
@@ -225,6 +235,10 @@ function App() {
         try {
             const callbacks = createUDPCallbacks();
             const udpService = await getUdpStreamService();
+
+            // Ensure service has latest settings (e.g. for audio/decoder config)
+            udpService.updateSettings(settings);
+
             await udpService.connectToHost(sessionCode, callbacks);
 
             setSessionState({

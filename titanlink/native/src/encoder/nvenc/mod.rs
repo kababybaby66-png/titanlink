@@ -1,107 +1,330 @@
-//! NVENC Hardware Encoder
+//! NVENC Hardware Encoder - Working Implementation
 //!
-//! This module wraps NVIDIA's NVENC API for ultra-low latency H264 encoding.
-//! Uses direct FFI calls to nvEncodeAPI64.dll for maximum performance.
+//! This module provides NVENC hardware encoding for H.264/H.265/AV1.
+//! Uses NVIDIA's NVENC API with zero-copy D3D11 texture encoding.
+
+mod nvenc_ffi;
+use nvenc_ffi::*;
 
 use anyhow::{anyhow, Result};
 use std::ffi::c_void;
 use std::ptr;
 use std::sync::Once;
 
-#[cfg(target_os = "windows")]
-use windows::Win32::Foundation::HMODULE;
-#[cfg(target_os = "windows")]
-use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
-#[cfg(target_os = "windows")]
-use windows::core::{PCSTR, PCWSTR};
+use windows::core::{Interface, PCSTR};
+use windows::Win32::{
+    Foundation::HMODULE,
+    Graphics::{
+        Direct3D::D3D_DRIVER_TYPE_UNKNOWN,
+        Direct3D11::{
+            D3D11CreateDevice, ID3D11Device, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_SDK_VERSION,
+        },
+        Dxgi::{CreateDXGIFactory1, IDXGIAdapter, IDXGIAdapter1, IDXGIFactory1, DXGI_ADAPTER_DESC},
+    },
+    System::LibraryLoader::{GetProcAddress, LoadLibraryW},
+};
 
-mod nvenc_ffi;
-use nvenc_ffi::*;
-
-// Global API function list
 static INIT: Once = Once::new();
-static mut API: Option<NV_ENCODE_API_FUNCTION_LIST> = None;
+static mut API: Option<&'static NV_ENCODE_API_FUNCTION_LIST> = None;
 static mut LIB_HANDLE: Option<HMODULE> = None;
 
-/// Check if NVENC is available on this system
 pub fn is_available() -> bool {
     #[cfg(target_os = "windows")]
     {
         init_api().is_ok()
     }
-
     #[cfg(not(target_os = "windows"))]
     {
         false
     }
 }
 
-/// Initialize the NVENC API
-#[cfg(target_os = "windows")]
-fn init_api() -> Result<&'static NV_ENCODE_API_FUNCTION_LIST> {
-    unsafe {
-        INIT.call_once(|| {
-            // Load nvEncodeAPI64.dll
-            let dll_name: Vec<u16> = "nvEncodeAPI64.dll\0".encode_utf16().collect();
-            if let Ok(handle) = LoadLibraryW(PCWSTR(dll_name.as_ptr())) {
-                LIB_HANDLE = Some(handle);
+fn hmodule_as_ptr(handle: windows::Win32::Foundation::HMODULE) -> *mut c_void {
+    handle.0 as *mut c_void
+}
 
-                // Get NvEncodeAPICreateInstance function
-                let func_name = b"NvEncodeAPICreateInstance\0";
-                if let Some(proc) = GetProcAddress(handle, PCSTR(func_name.as_ptr())) {
-                    let create_instance: NvEncodeAPICreateInstanceFn = std::mem::transmute(proc);
+fn load_nvenc_library() -> Option<windows::Win32::Foundation::HMODULE> {
+    let dll_names = ["nvEncodeAPI64.dll", "nvEncodeAPI.dll"];
 
-                    // Create function list
-                    let mut api = NV_ENCODE_API_FUNCTION_LIST::default();
-                    let status = create_instance(&mut api);
-
-                    if status == NV_ENC_SUCCESS {
-                        API = Some(api);
-                    }
-                }
+    for dll_name in &dll_names {
+        let dll_name_wide: Vec<u16> = format!("{}\0", dll_name).encode_utf16().collect();
+        let h = unsafe { LoadLibraryW(windows::core::PCWSTR(dll_name_wide.as_ptr())) };
+        if let Ok(module) = h {
+            if !module.0.is_null() {
+                return Some(module);
             }
-        });
+        }
+    }
+    None
+}
 
-        API.as_ref().ok_or_else(|| anyhow!("Failed to initialize NVENC API"))
+fn get_nvenc_create_instance_proc(
+    handle: windows::Win32::Foundation::HMODULE,
+) -> Option<NvEncodeAPICreateInstanceFn> {
+    let func_name = b"NvEncodeAPICreateInstance\0";
+    let maybe_proc = unsafe { GetProcAddress(handle, PCSTR(func_name.as_ptr())) };
+    if let Some(proc) = maybe_proc {
+        Some(unsafe { std::mem::transmute(proc) })
+    } else {
+        None
     }
 }
 
-#[cfg(not(target_os = "windows"))]
-fn init_api() -> Result<&'static NV_ENCODE_API_FUNCTION_LIST> {
-    Err(anyhow!("NVENC is only available on Windows"))
+fn create_nvenc_api_instance(
+    handle: windows::Win32::Foundation::HMODULE,
+) -> Result<NV_ENCODE_API_FUNCTION_LIST> {
+    let create_instance = get_nvenc_create_instance_proc(handle)
+        .ok_or_else(|| anyhow!("NvEncodeAPICreateInstance not found in DLL"))?;
+
+    eprintln!(
+        "[NVENC] NVENCAPI_VERSION = {} (0x{:X})",
+        NVENCAPI_VERSION(),
+        NVENCAPI_VERSION()
+    );
+
+    // Use default implementation which correctly calculates version using NVENCAPI_STRUCT_VERSION macro
+    let mut api = NV_ENCODE_API_FUNCTION_LIST::default();
+
+    eprintln!("[NVENC] Calling NvEncodeAPICreateInstance with functionList version: 0x{:X}", api.version);
+    let status = unsafe { create_instance(&mut api) };
+
+    if status == NV_ENC_SUCCESS {
+        eprintln!(
+            "[NVENC] SUCCESS! NVENC API initialized. Driver version: {} (0x{:X})",
+            api.version, api.version
+        );
+        Ok(api)
+    } else {
+        return Err(anyhow!(
+            "NvEncodeAPICreateInstance failed with status: {}. Check: (1) NVENC supported by GPU, (2) Latest NVIDIA drivers, (3) Not in virtualized env.",
+            status
+        ));
+    }
 }
 
-/// NVENC encoder configuration
-#[derive(Clone, Debug)]
+fn init_api_internal() -> Result<()> {
+    let handle = load_nvenc_library().ok_or_else(|| {
+        anyhow!("Failed to load nvEncodeAPI64.dll. Please install NVIDIA Game Ready Driver.")
+    })?;
+
+    let api = create_nvenc_api_instance(handle)?;
+
+    let leaked_api: &'static NV_ENCODE_API_FUNCTION_LIST = Box::leak(Box::new(api));
+
+    unsafe {
+        LIB_HANDLE = Some(handle);
+        API = Some(leaked_api);
+    }
+
+    eprintln!("[NVENC] Loaded nvEncodeAPI64.dll successfully");
+    eprintln!(
+        "[NVENC] API version: {}.{}",
+        leaked_api.version >> 8,
+        leaked_api.version & 0xFF
+    );
+
+    if leaked_api.nvEncOpenEncodeSessionEx.is_some() {
+        eprintln!("[NVENC] nvEncOpenEncodeSessionEx: available");
+    }
+    if leaked_api.nvEncInitializeEncoder.is_some() {
+        eprintln!("[NVENC] nvEncInitializeEncoder: available");
+    }
+
+    Ok(())
+}
+
+fn init_api() -> Result<&'static NV_ENCODE_API_FUNCTION_LIST> {
+    INIT.call_once(|| {
+        if let Err(e) = init_api_internal() {
+            eprintln!("[NVENC] Initialization failed: {:#}", e);
+        }
+    });
+
+    unsafe { API.ok_or_else(|| anyhow!("NVENC not available")) }
+}
+
+fn create_d3d11_device_for_nvenc() -> Result<*mut c_void> {
+    eprintln!("[NVENC] create_d3d11_device_for_nvenc() called");
+    unsafe {
+        let factory: IDXGIFactory1 =
+            CreateDXGIFactory1().map_err(|e| anyhow!("Failed to create DXGI Factory: {:?}", e))?;
+        eprintln!("[NVENC] DXGI factory created");
+
+        let nvidia_vendor_id: u32 = 0x10DE;
+        let mut adapter: Option<IDXGIAdapter1> = None;
+
+        for i in 0.. {
+            match factory.EnumAdapters1(i) {
+                Ok(a) => {
+                    let desc = a.GetDesc();
+                    if let Ok(d) = desc {
+                        let gpu_name = String::from_utf16_lossy(
+                            &d.Description
+                                [..d.Description.iter().position(|&c| c == 0).unwrap_or(32)],
+                        );
+                        eprintln!(
+                            "[NVENC] Enumerated GPU: {}, VendorId: 0x{:X}",
+                            gpu_name, d.VendorId
+                        );
+                        if d.VendorId == nvidia_vendor_id {
+                            adapter = Some(a);
+                            eprintln!("[NVENC] Found NVIDIA GPU: {}", gpu_name);
+                            break;
+                        }
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+
+        let adapter = adapter.ok_or_else(|| anyhow!("No NVIDIA GPU found for NVENC."))?;
+
+        let mut device: Option<ID3D11Device> = None;
+        let mut _context = None;
+
+        let adapter_cast = adapter
+            .cast::<IDXGIAdapter>()
+            .map_err(|e| anyhow!("Failed to cast adapter: {:?}", e))?;
+        eprintln!("[NVENC] Adapter cast successful, creating D3D11 device");
+
+        D3D11CreateDevice(
+            Some(&adapter_cast),
+            D3D_DRIVER_TYPE_UNKNOWN,
+            None,
+            D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+            None,
+            D3D11_SDK_VERSION,
+            Some(&mut device),
+            None,
+            Some(&mut _context),
+        )
+        .map_err(|e| anyhow!("Failed to create D3D11 device: {:?}", e))?;
+
+        let device = device.ok_or_else(|| anyhow!("D3D11 device is null"))?;
+
+        eprintln!("[NVENC] D3D11 device created successfully");
+        Ok(std::mem::transmute(device))
+    }
+}
+
+#[derive(Debug)]
+pub struct NvencUnavailableReason {
+    pub reason: NvencUnavailableReasonType,
+    pub details: String,
+}
+
+#[derive(Debug)]
+pub enum NvencUnavailableReasonType {
+    NoNvidiaGpu,
+    DriverTooOld,
+    DriverMissingDll,
+    ApiVersionMismatch,
+    D3d11CreationFailed,
+    EncodeSessionFailed,
+    VirtualizedEnvironment,
+    Unknown,
+}
+
+pub fn check_availability() -> Result<(), NvencUnavailableReason> {
+    let dll_name = "nvEncodeAPI64.dll\0";
+    let dll_name_wide: Vec<u16> = dll_name.encode_utf16().collect();
+    let h = unsafe { LoadLibraryW(windows::core::PCWSTR(dll_name_wide.as_ptr())) };
+
+    let h = match h {
+        Ok(module) if !module.0.is_null() => module,
+        _ => {
+            // Fallback: Try explicit path in System32
+            // Issue: In some Electron dev environments, PATH might be stripped or shadowed
+            let abs_path = "C:\\Windows\\System32\\nvEncodeAPI64.dll\0";
+            let abs_path_wide: Vec<u16> = abs_path.encode_utf16().collect();
+            let h_abs = unsafe { LoadLibraryW(windows::core::PCWSTR(abs_path_wide.as_ptr())) };
+            
+            match h_abs {
+                Ok(module) if !module.0.is_null() => {
+                    eprintln!("[NVENC] Loaded DLL from explicit path: C:\\Windows\\System32\\nvEncodeAPI64.dll");
+                    module
+                },
+                _ => {
+                    return Err(NvencUnavailableReason {
+                        reason: NvencUnavailableReasonType::DriverMissingDll,
+                        details: format!("nvEncodeAPI64.dll not found (checked PATH and System32). Error: {:?}", h.err()),
+                    });
+                }
+            }
+        }
+    };
+
+    let func_name = b"NvEncodeAPICreateInstance\0";
+    let maybe_proc = unsafe { GetProcAddress(h, PCSTR(func_name.as_ptr())) };
+
+    // Note: We don't call FreeLibrary here as it's not available in the current windows crate version.
+    // The library will be freed when the process exits.
+
+    if maybe_proc.is_none() {
+        return Err(NvencUnavailableReason {
+            reason: NvencUnavailableReasonType::DriverTooOld,
+            details: "NvEncodeAPICreateInstance not found. Driver may be too old.".to_string(),
+        });
+    }
+
+    match create_d3d11_device_for_nvenc() {
+        Ok(_dev) => Ok(()),
+        Err(e) => Err(NvencUnavailableReason {
+            reason: NvencUnavailableReasonType::D3d11CreationFailed,
+            details: format!(
+                "Failed to create D3D11 device: {}. Ensure GPU driver is properly installed.",
+                e
+            ),
+        }),
+    }
+}
+
+pub fn get_nvenc_status_message() -> String {
+    match check_availability() {
+        Ok(_) => "NVENC is available and ready to use.".to_string(),
+        Err(reason) => format!(
+            "NVENC unavailable: {:?} - {}",
+            reason.reason, reason.details
+        ),
+    }
+}
+
 pub struct NvencConfig {
-    /// Target bitrate in bits per second
     pub bitrate: u32,
-    /// Maximum bitrate for VBR
     pub max_bitrate: u32,
-    /// Target framerate
     pub framerate: u32,
-    /// GOP (Group of Pictures) length in frames
     pub gop_length: u32,
-    /// Use B-frames (should be 0 for low latency)
     pub b_frames: u32,
-    /// Preset (lower = faster, higher = quality)
     pub preset: NvencPreset,
-    /// Codec selection
     pub codec: VideoCodec,
-    /// H264 profile
     pub profile: H264Profile,
-    /// Rate control mode
     pub rate_control: RateControl,
+}
+
+impl Clone for NvencConfig {
+    fn clone(&self) -> Self {
+        Self {
+            bitrate: self.bitrate,
+            max_bitrate: self.max_bitrate,
+            framerate: self.framerate,
+            gop_length: self.gop_length,
+            b_frames: self.b_frames,
+            preset: self.preset,
+            codec: self.codec,
+            profile: self.profile,
+            rate_control: self.rate_control,
+        }
+    }
 }
 
 impl Default for NvencConfig {
     fn default() -> Self {
         Self {
-            bitrate: 10_000_000,      // 10 Mbps
-            max_bitrate: 20_000_000,  // 20 Mbps max
+            bitrate: 10_000_000,
+            max_bitrate: 20_000_000,
             framerate: 60,
-            gop_length: 120,          // Keyframe every 2 seconds at 60fps
-            b_frames: 0,              // No B-frames for low latency
+            gop_length: 120,
+            b_frames: 0,
             preset: NvencPreset::LowLatencyHighPerformance,
             codec: VideoCodec::H264,
             profile: H264Profile::Baseline,
@@ -110,7 +333,6 @@ impl Default for NvencConfig {
     }
 }
 
-/// Video codec selection
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum VideoCodec {
     H264,
@@ -128,7 +350,6 @@ impl VideoCodec {
     }
 }
 
-/// NVENC encoding preset
 #[derive(Clone, Copy, Debug)]
 pub enum NvencPreset {
     LowLatencyHighPerformance,
@@ -148,7 +369,6 @@ impl NvencPreset {
     }
 }
 
-/// H264 profile
 #[derive(Clone, Copy, Debug)]
 pub enum H264Profile {
     Baseline,
@@ -166,7 +386,6 @@ impl H264Profile {
     }
 }
 
-/// Rate control mode
 #[derive(Clone, Copy, Debug)]
 pub enum RateControl {
     CbrLowDelay,
@@ -184,21 +403,14 @@ impl RateControl {
     }
 }
 
-/// Encoded frame output
 pub struct EncodedPacket {
-    /// Frame number
     pub frame_number: u32,
-    /// Timestamp in microseconds
     pub timestamp_us: i64,
-    /// Is this a keyframe (IDR)?
     pub is_keyframe: bool,
-    /// Encoded H264 data (Annex B format with start codes)
     pub data: Vec<u8>,
-    /// Encoding time in microseconds
     pub encode_time_us: u64,
 }
 
-/// NVENC encoder
 pub struct NvencEncoder {
     encoder: *mut c_void,
     input_buffer: NV_ENC_INPUT_PTR,
@@ -210,73 +422,164 @@ pub struct NvencEncoder {
     initialized: bool,
 }
 
-// NVENC encoder can be sent between threads
 unsafe impl Send for NvencEncoder {}
 
 impl NvencEncoder {
-    /// Create a new NVENC encoder
     pub fn new(width: u32, height: u32, config: NvencConfig) -> Result<Self> {
         let api = init_api()?;
 
-        // Create a D3D11 device for NVENC
-        let device = create_d3d11_device()?;
-
-        // Open encode session
-        let mut encoder: *mut c_void = ptr::null_mut();
-        let mut session_params = NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS::default();
-        session_params.device = device;
-        session_params.deviceType = NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_DIRECTX11;
-
-        let open_fn = api.nvEncOpenEncodeSessionEx
+        let open_fn = api
+            .nvEncOpenEncodeSessionEx
             .ok_or_else(|| anyhow!("nvEncOpenEncodeSessionEx not available"))?;
 
-        let status = unsafe { open_fn(&mut session_params, &mut encoder) };
-        if status != NV_ENC_SUCCESS {
-            return Err(anyhow!("Failed to open NVENC session: {}", status));
+        let device = create_d3d11_device_for_nvenc()?;
+
+        // Use the current SDK version first
+        let api_versions = vec![
+            ((13 << 24) | 0, 13, 0), // 13.0 in newer format
+            ((12 << 24) | 1, 12, 1), // 12.1 in newer format
+            ((12 << 24) | 0, 12, 0), // 12.0 in newer format
+            (3073, 12, 1),           // 12.1 in old format
+            (2816, 11, 0),           // 11.0 in old format
+            (2048, 8, 0),            // 8.0 in old format
+        ];
+
+        let mut last_error = None;
+
+        for (api_ver, major, minor) in api_versions {
+            let mut encoder: *mut c_void = ptr::null_mut();
+            let mut session_params = NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS::default();
+            // version is set by Default::default() using correct macro
+            session_params.device = device;
+            session_params.apiVersion = api_ver;
+
+            eprintln!(
+                "[NVENC] Trying API version {}.{} (struct ver: 0x{:X}, api ver: 0x{:X})",
+                major, minor, session_params.version, session_params.apiVersion
+            );
+            eprintln!(
+                "[NVENC DEBUG] Struct Size: {}, Expected: 1552",
+                std::mem::size_of::<NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS>()
+            );
+            // Verify offsets manually via pointer arithmetic (unsafe but informative)
+            let _dummy = NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS::default();
+            eprintln!(
+                "[NVENC DEBUG] Offsets: version={}, deviceType={}, device={}, reserved={}, apiVersion={}, reserved1={}, reserved2={}",
+                (&_dummy.version as *const _ as usize) - (&_dummy as *const _ as usize),
+                (&_dummy.deviceType as *const _ as usize) - (&_dummy as *const _ as usize),
+                (&_dummy.device as *const _ as usize) - (&_dummy as *const _ as usize),
+                (&_dummy.reserved as *const _ as usize) - (&_dummy as *const _ as usize),
+                (&_dummy.apiVersion as *const _ as usize) - (&_dummy as *const _ as usize),
+                (&_dummy.reserved1 as *const _ as usize) - (&_dummy as *const _ as usize),
+                (&_dummy.reserved2 as *const _ as usize) - (&_dummy as *const _ as usize),
+            );
+
+            let status = unsafe { open_fn(&mut session_params, &mut encoder) };
+
+            if status == NV_ENC_SUCCESS {
+                eprintln!(
+                    "[NVENC] Successfully opened session with API version {}.{}",
+                    major, minor
+                );
+                return Self::init_encoder_session(api, encoder, width, height, &config);
+            }
+
+            eprintln!(
+                "[NVENC] API version {}.{} failed with status: {} ({})",
+                major,
+                minor,
+                status,
+                match status {
+                    NV_ENC_ERR_INVALID_VERSION => "INVALID_VERSION",
+                    NV_ENC_ERR_INVALID_ENCODERDEVICE => "INVALID_ENCODERDEVICE",
+                    NV_ENC_ERR_UNSUPPORTED_DEVICE => "UNSUPPORTED_DEVICE",
+                    _ => "Unknown",
+                }
+            );
+            last_error = Some(status);
         }
 
-        Self::init_encoder_session(api, encoder, width, height, config)
+        return Err(anyhow!(
+            "Failed to open NVENC session with all API versions. Last error: {}. \
+            Check: (1) GPU supports NVENC, (2) Not running in virtualized environment without GPU-Pv, (3) Latest NVIDIA drivers installed.",
+            last_error.map(|s| s as i32).unwrap_or(-1)
+        ));
     }
 
-    /// Create a new NVENC encoder sharing an existing D3D11 device (Zero-Copy)
     pub fn new_from_device(
         device: *mut c_void,
         width: u32,
         height: u32,
         config: NvencConfig,
     ) -> Result<Self> {
+        eprintln!("[NVENC] new_from_device called, device ptr: {:p}", device);
         let api = init_api()?;
-        
-        // Open encode session with existing device
-        let mut encoder: *mut c_void = ptr::null_mut();
-        let mut session_params = NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS::default();
-        session_params.device = device;
-        session_params.deviceType = NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_DIRECTX11;
 
-        let open_fn = api.nvEncOpenEncodeSessionEx
+        eprintln!(
+            "[NVENC] Driver NVENC API version reported during init: {}.{}",
+            api.version >> 8,
+            api.version & 0xFF
+        );
+
+        let mut encoder: *mut c_void = ptr::null_mut();
+
+        let open_fn = api
+            .nvEncOpenEncodeSessionEx
             .ok_or_else(|| anyhow!("nvEncOpenEncodeSessionEx not available"))?;
 
+        let mut session_params: NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS = Default::default();
+        session_params.device = device;
+        session_params.deviceType = NV_ENC_DEVICE_TYPE::NV_ENC_DEVICE_TYPE_DIRECTX11;
+        session_params.apiVersion = NVENCAPI_VERSION_FALLBACK();
+
+        eprintln!(
+            "[NVENC] Session params - apiVersion: {}, structVersion: 0x{:X}",
+            session_params.apiVersion, session_params.version
+        );
+
         let status = unsafe { open_fn(&mut session_params, &mut encoder) };
+        eprintln!(
+            "[NVENC] nvEncOpenEncodeSessionEx returned status: {} ({})",
+            status,
+            match status {
+                _ if status == NV_ENC_SUCCESS => "Success",
+                _ if status == NV_ENC_ERR_INVALID_VERSION =>
+                    "INVALID_VERSION - Driver doesn't support requested API version",
+                _ if status == NV_ENC_ERR_INVALID_ENCODERDEVICE =>
+                    "INVALID_ENCODERDEVICE - D3D11 device not supported by NVENC",
+                _ if status == NV_ENC_ERR_UNSUPPORTED_DEVICE =>
+                    "UNSUPPORTED_DEVICE - GPU doesn't support NVENC",
+                _ if status == NV_ENC_ERR_INVALID_DEVICE => "INVALID_DEVICE - No GPU device",
+                _ if status == NV_ENC_ERR_DEVICE_NOT_EXIST => "DEVICE_NOT_EXIST",
+                _ if status == NV_ENC_ERR_NO_ENCODE_DEVICE => "NO_ENCODE_DEVICE",
+                _ => "Unknown error",
+            }
+        );
+
         if status != NV_ENC_SUCCESS {
-            return Err(anyhow!("Failed to open NVENC session with existing device: {}", status));
+            return Err(anyhow!(
+                "Failed to open NVENC session. Status: {}. This could mean: (1) D3D11 device not compatible with NVENC, (2) Running in virtualized environment without GPU-Pv support, (3) GPU doesn't have encoding capability. Try: Update NVIDIA drivers, check if GPU supports NVENC, or use software encoding.",
+                status
+            ));
         }
 
-        Self::init_encoder_session(api, encoder, width, height, config)
+        Self::init_encoder_session(api, encoder, width, height, &config)
     }
 
-    /// Common initialization logic
     fn init_encoder_session(
         api: &'static NV_ENCODE_API_FUNCTION_LIST,
         encoder: *mut c_void,
         width: u32,
         height: u32,
-        config: NvencConfig,
+        config: &NvencConfig,
     ) -> Result<Self> {
-        // Fetch preset configuration from driver
-        let get_preset_fn = api.nvEncGetEncodePresetConfigEx
+        let get_preset_fn = api
+            .nvEncGetEncodePresetConfigEx
             .ok_or_else(|| anyhow!("nvEncGetEncodePresetConfigEx not available"))?;
 
-        let mut preset_config = NV_ENC_PRESET_CONFIG::default();
+        let mut preset_config: NV_ENC_PRESET_CONFIG = unsafe { std::mem::zeroed() };
+        preset_config.version = NVENCAPI_STRUCT_VERSION(4, 1);
+
         let status = unsafe {
             get_preset_fn(
                 encoder,
@@ -291,22 +594,20 @@ impl NvencEncoder {
             return Err(anyhow!("Failed to get preset configuration: {}", status));
         }
 
-        // Initialize encoder based on preset settings
         let mut enc_config = preset_config.presetCfg;
         enc_config.profileGUID = config.profile.to_guid();
         enc_config.gopLength = config.gop_length;
-        enc_config.frameIntervalP = 1; // No B-frames
+        enc_config.frameIntervalP = 1;
         enc_config.rcParams.rateControlMode = config.rate_control.to_mode();
         enc_config.rcParams.averageBitRate = config.bitrate;
         enc_config.rcParams.maxBitRate = config.max_bitrate;
         enc_config.rcParams.lowDelayKeyFrameScale = 1;
 
-        // Configure codec specific settings for low latency
         unsafe {
             match config.codec {
                 VideoCodec::H264 => {
                     enc_config.encodeCodecConfig.h264Config.idrPeriod = config.gop_length;
-                    enc_config.encodeCodecConfig.h264Config.reservedBitFields |= 1 << 11; // repeatSPSPPS = 1
+                    enc_config.encodeCodecConfig.h264Config.reservedBitFields |= 1 << 11;
                     enc_config.encodeCodecConfig.h264Config.maxNumRefFrames = 1;
                 }
                 VideoCodec::HEVC => {
@@ -318,7 +619,8 @@ impl NvencEncoder {
             }
         }
 
-        let mut init_params = NV_ENC_INITIALIZE_PARAMS::default();
+        let mut init_params: NV_ENC_INITIALIZE_PARAMS = unsafe { std::mem::zeroed() };
+        init_params.version = NVENCAPI_STRUCT_VERSION(5, 1);
         init_params.encodeGUID = config.codec.to_guid();
         init_params.presetGUID = config.preset.to_guid();
         init_params.encodeWidth = width;
@@ -327,11 +629,12 @@ impl NvencEncoder {
         init_params.darHeight = height;
         init_params.frameRateNum = config.framerate;
         init_params.frameRateDen = 1;
-        init_params.reservedBitFields = 2; // enablePTD = 1
+        init_params.reservedBitFields = 2;
         init_params.encodeConfig = &mut enc_config;
         init_params.tuningInfo = NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY;
 
-        let init_fn = api.nvEncInitializeEncoder
+        let init_fn = api
+            .nvEncInitializeEncoder
             .ok_or_else(|| anyhow!("nvEncInitializeEncoder not available"))?;
 
         let status = unsafe { init_fn(encoder, &mut init_params) };
@@ -339,13 +642,13 @@ impl NvencEncoder {
             return Err(anyhow!("Failed to initialize NVENC encoder: {}", status));
         }
 
-        // Create input buffer (ARGB format)
         let mut input_buffer_params = NV_ENC_CREATE_INPUT_BUFFER::default();
         input_buffer_params.width = width;
         input_buffer_params.height = height;
         input_buffer_params.bufferFmt = NV_ENC_BUFFER_FORMAT::NV_ENC_BUFFER_FORMAT_ABGR;
 
-        let create_input_fn = api.nvEncCreateInputBuffer
+        let create_input_fn = api
+            .nvEncCreateInputBuffer
             .ok_or_else(|| anyhow!("nvEncCreateInputBuffer not available"))?;
 
         let status = unsafe { create_input_fn(encoder, &mut input_buffer_params) };
@@ -353,10 +656,10 @@ impl NvencEncoder {
             return Err(anyhow!("Failed to create NVENC input buffer: {}", status));
         }
 
-        // Create output bitstream buffer
         let mut output_buffer_params = NV_ENC_CREATE_BITSTREAM_BUFFER::default();
 
-        let create_output_fn = api.nvEncCreateBitstreamBuffer
+        let create_output_fn = api
+            .nvEncCreateBitstreamBuffer
             .ok_or_else(|| anyhow!("nvEncCreateBitstreamBuffer not available"))?;
 
         let status = unsafe { create_output_fn(encoder, &mut output_buffer_params) };
@@ -368,7 +671,7 @@ impl NvencEncoder {
             encoder,
             input_buffer: input_buffer_params.inputBuffer,
             output_buffer: output_buffer_params.bitstreamBuffer,
-            config,
+            config: config.clone(),
             frame_number: 0,
             width,
             height,
@@ -376,27 +679,30 @@ impl NvencEncoder {
         })
     }
 
-    /// Encode a D3D11 texture directly (Zero-Copy)
-    pub fn encode_texture(&mut self, texture: *mut c_void, force_keyframe: bool) -> Result<EncodedPacket> {
+    pub fn encode_texture(
+        &mut self,
+        texture: *mut c_void,
+        force_keyframe: bool,
+    ) -> Result<EncodedPacket> {
         if !self.initialized {
             return Err(anyhow!("Encoder not initialized"));
         }
 
         let start = std::time::Instant::now();
         let api = init_api()?;
-        
+
         let is_keyframe = force_keyframe || (self.frame_number % self.config.gop_length == 0);
 
-        // Register texture as input resource
         let mut reg_res = NV_ENC_REGISTER_RESOURCE::default();
         reg_res.resourceType = NV_ENC_INPUT_RESOURCE_TYPE::NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX;
         reg_res.width = self.width;
         reg_res.height = self.height;
         reg_res.pitch = self.width * 4;
         reg_res.resourceToRegister = texture;
-        reg_res.bufferFormat = NV_ENC_BUFFER_FORMAT::NV_ENC_BUFFER_FORMAT_ARGB; // DXGI is usually B8G8R8A8
+        reg_res.bufferFormat = NV_ENC_BUFFER_FORMAT::NV_ENC_BUFFER_FORMAT_ARGB;
 
-        let register_fn = api.nvEncRegisterResource
+        let register_fn = api
+            .nvEncRegisterResource
             .ok_or_else(|| anyhow!("nvEncRegisterResource not available"))?;
 
         let status = unsafe { register_fn(self.encoder, &mut reg_res as *mut _ as *mut c_void) };
@@ -406,25 +712,25 @@ impl NvencEncoder {
 
         let registered_resource = reg_res.registeredResource;
 
-        // Map resource
         let mut map_res = NV_ENC_MAP_INPUT_RESOURCE::default();
         map_res.registeredResource = registered_resource;
 
-        let map_fn = api.nvEncMapInputResource
+        let map_fn = api
+            .nvEncMapInputResource
             .ok_or_else(|| anyhow!("nvEncMapInputResource not available"))?;
-            
+
         let status = unsafe { map_fn(self.encoder, &mut map_res as *mut _ as *mut c_void) };
         if status != NV_ENC_SUCCESS {
-             let _ = unsafe { (api.nvEncUnregisterResource.unwrap())(self.encoder, registered_resource) };
-             return Err(anyhow!("Failed to map resource: {}", status));
+            unsafe {
+                (api.nvEncUnregisterResource.unwrap())(self.encoder, registered_resource);
+            }
+            return Err(anyhow!("Failed to map resource: {}", status));
         }
 
-        // Encode
         let mut pic_params = NV_ENC_PIC_PARAMS::default();
         pic_params.inputWidth = self.width;
         pic_params.inputHeight = self.height;
         pic_params.inputPitch = self.width * 4;
-        // USE MAPPED BUFFER
         pic_params.inputBuffer = map_res.mappedResource;
         pic_params.outputBitstream = self.output_buffer;
         pic_params.bufferFmt = NV_ENC_BUFFER_FORMAT::NV_ENC_BUFFER_FORMAT_ARGB;
@@ -432,19 +738,19 @@ impl NvencEncoder {
         pic_params.inputTimeStamp = self.frame_number as u64;
 
         if is_keyframe {
-            pic_params.encodePicFlags = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEIDR as u32
-                | NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_OUTPUT_SPSPPS as u32;
+            pic_params.encodePicFlags = (NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEIDR as u32)
+                | (NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_OUTPUT_SPSPPS as u32);
         }
 
-        let encode_fn = api.nvEncEncodePicture
+        let encode_fn = api
+            .nvEncEncodePicture
             .ok_or_else(|| anyhow!("nvEncEncodePicture not available"))?;
 
         let status = unsafe { encode_fn(self.encoder, &mut pic_params) };
-        
-        // Always unmap and unregister even if encode fails
+
         let unmap_fn = api.nvEncUnmapInputResource.unwrap();
         unsafe { unmap_fn(self.encoder, map_res.mappedResource) };
-        
+
         let unreg_fn = api.nvEncUnregisterResource.unwrap();
         unsafe { unreg_fn(self.encoder, registered_resource) };
 
@@ -455,14 +761,18 @@ impl NvencEncoder {
         self.retrieve_bitstream(start, is_keyframe)
     }
 
-    fn retrieve_bitstream(&mut self, start_time: std::time::Instant, request_keyframe: bool) -> Result<EncodedPacket> {
+    fn retrieve_bitstream(
+        &mut self,
+        start_time: std::time::Instant,
+        _request_keyframe: bool,
+    ) -> Result<EncodedPacket> {
         let api = init_api()?;
-        
-        // Lock bitstream to get output
+
         let mut lock_bitstream = NV_ENC_LOCK_BITSTREAM::default();
         lock_bitstream.outputBitstreamBuffer = self.output_buffer;
 
-        let lock_bitstream_fn = api.nvEncLockBitstream
+        let lock_bitstream_fn = api
+            .nvEncLockBitstream
             .ok_or_else(|| anyhow!("nvEncLockBitstream not available"))?;
 
         let status = unsafe { lock_bitstream_fn(self.encoder, &mut lock_bitstream) };
@@ -470,7 +780,6 @@ impl NvencEncoder {
             return Err(anyhow!("Failed to lock bitstream: {}", status));
         }
 
-        // Copy encoded data
         let encoded_data = unsafe {
             std::slice::from_raw_parts(
                 lock_bitstream.bitstreamBufferPtr as *const u8,
@@ -484,8 +793,8 @@ impl NvencEncoder {
             NV_ENC_PIC_TYPE::NV_ENC_PIC_TYPE_IDR | NV_ENC_PIC_TYPE::NV_ENC_PIC_TYPE_I
         );
 
-        // Unlock bitstream
-        let unlock_bitstream_fn = api.nvEncUnlockBitstream
+        let unlock_bitstream_fn = api
+            .nvEncUnlockBitstream
             .ok_or_else(|| anyhow!("nvEncUnlockBitstream not available"))?;
 
         let status = unsafe { unlock_bitstream_fn(self.encoder, self.output_buffer) };
@@ -509,7 +818,6 @@ impl NvencEncoder {
         })
     }
 
-    /// Encode a frame from BGRA pixel data
     pub fn encode_bgra(&mut self, data: &[u8], force_keyframe: bool) -> Result<EncodedPacket> {
         if !self.initialized {
             return Err(anyhow!("Encoder not initialized"));
@@ -518,11 +826,11 @@ impl NvencEncoder {
         let start = std::time::Instant::now();
         let api = init_api()?;
 
-        // Lock input buffer
         let mut lock_params = NV_ENC_LOCK_INPUT_BUFFER::default();
         lock_params.inputBuffer = self.input_buffer;
 
-        let lock_fn = api.nvEncLockInputBuffer
+        let lock_fn = api
+            .nvEncLockInputBuffer
             .ok_or_else(|| anyhow!("nvEncLockInputBuffer not available"))?;
 
         let status = unsafe { lock_fn(self.encoder, &mut lock_params) };
@@ -530,8 +838,6 @@ impl NvencEncoder {
             return Err(anyhow!("Failed to lock input buffer: {}", status));
         }
 
-        // Copy BGRA data to ABGR buffer (swap R and B)
-        // NVENC expects ABGR, we have BGRA
         unsafe {
             let dst = lock_params.bufferDataPtr as *mut u8;
             let pitch = lock_params.pitch as usize;
@@ -544,19 +850,17 @@ impl NvencEncoder {
                 for x in 0..self.width as usize {
                     let src_idx = x * 4;
                     let dst_idx = x * 4;
-                    
-                    // BGRA -> ABGR conversion
-                    // ABGR Layout in memory: [A] [B] [G] [R]
-                    *dst_row.add(dst_idx + 0) = src_row[src_idx + 3]; // A
-                    *dst_row.add(dst_idx + 1) = src_row[src_idx + 0]; // B (Src: 0)
-                    *dst_row.add(dst_idx + 2) = src_row[src_idx + 1]; // G (Src: 1)
-                    *dst_row.add(dst_idx + 3) = src_row[src_idx + 2]; // R (Src: 2)
+
+                    *dst_row.add(dst_idx + 0) = src_row[src_idx + 3];
+                    *dst_row.add(dst_idx + 1) = src_row[src_idx + 0];
+                    *dst_row.add(dst_idx + 2) = src_row[src_idx + 1];
+                    *dst_row.add(dst_idx + 3) = src_row[src_idx + 2];
                 }
             }
         }
 
-        // Unlock input buffer
-        let unlock_fn = api.nvEncUnlockInputBuffer
+        let unlock_fn = api
+            .nvEncUnlockInputBuffer
             .ok_or_else(|| anyhow!("nvEncUnlockInputBuffer not available"))?;
 
         let status = unsafe { unlock_fn(self.encoder, self.input_buffer) };
@@ -564,7 +868,6 @@ impl NvencEncoder {
             return Err(anyhow!("Failed to unlock input buffer: {}", status));
         }
 
-        // Encode the frame
         let is_keyframe = force_keyframe || (self.frame_number % self.config.gop_length == 0);
 
         let mut pic_params = NV_ENC_PIC_PARAMS::default();
@@ -578,11 +881,12 @@ impl NvencEncoder {
         pic_params.inputTimeStamp = self.frame_number as u64;
 
         if is_keyframe {
-            pic_params.encodePicFlags = NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEIDR as u32
-                | NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_OUTPUT_SPSPPS as u32;
+            pic_params.encodePicFlags = (NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_FORCEIDR as u32)
+                | (NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_OUTPUT_SPSPPS as u32);
         }
 
-        let encode_fn = api.nvEncEncodePicture
+        let encode_fn = api
+            .nvEncEncodePicture
             .ok_or_else(|| anyhow!("nvEncEncodePicture not available"))?;
 
         let status = unsafe { encode_fn(self.encoder, &mut pic_params) };
@@ -590,23 +894,19 @@ impl NvencEncoder {
             return Err(anyhow!("Failed to encode frame: {}", status));
         }
 
-
-
         self.retrieve_bitstream(start, is_keyframe)
     }
 
-    /// Force an IDR frame
     pub fn force_keyframe(&mut self) -> Result<EncodedPacket> {
         let dummy_data = vec![0u8; (self.width * self.height * 4) as usize];
         self.encode_bgra(&dummy_data, true)
     }
 
-    /// Get encoder statistics
     pub fn stats(&self) -> EncoderStats {
         EncoderStats {
             frames_encoded: self.frame_number,
             average_bitrate: self.config.bitrate,
-            average_encode_time_ms: 0.0, // TODO: Track actual average
+            average_encode_time_ms: 0.0,
         }
     }
 }
@@ -619,17 +919,14 @@ impl Drop for NvencEncoder {
 
         if let Ok(api) = init_api() {
             unsafe {
-                // Destroy input buffer
                 if let Some(destroy_input) = api.nvEncDestroyInputBuffer {
                     destroy_input(self.encoder, self.input_buffer);
                 }
 
-                // Destroy output buffer
                 if let Some(destroy_output) = api.nvEncDestroyBitstreamBuffer {
                     destroy_output(self.encoder, self.output_buffer);
                 }
 
-                // Destroy encoder
                 if let Some(destroy_encoder) = api.nvEncDestroyEncoder {
                     destroy_encoder(self.encoder);
                 }
@@ -638,70 +935,8 @@ impl Drop for NvencEncoder {
     }
 }
 
-/// Encoder statistics
 pub struct EncoderStats {
     pub frames_encoded: u32,
     pub average_bitrate: u32,
     pub average_encode_time_ms: f64,
-}
-
-/// Create a D3D11 device for NVENC
-#[cfg(target_os = "windows")]
-fn create_d3d11_device() -> Result<*mut c_void> {
-    use windows::Win32::Graphics::Direct3D::*;
-    use windows::Win32::Graphics::Direct3D11::*;
-    use windows::Win32::Graphics::Dxgi::*;
-
-    unsafe {
-        // Enumerate adapters to find NVIDIA GPU
-        let factory: IDXGIFactory1 = CreateDXGIFactory1()
-            .map_err(|e| anyhow!("Failed to create DXGI Factory: {}", e))?;
-
-        let mut adapter: Option<IDXGIAdapter1> = None;
-        let mut i = 0;
-
-        while let Ok(a) = factory.EnumAdapters1(i) {
-             let desc = a.GetDesc1().map_err(|e| anyhow!("Failed to get adapter desc: {}", e))?;
-             if desc.VendorId == 0x10DE { // NVIDIA
-                 adapter = Some(a);
-                 break;
-             }
-             i += 1;
-        }
-
-        let adapter = adapter.ok_or_else(|| anyhow!("No NVIDIA GPU found. NVENC requires an NVIDIA GPU."))?;
-
-        let mut device: Option<ID3D11Device> = None;
-        let mut context: Option<ID3D11DeviceContext> = None;
-
-        let feature_levels = [D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0];
-
-        // Create device on the NVIDIA adapter
-        // Note: DriverType must be UNKNOWN when providing an adapter
-        let result = D3D11CreateDevice(
-            &adapter,
-            D3D_DRIVER_TYPE_UNKNOWN,
-            None,
-            D3D11_CREATE_DEVICE_FLAG(0),
-            Some(&feature_levels),
-            D3D11_SDK_VERSION,
-            Some(&mut device),
-            None,
-            Some(&mut context),
-        );
-
-        if result.is_err() {
-            return Err(anyhow!("Failed to create D3D11 device on NVIDIA GPU"));
-        }
-
-        let device = device.ok_or_else(|| anyhow!("D3D11 device is null"))?;
-        
-        // Get the raw pointer
-        Ok(std::mem::transmute(device))
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-fn create_d3d11_device() -> Result<*mut c_void> {
-    Err(anyhow!("D3D11 is only available on Windows"))
 }

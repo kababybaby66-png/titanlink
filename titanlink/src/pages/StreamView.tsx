@@ -67,7 +67,7 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
         };
     }, [sessionState.role, isHardwareMode]);
 
-    // Poll connection quality metrics
+    // Poll connection quality metrics and update FPS from hardware decoder
     useEffect(() => {
         const interval = setInterval(() => {
             // UDP service doesn't track connection quality the same way as WebRTC yet
@@ -75,13 +75,13 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
             const quality = { packetLoss: 0, jitter: 0, hasAudio: false };
             setPacketLoss(quality.packetLoss);
             setJitter(quality.jitter);
-            setHasAudio(quality.hasAudio || hasAudio); // Keep true if we detected audio
-            // FPS tracking not yet implemented in UDP service
-            // setActualFps(60);
-        }, 500); // LOW LATENCY: Poll faster for responsive stats
+            setHasAudio(quality.hasAudio || hasAudio);
+            // Update actual FPS from hardware decoder (hwFps updates every second)
+            setActualFps(hwFps);
+        }, 1000); // Update FPS every second as requested (frames per second)
 
         return () => clearInterval(interval);
-    }, [hasAudio]);
+    }, [hasAudio, hwFps]);
 
     // Handle volume changes
     // Audio volume handling - TODO for UDP audio

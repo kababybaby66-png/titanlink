@@ -8,20 +8,18 @@ use anyhow::{anyhow, Context, Result};
 use std::ptr;
 use windows::{
     core::Interface,
-    Win32::{
-        Graphics::{
-            Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_UNKNOWN},
-            Direct3D11::{
-                D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D,
-                D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_CPU_ACCESS_READ, D3D11_MAP_READ,
-                D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
-            },
-            Dxgi::{
-                CreateDXGIFactory1, IDXGIAdapter1, IDXGIFactory1, IDXGIOutput, IDXGIOutput1,
-                IDXGIOutputDuplication, IDXGISurface1, DXGI_ERROR_ACCESS_LOST,
-                DXGI_ERROR_WAIT_TIMEOUT, DXGI_OUTDUPL_FRAME_INFO,
-            },
-            Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC},
+    Win32::Graphics::{
+        Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_UNKNOWN},
+        Direct3D11::{
+            D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D,
+            D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAP_READ,
+            D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
+        },
+        Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC},
+        Dxgi::{
+            CreateDXGIFactory1, IDXGIAdapter, IDXGIAdapter1, IDXGIFactory1, IDXGIOutput,
+            IDXGIOutput1, IDXGIOutputDuplication, IDXGISurface1, DXGI_ERROR_ACCESS_LOST,
+            DXGI_ERROR_WAIT_TIMEOUT, DXGI_OUTDUPL_FRAME_INFO,
         },
     },
 };
@@ -44,7 +42,11 @@ pub fn enumerate_displays() -> Result<Vec<DisplayInfo>> {
 
                 // Convert device name from wide string
                 let name = String::from_utf16_lossy(
-                    &desc.DeviceName[..desc.DeviceName.iter().position(|&c| c == 0).unwrap_or(desc.DeviceName.len())]
+                    &desc.DeviceName[..desc
+                        .DeviceName
+                        .iter()
+                        .position(|&c| c == 0)
+                        .unwrap_or(desc.DeviceName.len())],
                 );
 
                 let width = (desc.DesktopCoordinates.right - desc.DesktopCoordinates.left) as u32;
@@ -55,7 +57,8 @@ pub fn enumerate_displays() -> Result<Vec<DisplayInfo>> {
                     name: name.trim_end_matches('\0').to_string(),
                     width,
                     height,
-                    is_primary: desc.DesktopCoordinates.left == 0 && desc.DesktopCoordinates.top == 0,
+                    is_primary: desc.DesktopCoordinates.left == 0
+                        && desc.DesktopCoordinates.top == 0,
                 });
 
                 output_index += 1;
@@ -87,16 +90,16 @@ impl DxgiCapturer {
     pub fn new(display_index: u32) -> Result<Self> {
         unsafe {
             // Create DXGI factory
-            let factory: IDXGIFactory1 = CreateDXGIFactory1()
-                .context("Failed to create DXGI factory")?;
+            let factory: IDXGIFactory1 =
+                CreateDXGIFactory1().context("Failed to create DXGI factory")?;
 
             // Find the output (monitor) by index
-            let (adapter, output) = Self::find_output(&factory, display_index)
-                .context("Failed to find display")?;
+            let (adapter, output) =
+                Self::find_output(&factory, display_index).context("Failed to find display")?;
 
             // Get output description for dimensions
             let output_desc = output.GetDesc()?;
-            
+
             // Log adapter description for debugging
             let adapter_desc = adapter.GetDesc1()?;
             let adapter_name = String::from_utf16_lossy(&adapter_desc.Description)
@@ -104,16 +107,21 @@ impl DxgiCapturer {
                 .to_string();
             println!("[DXGI] Initializing capture on adapter: {}", adapter_name);
 
-            let width = (output_desc.DesktopCoordinates.right - output_desc.DesktopCoordinates.left) as u32;
-            let height = (output_desc.DesktopCoordinates.bottom - output_desc.DesktopCoordinates.top) as u32;
+            let width =
+                (output_desc.DesktopCoordinates.right - output_desc.DesktopCoordinates.left) as u32;
+            let height =
+                (output_desc.DesktopCoordinates.bottom - output_desc.DesktopCoordinates.top) as u32;
 
             // Create D3D11 device
             let mut device = None;
             let mut context = None;
-            
-            // Try different driver types if UNKNOWN fails, though UNKNOWN with adapter is correct
+
+            let adapter_cast = adapter
+                .cast::<windows::Win32::Graphics::Dxgi::IDXGIAdapter>()
+                .context("Failed to cast adapter")?;
+
             D3D11CreateDevice(
-                &adapter,
+                Some(&adapter_cast),
                 D3D_DRIVER_TYPE_UNKNOWN,
                 None,
                 D3D11_CREATE_DEVICE_BGRA_SUPPORT,
@@ -122,14 +130,14 @@ impl DxgiCapturer {
                 Some(&mut device),
                 None,
                 Some(&mut context),
-            ).context("Failed to create D3D11 device")?;
+            )
+            .context("Failed to create D3D11 device")?;
 
             let device = device.ok_or_else(|| anyhow!("Failed to create D3D11 device"))?;
             let context = context.ok_or_else(|| anyhow!("Failed to create D3D11 context"))?;
 
             // Get IDXGIOutput1 for duplication
-            let output1: IDXGIOutput1 = output.cast()
-                .context("Failed to cast to IDXGIOutput1")?;
+            let output1: IDXGIOutput1 = output.cast().context("Failed to cast to IDXGIOutput1")?;
 
             // Create output duplication with retry mechanism
             // DuplicateOutput can fail transiently due to mode changes, secure desktop, etc.
@@ -153,9 +161,59 @@ impl DxgiCapturer {
                 }
             }
 
+            /// Find the output (monitor) by index
+            /// Prefers NVIDIA GPUs for NVENC compatibility
+            unsafe fn find_output(
+                factory: &IDXGIFactory1,
+                target_index: u32,
+            ) -> Result<(IDXGIAdapter1, IDXGIOutput)> {
+                const NVIDIA_VENDOR_ID: u32 = 0x10DE;
+
+                let mut current_index = 0u32;
+                let mut adapter_index = 0;
+
+                // First pass: Try to find the display on an NVIDIA GPU
+                while let Ok(adapter) = factory.EnumAdapters1(adapter_index) {
+                    let desc = adapter.GetDesc1();
+                    if let Ok(d) = desc {
+                        if d.VendorId == NVIDIA_VENDOR_ID {
+                            let mut output_index = 0;
+                            while let Ok(output) = adapter.EnumOutputs(output_index) {
+                                if current_index == target_index {
+                                    return Ok((adapter, output));
+                                }
+                                current_index += 1;
+                                output_index += 1;
+                            }
+                        }
+                    }
+                    adapter_index += 1;
+                }
+
+                // Second pass: If not found on NVIDIA GPU, try any adapter
+                current_index = 0;
+                adapter_index = 0;
+                while let Ok(adapter) = factory.EnumAdapters1(adapter_index) {
+                    let mut output_index = 0;
+                    while let Ok(output) = adapter.EnumOutputs(output_index) {
+                        if current_index == target_index {
+                            return Ok((adapter, output));
+                        }
+                        current_index += 1;
+                        output_index += 1;
+                    }
+                    adapter_index += 1;
+                }
+
+                Err(anyhow!("Display index {} not found", target_index))
+            }
+
             let duplication = duplication.ok_or_else(|| {
                 let e = last_error.unwrap();
-                anyhow!("Failed to create output duplication after 3 attempts. Error: {:?}", e)
+                anyhow!(
+                    "Failed to create output duplication after 3 attempts. Error: {:?}",
+                    e
+                )
             })?;
 
             // Create staging texture for CPU read (only used if we need software encoding)
@@ -177,7 +235,8 @@ impl DxgiCapturer {
 
             let mut staging_texture = None;
             device.CreateTexture2D(&staging_desc, None, Some(&mut staging_texture))?;
-            let staging_texture = staging_texture.ok_or_else(|| anyhow!("Failed to create staging texture"))?;
+            let staging_texture =
+                staging_texture.ok_or_else(|| anyhow!("Failed to create staging texture"))?;
 
             Ok(Self {
                 device,
@@ -192,7 +251,10 @@ impl DxgiCapturer {
     }
 
     /// Find adapter and output by display index
-    unsafe fn find_output(factory: &IDXGIFactory1, target_index: u32) -> Result<(IDXGIAdapter1, IDXGIOutput)> {
+    unsafe fn find_output(
+        factory: &IDXGIFactory1,
+        target_index: u32,
+    ) -> Result<(IDXGIAdapter1, IDXGIOutput)> {
         let mut current_index = 0u32;
         let mut adapter_index = 0;
 
@@ -240,7 +302,9 @@ impl DxgiCapturer {
             let mut frame_info = DXGI_OUTDUPL_FRAME_INFO::default();
             let mut resource = None;
 
-            let result = self.duplication.AcquireNextFrame(timeout_ms, &mut frame_info, &mut resource);
+            let result =
+                self.duplication
+                    .AcquireNextFrame(timeout_ms, &mut frame_info, &mut resource);
 
             match result {
                 Ok(()) => {

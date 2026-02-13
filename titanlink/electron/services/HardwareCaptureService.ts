@@ -24,6 +24,7 @@ interface CaptureSettings {
     bitrate: number;
     useHardwareEncoder: boolean;
     codec: string;
+    bitrateMode: string; // "cbr" or "vbr"
 }
 
 interface EncodedFrame {
@@ -37,7 +38,8 @@ const LOG_PREFIX = '[HardwareCapture]';
 const DEFAULT_ENCODER_SUPPORT: EncoderSupport = { nvenc: false, amf: false, quicksync: false, software: false };
 
 export class HardwareCaptureService extends EventEmitter {
-    private native: any = null;
+    private nativeNet: any = null;
+    private nativeCapture: any = null;
     private isRunning = false;
 
     constructor() {
@@ -45,43 +47,54 @@ export class HardwareCaptureService extends EventEmitter {
         this.loadNativeAddon();
     }
 
-    private getBinaryPath(): string {
+    private getBinaryPath(isCaptureCpp: boolean = false): string {
         const isDev = !app.isPackaged;
-        const binaryName = `titanlink-capture.${process.platform}-${process.arch}-msvc.node`;
+        let binaryName = '';
 
-        console.log(`${LOG_PREFIX} === Path Resolution Debug ===`);
+        if (isCaptureCpp) {
+            binaryName = `titanlink-nvenc-cpp.node`; // C++ module name
+        } else {
+            // Rust module name
+            binaryName = `titanlink-capture.${process.platform}-${process.arch}-msvc.node`;
+        }
+
+        console.log(`${LOG_PREFIX} === Path Resolution Debug (${isCaptureCpp ? 'C++' : 'Rust'}) ===`);
         console.log(`${LOG_PREFIX} isDev: ${isDev}`);
         console.log(`${LOG_PREFIX} binaryName: ${binaryName}`);
 
         if (isDev) {
-            // Try common dev layouts
             const appPath = app.getAppPath();
             const cwd = process.cwd();
+            const candidates = [];
 
-            console.log(`${LOG_PREFIX} app.getAppPath(): ${appPath}`);
-            console.log(`${LOG_PREFIX} process.cwd(): ${cwd}`);
-
-            const candidates = [
-                path.join(appPath, 'native', binaryName),
-                path.join(appPath, '..', 'native', binaryName),
-                path.join(cwd, 'native', binaryName),
-                path.join(__dirname, '..', '..', 'native', binaryName), // From electron/services/ to root
-            ];
+            if (isCaptureCpp) {
+                // C++ module paths
+                // Usually relative to electron/services is ../../native-cpp/build/Release/
+                // __dirname is electron/services/ (in dist?) or services/ (in ts-node?)
+                // Assuming dev mode runs from root or electron/
+                candidates.push(path.join(__dirname, '..', '..', 'native-cpp', 'build', 'Release', binaryName));
+                candidates.push(path.join(cwd, 'native-cpp', 'build', 'Release', binaryName));
+            } else {
+                // Rust module paths (existing logic)
+                candidates.push(path.join(appPath, 'native', binaryName));
+                candidates.push(path.join(appPath, '..', 'native', binaryName));
+                candidates.push(path.join(cwd, 'native', binaryName));
+                candidates.push(path.join(__dirname, '..', '..', 'native', binaryName));
+            }
 
             console.log(`${LOG_PREFIX} Checking candidates:`);
             for (const cand of candidates) {
                 const exists = fs.existsSync(cand);
                 console.log(`${LOG_PREFIX}   ${exists ? '✓' : '✗'} ${cand}`);
                 if (exists) {
-                    console.log(`${LOG_PREFIX} ✅ Found native binary at: ${cand}`);
                     return cand;
                 }
             }
-
-            console.warn(`${LOG_PREFIX} ⚠️ Could not find native binary in any candidate. Defaulting to: ${candidates[0]}`);
+            // Fallback
             return candidates[0];
         } else {
-            // In production, the native folder is copied to resources/native/
+            // Production
+            // Assuming native-cpp node is also copied to resources/native/
             const prodPath = path.join(process.resourcesPath, 'native', binaryName);
             console.log(`${LOG_PREFIX} Production path: ${prodPath}`);
             return prodPath;
@@ -89,35 +102,59 @@ export class HardwareCaptureService extends EventEmitter {
     }
 
     private loadNativeAddon(): void {
-        const binaryPath = this.getBinaryPath();
-
-        if (!fs.existsSync(binaryPath)) {
-            console.error(`${LOG_PREFIX} Native addon not found at: ${binaryPath}`);
-            return;
+        // Load Rust Module (Network/Audio)
+        const netPath = this.getBinaryPath(false);
+        if (fs.existsSync(netPath)) {
+            try {
+                this.nativeNet = require(netPath);
+                console.log(`${LOG_PREFIX} Rust (Network) module loaded successfully`);
+                if (this.nativeNet.healthCheck) {
+                    console.log(`${LOG_PREFIX} Health check: ${this.nativeNet.healthCheck()}`);
+                }
+            } catch (e) {
+                console.error(`${LOG_PREFIX} Failed to load Rust module:`, e);
+            }
         }
 
-        try {
-            this.native = require(binaryPath);
-            if (this.native && typeof this.native.healthCheck === 'function') {
-                console.log(`${LOG_PREFIX} Loaded successfully: ${this.native.healthCheck()}`);
-            } else {
-                console.warn(`${LOG_PREFIX} Native addon loaded but missing healthCheck()`);
+        // Load C++ Module (Capture/Encode)
+        const capPath = this.getBinaryPath(true);
+        if (fs.existsSync(capPath)) {
+            try {
+                this.nativeCapture = require(capPath);
+                console.log(`${LOG_PREFIX} C++ (Capture) module loaded successfully`);
+
+                // Check support
+                try {
+                    const support = this.nativeCapture.getEncoderSupport();
+                    console.log(`${LOG_PREFIX} C++ Encoder Support:`, JSON.stringify(support));
+                } catch (e) {
+                    console.error(`${LOG_PREFIX} Failed check:`, e);
+                }
+
+            } catch (e) {
+                console.error(`${LOG_PREFIX} Failed to load C++ module:`, e);
             }
-        } catch (e) {
-            console.error(`${LOG_PREFIX} Failed to load native addon:`, e);
+        } else {
+            console.error(`${LOG_PREFIX} C++ module not found at ${capPath}`);
         }
     }
 
     public async getEncoderSupport(): Promise<EncoderSupport> {
-        if (!this.native) return DEFAULT_ENCODER_SUPPORT;
-        return this.native.getEncoderSupport();
+        if (this.nativeCapture) {
+            return this.nativeCapture.getEncoderSupport();
+        }
+        if (this.nativeNet) {
+            // Fallback to Rust? Or default false
+            return DEFAULT_ENCODER_SUPPORT;
+        }
+        return DEFAULT_ENCODER_SUPPORT;
     }
 
     public async getDisplays(): Promise<DisplayInfo[]> {
-        if (!this.native) return [];
+        if (!this.nativeCapture) return []; // Only C++ supports capture now
 
         try {
-            return this.native.getDisplays();
+            return this.nativeCapture.getDisplays();
         } catch (e) {
             console.error(`${LOG_PREFIX} Failed to get displays:`, e);
             return [];
@@ -125,12 +162,12 @@ export class HardwareCaptureService extends EventEmitter {
     }
 
     public start(settings: CaptureSettings): boolean {
-        if (!this.native || this.isRunning) return false;
+        if (!this.nativeCapture || this.isRunning) return false;
 
         try {
-            console.log(`${LOG_PREFIX} Starting on display ${settings.displayIndex}`);
+            console.log(`${LOG_PREFIX} Starting (C++) on display ${settings.displayIndex}`);
 
-            this.native.startCapture(settings, (frame: EncodedFrame) => {
+            this.nativeCapture.startCapture(settings, (frame: EncodedFrame) => {
                 this.emit('frame', frame);
             });
 
@@ -143,10 +180,10 @@ export class HardwareCaptureService extends EventEmitter {
     }
 
     public stop(): boolean {
-        if (!this.native || !this.isRunning) return false;
+        if (!this.nativeCapture || !this.isRunning) return false;
 
         try {
-            this.native.stopCapture();
+            this.nativeCapture.stopCapture();
             this.isRunning = false;
             return true;
         } catch (e) {
@@ -156,7 +193,61 @@ export class HardwareCaptureService extends EventEmitter {
     }
 
     public isCaptureActive(): boolean {
-        return this.isRunning && this.native?.isCaptureRunning();
+        // C++ module might not expose isCaptureRunning, but we track locally
+        return this.isRunning;
+    }
+    // --- Audio Capture ---
+
+    // Check if audio capture loops back is supported (WASAPI)
+    public isAudioSupported(): boolean {
+        if (!this.nativeNet) return false;
+        try {
+            return this.nativeNet.isAudioAvailable();
+        } catch (error) {
+            console.error(`${LOG_PREFIX} Failed to check audio support:`, error);
+            return false;
+        }
+    }
+
+    // Start capturing system audio
+    public startAudio(sampleRate: number = 48000, quality: string = 'game'): boolean {
+        if (!this.nativeNet) {
+            console.error(`${LOG_PREFIX} Native (Rust/Net) addon not loaded`);
+            return false;
+        }
+
+        console.log(`${LOG_PREFIX} Starting audio capture (rate: ${sampleRate}, quality: ${quality})`);
+
+        try {
+            // qualityMode: "game" or "voice" (Rust expects String)
+            const qualityMode = quality === 'voice' ? 'voice' : 'game';
+
+            this.nativeNet.startAudioCapture({
+                sampleRate,
+                qualityMode
+            }, (frame: any) => {
+                this.emit('audio-frame', frame);
+            });
+
+            console.log(`${LOG_PREFIX} Audio capture started successfully`);
+            return true;
+        } catch (error) {
+            console.error(`${LOG_PREFIX} Failed to start audio capture:`, error);
+            return false;
+        }
+    }
+
+    // Stop capturing audio
+    public stopAudio(): void {
+        if (!this.nativeNet) return;
+
+        console.log(`${LOG_PREFIX} Stopping audio capture...`);
+        try {
+            this.nativeNet.stopAudioCapture();
+            console.log(`${LOG_PREFIX} Audio capture stopped`);
+        } catch (error) {
+            console.error(`${LOG_PREFIX} Failed to stop audio capture:`, error);
+        }
     }
 }
 

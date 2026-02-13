@@ -25,6 +25,7 @@ export interface CaptureSettings {
   bitrate: number
   useHardwareEncoder: boolean
   codec: string
+  bitrateMode: string
 }
 export interface EncodedFrame {
   frameNumber: number
@@ -35,6 +36,21 @@ export interface EncodedFrame {
 export declare function startCapture(settings: CaptureSettings, callback: (frame: EncodedFrame) => void): void
 export declare function stopCapture(): void
 export declare function isCaptureRunning(): boolean
+export interface AudioCaptureSettings {
+  sampleRate: number
+  qualityMode: string
+}
+export interface AudioFrame {
+  data: Buffer
+  sampleRate: number
+  channels: number
+  bitsPerSample: number
+  frameCount: number
+  timestampUs: number
+}
+export declare function isAudioAvailable(): boolean
+export declare function startAudioCapture(settings: AudioCaptureSettings, callback: (frame: AudioFrame) => void): void
+export declare function stopAudioCapture(): void
 /** UDP Network Client for TitanLink */
 export declare class NetworkClient {
   constructor()

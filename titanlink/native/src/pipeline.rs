@@ -1,5 +1,6 @@
 use crate::capture::dxgi::DxgiCapturer;
 use crate::encoder::nvenc::{NvencConfig, NvencEncoder};
+use crate::encoder::quicksync::QuickSyncEncoder;
 use crate::encoder::software::SoftwareEncoder;
 use crate::{CaptureSettings, EncodedFrame};
 use anyhow::{Context, Result};
@@ -7,8 +8,8 @@ use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
-use windows::Win32::Graphics::Direct3D11::ID3D11Texture2D;
 use windows::core::Interface;
+use windows::Win32::Graphics::Direct3D11::ID3D11Texture2D;
 
 /// Global flag to signal capture loop to stop
 static SHOULD_STOP: AtomicBool = AtomicBool::new(false);
@@ -26,6 +27,7 @@ fn should_stop() -> bool {
 /// Encoder wrapper for either hardware or software encoding
 enum Encoder {
     Nvenc(NvencEncoder),
+    QuickSync(QuickSyncEncoder),
     Software(SoftwareEncoder),
 }
 
@@ -33,9 +35,12 @@ impl Encoder {
     fn encode_cpu(&mut self, data: &[u8], force_keyframe: bool) -> Result<(Vec<u8>, bool)> {
         match self {
             Encoder::Nvenc(enc) => {
-                // Fallback for NVENC if we have CPU data for some reason
                 let packet = enc.encode_bgra(data, force_keyframe)?;
                 Ok((packet.data, packet.is_keyframe))
+            }
+            Encoder::QuickSync(enc) => {
+                let data = enc.encode_bgra(data, force_keyframe)?;
+                Ok((data, force_keyframe))
             }
             Encoder::Software(enc) => {
                 let data = enc.encode(data)?;
@@ -44,19 +49,27 @@ impl Encoder {
         }
     }
 
-    fn encode_gpu(&mut self, texture: *mut c_void, force_keyframe: bool) -> Result<(Vec<u8>, bool)> {
+    fn encode_gpu(
+        &mut self,
+        texture: *mut c_void,
+        force_keyframe: bool,
+    ) -> Result<(Vec<u8>, bool)> {
         match self {
             Encoder::Nvenc(enc) => {
                 let packet = enc.encode_texture(texture, force_keyframe)?;
                 Ok((packet.data, packet.is_keyframe))
             }
-            Encoder::Software(_) => anyhow::bail!("Software encoder cannot handle GPU textures"),
+            Encoder::QuickSync(_) | Encoder::Software(_) => {
+                anyhow::bail!(
+                    "QuickSync/Software encoder cannot handle GPU textures (use CPU capture)"
+                )
+            }
         }
     }
 }
 
 /// Run the capture pipeline
-/// 
+///
 /// This function runs in a background thread and captures/encodes frames
 /// continuously until stop is signaled.
 pub fn run_capture_pipeline(
@@ -66,41 +79,99 @@ pub fn run_capture_pipeline(
     // Reset stop flag
     SHOULD_STOP.store(false, Ordering::SeqCst);
 
-    // Calculate frame interval
+    // Calculate frame interval - supports 1-240 Hz
     let frame_interval = Duration::from_secs_f64(1.0 / settings.fps as f64);
-    
+    eprintln!(
+        "[Pipeline] === CAPTURE SETTINGS ===\n\
+         [Pipeline]   FPS: {} (interval: {:?})\n\
+         [Pipeline]   Bitrate: {} bps ({:.1} Mbps)\n\
+         [Pipeline]   Codec: {}\n\
+         [Pipeline]   Bitrate Mode: {}\n\
+         [Pipeline]   Hardware Encoder: {}\n\
+         [Pipeline]   Display Index: {}\n\
+         [Pipeline] ========================",
+        settings.fps, frame_interval,
+        settings.bitrate, settings.bitrate as f64 / 1_000_000.0,
+        settings.codec,
+        settings.bitrate_mode,
+        settings.use_hardware_encoder,
+        settings.display_index,
+    );
+
     // Initialize DXGI capturer
-    let mut capturer = DxgiCapturer::new(settings.display_index)
-        .context("Failed to initialize DXGI capturer")?;
+    let mut capturer =
+        DxgiCapturer::new(settings.display_index).context("Failed to initialize DXGI capturer")?;
 
     let (width, height) = capturer.dimensions();
-    println!("[Pipeline] Initialized DXGI capture: {}x{} @ {}fps", width, height, settings.fps);
+    println!(
+        "[Pipeline] Initialized capture: {}x{} @ {}fps (interval: {:?})",
+        width, height, settings.fps, frame_interval
+    );
 
     // Initialize encoder
     let mut encoder = if settings.use_hardware_encoder && crate::encoder::nvenc::is_available() {
-        println!("[Pipeline] Using NVENC hardware encoder ({})", settings.codec);
-        
+        println!(
+            "[Pipeline] Using NVENC hardware encoder ({})",
+            settings.codec
+        );
+
         let codec = match settings.codec.to_lowercase().as_str() {
             "hevc" | "h265" => crate::encoder::nvenc::VideoCodec::HEVC,
             "av1" => crate::encoder::nvenc::VideoCodec::AV1,
             _ => crate::encoder::nvenc::VideoCodec::H264,
         };
 
+        let rate_control = match settings.bitrate_mode.to_lowercase().as_str() {
+            "vbr" => crate::encoder::nvenc::RateControl::Vbr,
+            _ => crate::encoder::nvenc::RateControl::CbrLowDelay,
+        };
+
+        let max_bitrate = if matches!(rate_control, crate::encoder::nvenc::RateControl::Vbr) {
+            settings.bitrate * 2 // VBR allows up to 2x average
+        } else {
+            settings.bitrate
+        };
+
         let config = NvencConfig {
             bitrate: settings.bitrate,
+            max_bitrate,
             framerate: settings.fps,
             codec,
+            rate_control,
             ..Default::default()
         };
 
-        // Share the D3D11 device with NVENC for Zero-Copy
-        // NvencEncoder expects *mut c_void, standard windows-rs Interface gives us a way to cast
-        let device_ptr: *mut c_void = unsafe { std::mem::transmute_copy(capturer.device()) };
-
-        match NvencEncoder::new_from_device(device_ptr, width, height, config) {
+        match NvencEncoder::new(width, height, config) {
             Ok(enc) => Encoder::Nvenc(enc),
             Err(e) => {
-                println!("[Pipeline] NVENC init failed, falling back to software: {}", e);
+                println!("[Pipeline] NVENC init failed, trying QuickSync: {}", e);
+                if crate::encoder::quicksync::is_available() {
+                    println!(
+                        "[Pipeline] Using QuickSync hardware encoder ({})",
+                        settings.codec
+                    );
+                    match QuickSyncEncoder::new(width, height) {
+                        Ok(enc) => Encoder::QuickSync(enc),
+                        Err(e2) => {
+                            println!("[Pipeline] QuickSync init failed, using software: {}", e2);
+                            Encoder::Software(SoftwareEncoder::new(width, height))
+                        }
+                    }
+                } else {
+                    println!("[Pipeline] Using software encoder");
+                    Encoder::Software(SoftwareEncoder::new(width, height))
+                }
+            }
+        }
+    } else if settings.use_hardware_encoder && crate::encoder::quicksync::is_available() {
+        println!(
+            "[Pipeline] Using QuickSync hardware encoder ({})",
+            settings.codec
+        );
+        match QuickSyncEncoder::new(width, height) {
+            Ok(enc) => Encoder::QuickSync(enc),
+            Err(e) => {
+                println!("[Pipeline] QuickSync init failed, using software: {}", e);
                 Encoder::Software(SoftwareEncoder::new(width, height))
             }
         }
@@ -111,9 +182,13 @@ pub fn run_capture_pipeline(
 
     let mut frame_number: u32 = 0;
     let mut last_frame_time = Instant::now();
-    let keyframe_interval = settings.fps; // Keyframe every 1 second
+    let keyframe_interval = settings.fps.max(60); // At least every second, more frequent for high FPS
+    let log_interval = (settings.fps * 2).max(60); // Log every 2 seconds, at minimum every second
 
-    println!("[Pipeline] Starting capture loop");
+    println!(
+        "[Pipeline] Starting {}fps capture loop (keyframe every {} frames, log every {} frames)",
+        settings.fps, keyframe_interval, log_interval
+    );
 
     loop {
         if should_stop() {
@@ -121,54 +196,80 @@ pub fn run_capture_pipeline(
             break;
         }
 
-        // Try to capture a frame
+        // Calculate time until next frame
+        let elapsed = last_frame_time.elapsed();
+        if elapsed < frame_interval {
+            // High-performance spin-wait for precise timing
+            let spin_wait = frame_interval - elapsed;
+            let start_spin = Instant::now();
+            while start_spin.elapsed() < spin_wait {
+                std::hint::spin_loop();
+            }
+        }
+
         let capture_start = Instant::now();
-        
-        // Calculate timeout based on remaining time in frame interval
-        let elapsed_since_last = last_frame_time.elapsed();
-        let remaining = if elapsed_since_last < frame_interval {
-            (frame_interval - elapsed_since_last).as_millis() as u32
-        } else {
-            1 // At least 1ms timeout
-        };
+        let remaining = 0; // No timeout needed with precise timing
 
         let frame_result = match encoder {
             Encoder::Nvenc(_) => {
-                // Happy Path: Zero-Copy GPU Capture -> Encode
-                match capturer.capture_frame_gpu(remaining) {
-                    Ok(Some(texture)) => {
+                // Capture GPU texture, copy to CPU, encode (copy-based path)
+                match capturer.capture_frame_cpu(remaining) {
+                    Ok(Some(pixels)) => {
                         let capture_time = capture_start.elapsed();
                         let encode_start = Instant::now();
                         let force_keyframe = frame_number % keyframe_interval == 0;
 
-                        // Cast texture to raw pointer for NVENC
-                        let texture_ptr: *mut c_void = unsafe { std::mem::transmute_copy(&texture) };
-
-                        let res = encoder.encode_gpu(texture_ptr, force_keyframe);
-                        
-                        // CRITICAL: Release frame immediately after encode submission
-                        capturer.release_frame().ok();
-                        
-                        match res {
-                            Ok((data, is_keyframe)) => Some((data, is_keyframe, capture_time, encode_start.elapsed())),
+                        match encoder.encode_cpu(&pixels, force_keyframe) {
+                            Ok((data, is_keyframe)) => {
+                                Some((data, is_keyframe, capture_time, encode_start.elapsed()))
+                            }
                             Err(e) => {
-                                eprintln!("[Pipeline] GPU Encode error: {}", e);
+                                eprintln!("[Pipeline] NVENC Encode error: {}", e);
                                 None
                             }
                         }
                     }
-                    Ok(None) => None, // No new frame
+                    Ok(None) => None,
                     Err(e) => {
-                        eprintln!("[Pipeline] GPU Capture error: {}", e);
-                        // Access lost handling is complex with shared device...
-                        // For now, let loop continue and try to recover next frame or break
+                        eprintln!("[Pipeline] CPU Capture error: {}", e);
                         if e.to_string().contains("Access lost") {
-                             // Recreating capturer here is tricky because Encoder holds ref to Device?
-                             // Actually Encoder holds the pointer. If Device is recreated, pointer is invalid.
-                             // We would need to recreate Encoder too.
-                             // For this iteration, just break/log implementation gap.
-                             eprintln!("[Pipeline] Critical: Access lost with shared device. Restart required.");
-                             break; 
+                            println!("[NVENC] Access lost, restarting...");
+                            match DxgiCapturer::new(settings.display_index) {
+                                Ok(new_cap) => capturer = new_cap,
+                                Err(_) => break,
+                            }
+                        }
+                        None
+                    }
+                }
+            }
+            Encoder::QuickSync(_) => {
+                // CPU capture -> QuickSync encode
+                match capturer.capture_frame_cpu(remaining) {
+                    Ok(Some(pixels)) => {
+                        let capture_time = capture_start.elapsed();
+                        let encode_start = Instant::now();
+                        let force_keyframe = frame_number % keyframe_interval == 0;
+
+                        match encoder.encode_cpu(&pixels, force_keyframe) {
+                            Ok((data, is_keyframe)) => {
+                                Some((data, is_keyframe, capture_time, encode_start.elapsed()))
+                            }
+                            Err(e) => {
+                                eprintln!("[Pipeline] QuickSync Encode error: {}", e);
+                                None
+                            }
+                        }
+                    }
+                    Ok(None) => None,
+                    Err(e) => {
+                        eprintln!("[QuickSync] CPU Capture error: {}", e);
+                        if e.to_string().contains("Access lost") {
+                            println!("[QuickSync] Access lost, restarting...");
+                            match DxgiCapturer::new(settings.display_index) {
+                                Ok(new_cap) => capturer = new_cap,
+                                Err(_) => break,
+                            }
                         }
                         None
                     }
@@ -181,9 +282,11 @@ pub fn run_capture_pipeline(
                         let capture_time = capture_start.elapsed();
                         let encode_start = Instant::now();
                         let force_keyframe = frame_number % keyframe_interval == 0;
-                        
+
                         match encoder.encode_cpu(&pixels, force_keyframe) {
-                            Ok((data, is_keyframe)) => Some((data, is_keyframe, capture_time, encode_start.elapsed())),
+                            Ok((data, is_keyframe)) => {
+                                Some((data, is_keyframe, capture_time, encode_start.elapsed()))
+                            }
                             Err(e) => {
                                 eprintln!("[Pipeline] CPU Encode error: {}", e);
                                 None
@@ -193,7 +296,7 @@ pub fn run_capture_pipeline(
                     Ok(None) => None,
                     Err(e) => {
                         eprintln!("[Pipeline] CPU Capture error: {}", e);
-                         if e.to_string().contains("Access lost") {
+                        if e.to_string().contains("Access lost") {
                             // Recreate capturer logic (removed for brevity, but needed in prod)
                             println!("[Pipeline] Access lost, restarting...");
                             match DxgiCapturer::new(settings.display_index) {
@@ -228,11 +331,11 @@ pub fn run_capture_pipeline(
                     eprintln!("[Pipeline] Failed to call JS callback");
                 }
 
-                // Log timing periodically
-                if frame_number % 60 == 0 {
+                // Log timing periodically (every 2 seconds)
+                if frame_number % log_interval == 0 {
                     println!(
-                        "[Pipeline] Frame {} - Capture: {:?}, Encode: {:?}",
-                        frame_number, capture_time, encode_time
+                        "[Pipeline] Frame {} ({}fps log) - Capture: {:?}, Encode: {:?}",
+                        frame_number, settings.fps, capture_time, encode_time
                     );
                 }
 
@@ -240,20 +343,15 @@ pub fn run_capture_pipeline(
                 last_frame_time = Instant::now();
             }
             None => {
-                // Sleep to prevent busy-wait if no frame
-                // Especially important if we returned 'None' due to timeout or error
-                std::thread::sleep(Duration::from_millis(1));
+                // Missed frame - continue immediately
             }
-        }
-
-        // Sleep to maintain frame rate
-        let frame_time = last_frame_time.elapsed();
-        if frame_time < frame_interval {
-            std::thread::sleep(frame_interval - frame_time);
         }
     }
 
-    println!("[Pipeline] Capture loop ended after {} frames", frame_number);
+    println!(
+        "[Pipeline] Capture loop ended after {} frames",
+        frame_number
+    );
     Ok(())
 }
 
