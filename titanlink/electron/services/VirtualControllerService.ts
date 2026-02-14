@@ -44,7 +44,9 @@ export class VirtualControllerService {
 
             // Check if the feeder executable exists
             const fs = await import('fs');
-            if (!fs.existsSync(feederPath)) {
+            try {
+                await fs.promises.access(feederPath, fs.constants.F_OK);
+            } catch (error) {
                 console.error('[VirtualController] Vigem feeder NOT FOUND at:', feederPath);
                 return {
                     success: false,
