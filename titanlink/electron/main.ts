@@ -31,6 +31,7 @@ import { VirtualControllerService } from './services/VirtualControllerService';
 import { selfHostedTurnService } from './services/SelfHostedTurnService';
 import { hardwareCaptureService } from './services/HardwareCaptureService';
 import { virtualDisplayService } from './services/VirtualDisplayService';
+import { smartConnectionService } from './services/SmartConnectionService';
 import type { DisplayInfo, GamepadInputState } from '../shared/types/ipc';
 
 // Keep a global reference of the window object
@@ -442,9 +443,9 @@ function createWindow() {
         backgroundColor: '#0a0a0f',
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
-            nodeIntegration: true,
-            contextIsolation: false,
-            sandbox: false, // Required for some native modules
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
         },
         icon: path.join(__dirname, '../resources/icon.ico'),
     });
@@ -965,13 +966,6 @@ public class AudioDeviceHelper {
         autoUpdater.quitAndInstall();
     });
 
-    // Forward native capture frames to renderer
-    hardwareCaptureService.on('frame', (frame) => {
-        if (mainWindow) {
-            mainWindow.webContents.send('hardware-capture:frame', frame);
-        }
-    });
-
     // Forward native audio frames to renderer
     hardwareCaptureService.on('audio-frame', (frame) => {
         if (mainWindow) {
@@ -1022,6 +1016,67 @@ public class AudioDeviceHelper {
     ipcMain.handle('virtual-display:remove-all', async () => {
         console.log('[Main] Removing all virtual displays');
         return virtualDisplayService.removeAllDisplays();
+    });
+
+    // ============================================
+    // Smart Connection Handlers (Native P2P)
+    // ============================================
+
+    ipcMain.handle('smart-connection:connect', async (_event, config) => {
+        console.log('[Main] Smart connection request:', config);
+        return smartConnectionService.connect(config);
+    });
+
+    ipcMain.handle('smart-connection:disconnect', async () => {
+        smartConnectionService.disconnect();
+    });
+
+    ipcMain.handle('smart-connection:send-input', (_event, input) => {
+        smartConnectionService.sendControllerInput(input);
+    });
+
+    ipcMain.handle('smart-connection:get-stats', async () => {
+        return smartConnectionService.getStats();
+    });
+
+    // Wire up SmartConnection events
+    smartConnectionService.on('video-frame', (frame) => {
+        if (mainWindow) {
+            mainWindow.webContents.send('smart-connection:video-frame', frame);
+        }
+    });
+
+    smartConnectionService.on('input', (input: GamepadInputState) => {
+        // When acting as Host, received input is injected into virtual controller
+        virtualController.updateInput(input);
+
+        // Also notify renderer if needed (e.g. for debug overlay)
+        if (mainWindow) {
+            mainWindow.webContents.send('smart-connection:input', input);
+        }
+    });
+
+    // Wire up Hardware Capture to SmartConnection (for Hosting)
+    hardwareCaptureService.on('frame', (frame) => {
+        // Forward to Renderer (local preview)
+        if (mainWindow) {
+            mainWindow.webContents.send('hardware-capture:frame', frame);
+        }
+
+        // Forward to Network (if connected)
+        if (smartConnectionService.isConnected()) {
+            const codecStr = hardwareCaptureService.getCurrentCodec();
+            let codecId = 1;
+            if (codecStr === 'hevc') codecId = 2;
+            if (codecStr === 'av1') codecId = 3;
+
+            smartConnectionService.sendVideoFrame(
+                frame.frameNumber,
+                codecId,
+                frame.isKeyframe,
+                frame.data
+            );
+        }
     });
 }
 

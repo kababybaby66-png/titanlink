@@ -20,6 +20,13 @@ export type ConnectionState =
     | 'connected'
     | 'streaming';
 
+export enum ConnectionMode {
+    DISCONNECTED = 'disconnected',
+    P2P = 'p2p',
+    RELAY = 'relay',
+    CONNECTING = 'connecting',
+}
+
 export interface SessionInfo {
     sessionId: string;
     role: 'host' | 'client';
