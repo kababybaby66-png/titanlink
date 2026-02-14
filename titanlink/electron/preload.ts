@@ -120,6 +120,26 @@ const electronAPI = {
     },
 
     // ============================================
+    // Smart Connection APIs
+    // ============================================
+    smartConnection: {
+        connect: (config: any): Promise<boolean> => ipcRenderer.invoke('smart-connection:connect', config),
+        disconnect: (): Promise<void> => ipcRenderer.invoke('smart-connection:disconnect'),
+        sendInput: (input: GamepadInputState) => ipcRenderer.invoke('smart-connection:send-input', input),
+        getStats: (): Promise<any> => ipcRenderer.invoke('smart-connection:get-stats'),
+        onVideoFrame: (callback: (frame: any) => void) => {
+            const listener = (_event: any, frame: any) => callback(frame);
+            ipcRenderer.on('smart-connection:video-frame', listener);
+            return () => { ipcRenderer.removeListener('smart-connection:video-frame', listener); };
+        },
+        onInput: (callback: (input: GamepadInputState) => void) => {
+            const listener = (_event: any, input: any) => callback(input);
+            ipcRenderer.on('smart-connection:input', listener);
+            return () => { ipcRenderer.removeListener('smart-connection:input', listener); };
+        },
+    },
+
+    // ============================================
     // Hardware Capture APIs (DXGI + NVENC)
     // ============================================
     hardwareCapture: {

@@ -56,7 +56,7 @@ export class UDPStreamService {
     private frameNumber: number = 0;
 
     // Bitrate tracking
-    private bytesSentInLastSecond: number = 0;
+    private lastTotalBytesSent: number = 0;
     private currentBitrateMbps: number = 0;
     private bitrateInterval: NodeJS.Timeout | null = null;
     private audioCaptureActive: boolean = false;
@@ -68,8 +68,16 @@ export class UDPStreamService {
 
     private startBitrateTimer() {
         this.bitrateInterval = setInterval(() => {
-            this.currentBitrateMbps = (this.bytesSentInLastSecond * 8) / (1024 * 1024);
-            this.bytesSentInLastSecond = 0;
+            if (this.connectionManager) {
+                const stats = this.connectionManager.getStats();
+                const totalBytes = stats.bytesSent;
+                // Calculate diff if we have previous data
+                if (this.lastTotalBytesSent > 0 && totalBytes >= this.lastTotalBytesSent) {
+                    const diff = totalBytes - this.lastTotalBytesSent;
+                    this.currentBitrateMbps = (diff * 8) / (1024 * 1024);
+                }
+                this.lastTotalBytesSent = totalBytes;
+            }
         }, 1000);
     }
 
@@ -140,6 +148,7 @@ export class UDPStreamService {
 
         // Initialize connection manager (will connect when client joins)
         this.connectionManager = new SmartConnectionManager();
+        this.lastTotalBytesSent = 0; // Reset bitrate tracking
 
         // Host must connect to relay to receive packets
         await this.connectionManager.connect({
@@ -186,6 +195,7 @@ export class UDPStreamService {
 
         // Initialize connection manager
         this.connectionManager = new SmartConnectionManager();
+        this.lastTotalBytesSent = 0; // Reset bitrate tracking
 
         // Handle incoming video frames
         this.connectionManager.onFrame((frame) => {
@@ -491,12 +501,7 @@ export class UDPStreamService {
 
                 if (started) {
                     console.log(`[UDPStreamService] Hardware capture started (${this.settings.codec})`);
-
-                    // Register frame handler
-                    window.electronAPI.hardwareCapture.onFrame((frame: any) => {
-                        this.handleEncodedFrame(frame);
-                    });
-
+                    // Frame forwarding is now handled in Main process
                     return;
                 }
             }
@@ -538,40 +543,6 @@ export class UDPStreamService {
         }
     }
 
-    private handleEncodedFrame(frame: {
-        frameNumber: number;
-        timestampUs: bigint | number;
-        isKeyframe: boolean;
-        data: Buffer;
-    }): void {
-        if (!this.connectionManager || !this.isConnected) {
-            return;
-        }
-
-        // Log occasionally for verification
-        if (frame.frameNumber % 60 === 0) {
-            console.log(`[UDPStreamService] Received frame ${frame.frameNumber} from native (size: ${frame.data.length}, key: ${frame.isKeyframe})`);
-        }
-
-
-        // Map codec string to ID
-        // 1: H264, 2: HEVC, 3: AV1
-        let codecId = 1;
-        if (this.settings.codec === 'hevc') codecId = 2;
-        if (this.settings.codec === 'av1') codecId = 3;
-
-        try {
-            this.bytesSentInLastSecond += frame.data.length;
-            this.connectionManager.sendVideoFrame(
-                frame.frameNumber,
-                codecId,
-                frame.isKeyframe,
-                frame.data,
-            );
-        } catch (error) {
-            console.error('[UDPStreamService] Failed to send video frame:', error);
-        }
-    }
 
     private startSimulatedCapture(): void {
         console.log('[UDPStreamService] Starting simulated capture...');

@@ -41,6 +41,7 @@ export class HardwareCaptureService extends EventEmitter {
     private nativeNet: any = null;
     private nativeCapture: any = null;
     private isRunning = false;
+    private currentCodec: string = 'h264';
 
     constructor() {
         super();
@@ -166,6 +167,7 @@ export class HardwareCaptureService extends EventEmitter {
 
         try {
             console.log(`${LOG_PREFIX} Starting (C++) on display ${settings.displayIndex}`);
+            this.currentCodec = settings.codec;
 
             this.nativeCapture.startCapture(settings, (frame: EncodedFrame) => {
                 this.emit('frame', frame);
@@ -195,6 +197,10 @@ export class HardwareCaptureService extends EventEmitter {
     public isCaptureActive(): boolean {
         // C++ module might not expose isCaptureRunning, but we track locally
         return this.isRunning;
+    }
+
+    public getCurrentCodec(): string {
+        return this.currentCodec;
     }
     // --- Audio Capture ---
 
