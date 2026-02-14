@@ -44,7 +44,7 @@ function heartbeat() {
 }
 
 wss.on('connection', (ws) => {
-    const connId = crypto.randomUUID().substring(0, 8);
+    const connId = crypto.randomUUID();
     console.log('Client connected:', connId);
 
     // Setup heartbeat
