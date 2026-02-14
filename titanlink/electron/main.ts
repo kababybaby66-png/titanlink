@@ -442,9 +442,9 @@ function createWindow() {
         backgroundColor: '#0a0a0f',
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
-            nodeIntegration: true,
-            contextIsolation: false,
-            sandbox: false, // Required for some native modules
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
         },
         icon: path.join(__dirname, '../resources/icon.ico'),
     });
