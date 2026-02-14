@@ -24,6 +24,10 @@ impl UdpTransport {
         // Set socket to non-blocking mode for async operations
         socket.set_nonblocking(true)?;
 
+        // Increase socket buffer size to 4MB to handle 4K/high-bitrate bursts
+        // This is critical to avoid "os error 10035" (WSAEWOULDBLOCK)
+        let _ = set_socket_buffer_size(&socket, 4 * 1024 * 1024);
+
         Ok(Self {
             socket,
             remote_addr,
@@ -31,6 +35,33 @@ impl UdpTransport {
             packet_builder: PacketBuilder::new(session_id),
             running: Arc::new(AtomicBool::new(true)),
         })
+    }
+
+    // ... existing video methods ...
+
+    /// Send raw packet (exposed for reliable channel)
+    pub(crate) fn send_packet(&self, packet: &Packet) -> std::io::Result<usize> {
+        let bytes = packet.to_bytes();
+        let mut retries = 0;
+        
+        loop {
+            match self.socket.send_to(&bytes, self.remote_addr) {
+                Ok(n) => return Ok(n),
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    if retries >= 3 {
+                        // Buffer truly full after retries, drop packet
+                        // This prevents blocking the capture thread too long
+                        return Ok(0);
+                    }
+                    
+                    // Small backoff to let buffer drain
+                    std::thread::sleep(Duration::from_millis(1));
+                    retries += 1;
+                    continue;
+                }
+                Err(e) => return Err(e),
+            }
+        }
     }
 
     /// Send video frame (fire-and-forget, no ACK required)
@@ -101,12 +132,10 @@ impl UdpTransport {
         Ok(total_sent)
     }
 
-    /// Send raw packet (exposed for reliable channel)
-    pub(crate) fn send_packet(&self, packet: &Packet) -> std::io::Result<usize> {
-        let bytes = packet.to_bytes();
-        self.socket.send_to(&bytes, self.remote_addr)
+    /// Check if running
+    pub fn is_running(&self) -> bool {
+        self.running.load(Ordering::SeqCst)
     }
-
     /// Send controller input (will be handled by reliable channel in Task 2.3)
     pub fn send_controller_input(&mut self, input: ControllerInputData) -> std::io::Result<usize> {
         let packet = self.packet_builder.controller_input(input);
@@ -146,12 +175,41 @@ impl UdpTransport {
     pub fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
     }
+}
 
-    /// Check if running
-
-    pub fn is_running(&self) -> bool {
-        self.running.load(Ordering::SeqCst)
+// Helper to set socket buffer size cross-platform
+fn set_socket_buffer_size(socket: &UdpSocket, size: usize) -> std::io::Result<()> {
+    // Windows requires setsockoptSO_SNDBUF
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawSocket;
+        use windows::Win32::Networking::WinSock::{setsockopt, SOCKET, SO_RCVBUF, SO_SNDBUF, SOL_SOCKET};
+        
+        // SOCKET is a wrapper struct in windows crate 0.48+
+        let raw_socket = SOCKET(socket.as_raw_socket() as usize);
+        let size_i32 = size as i32;
+        let size_ptr = &size_i32 as *const i32 as *const _;
+        
+        unsafe {
+            // Set Send Buffer
+            if setsockopt(raw_socket, SOL_SOCKET, SO_SNDBUF, Some(std::slice::from_raw_parts(size_ptr as *const u8, 4))) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            
+            // Set Receive Buffer (for client side or ACKs)
+            if setsockopt(raw_socket, SOL_SOCKET, SO_RCVBUF, Some(std::slice::from_raw_parts(size_ptr as *const u8, 4))) != 0 {
+                 return Err(std::io::Error::last_os_error());
+            }
+        }
     }
+
+    #[cfg(unix)]
+    {
+        // socket2 crate would be cleaner, but using libc/std is fine
+        // for now just skip explicit size on unix or trust default
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

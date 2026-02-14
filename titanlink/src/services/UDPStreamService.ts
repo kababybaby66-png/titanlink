@@ -203,7 +203,7 @@ export class UDPStreamService {
         });
 
         this.isConnected = true;
-        this.callbacks.onStateChange('connected');
+        this.callbacks.onStateChange('streaming');
         this.callbacks.onPeerConnected({
             peerId: 'host',
             username: 'Host',
