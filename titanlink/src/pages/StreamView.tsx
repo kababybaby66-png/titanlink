@@ -39,6 +39,8 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
     const [packetLoss, setPacketLoss] = useState(0);
     const [jitter, setJitter] = useState(0);
     const [actualFps, setActualFps] = useState(0);
+    const [bitrate, setBitrate] = useState(0);
+    const [sessionDuration, setSessionDuration] = useState<string>("00:00:00");
 
     // WebRTC MediaStream handling removed - pure WebCodecs path used
 
@@ -74,12 +76,32 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
             setPacketLoss(quality.packetLoss);
             setJitter(quality.jitter);
             setHasAudio(quality.hasAudio || hasAudio);
+            setBitrate(quality.bitrateMbps);
             // Update actual FPS from hardware decoder (hwFps updates every second)
             setActualFps(hwFps);
         }, 1000); // Update FPS every second as requested (frames per second)
 
         return () => clearInterval(interval);
     }, [hasAudio, hwFps]);
+
+    // Session Timer Effect
+    useEffect(() => {
+        if (!sessionState.sessionStartTime || sessionState.connectionState !== 'streaming') {
+            return;
+        }
+
+        const interval = setInterval(() => {
+            const diff = Date.now() - sessionState.sessionStartTime!;
+            const seconds = Math.floor((diff / 1000) % 60);
+            const minutes = Math.floor((diff / (1000 * 60)) % 60);
+            const hours = Math.floor((diff / (1000 * 60 * 60)));
+
+            const pad = (n: number) => n.toString().padStart(2, '0');
+            setSessionDuration(`${pad(hours)}:${pad(minutes)}:${pad(seconds)}`);
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [sessionState.sessionStartTime, sessionState.connectionState]);
 
     // Handle volume changes
     // Audio volume handling - TODO for UDP audio
@@ -325,6 +347,12 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
                         <div className="dock-left">
                             <div className="dock-logo">TitanLink OS</div>
                             <div className="dock-divider"></div>
+                            {/* Session Timer */}
+                            <div className="dock-timer" title="Session Duration">
+                                <span className="material-symbols-outlined">timer</span>
+                                <span>{sessionDuration}</span>
+                            </div>
+                            <div className="dock-divider"></div>
                             <button
                                 className={`dock-btn ${windows.stats ? 'active' : ''}`}
                                 onClick={() => toggleWindow('stats')}
@@ -413,6 +441,10 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
                                     </span>
                                 </div>
                                 <div className="stat-row">
+                                    <span className="label">Bitrate</span>
+                                    <span className="value">{bitrate.toFixed(1)} Mbps</span>
+                                </div>
+                                <div className="stat-row">
                                     <span className="label">Protocol</span>
                                     <span className="value">WebRTC/UDP</span>
                                 </div>
@@ -472,6 +504,14 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
                         </div>
 
                         <div className="telemetry-grid">
+                            <div className="telemetry-item">
+                                <span className="t-label">TIME</span>
+                                <span className="t-val text-cyan">{sessionDuration}</span>
+                            </div>
+                            <div className="telemetry-item">
+                                <span className="t-label">BITRATE</span>
+                                <span className="t-val text-cyan">{bitrate.toFixed(1)} MBPS</span>
+                            </div>
                             <div className="telemetry-item">
                                 <span className="t-label">PING</span>
                                 <span className={`t-val ${sessionState.latency && sessionState.latency < 50 ? 'text-cyan' : 'text-warn'}`}>

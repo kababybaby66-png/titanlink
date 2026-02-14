@@ -64,6 +64,7 @@ export interface SessionState {
     connectionState: ConnectionState;
     peerInfo?: PeerInfo;
     latency?: number;
+    sessionStartTime?: number;
 }
 
 const SETTINGS_STORAGE_KEY = 'titanlink_settings_v1';
@@ -154,7 +155,15 @@ function App() {
     // Create WebRTC callbacks
     const createUDPCallbacks = useCallback(() => ({
         onStateChange: (state: ConnectionState) => {
-            setSessionState(prev => ({ ...prev, connectionState: state }));
+            setSessionState(prev => {
+                const newState = { ...prev, connectionState: state };
+                if (state === 'streaming' && !prev.sessionStartTime) {
+                    newState.sessionStartTime = Date.now();
+                } else if (state === 'disconnected') {
+                    newState.sessionStartTime = undefined;
+                }
+                return newState;
+            });
         },
         onPeerConnected: (peer: PeerInfo) => {
             setSessionState(prev => ({ ...prev, peerInfo: peer }));
