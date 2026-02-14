@@ -689,9 +689,7 @@ function registerIpcHandlers() {
 
         try {
             // Create temp directory
-            if (!fs.existsSync(tempDir)) {
-                fs.mkdirSync(tempDir, { recursive: true });
-            }
+            await fs.promises.mkdir(tempDir, { recursive: true });
 
             // Download the zip file
             await new Promise<void>((resolve, reject) => {
@@ -749,7 +747,7 @@ function registerIpcHandlers() {
             zip.extractAllTo(extractPath, true);
 
             // Find the 64-bit installer (or 32-bit as fallback)
-            const files = fs.readdirSync(extractPath);
+            const files = await fs.promises.readdir(extractPath);
             let installer = files.find((f: string) => f.toLowerCase().includes('vbcable_setup_x64.exe'));
             if (!installer) {
                 installer = files.find((f: string) => f.toLowerCase().includes('vbcable_setup.exe'));
@@ -787,7 +785,7 @@ function registerIpcHandlers() {
 
             // Clean up temp files
             try {
-                fs.rmSync(tempDir, { recursive: true, force: true });
+                await fs.promises.rm(tempDir, { recursive: true, force: true });
             } catch {
                 // Ignore cleanup errors
             }
