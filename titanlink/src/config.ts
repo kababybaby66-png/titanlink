@@ -1,69 +1,14 @@
+/**
+ * TitanLink Application Config
+ *
+ * Signaling is now done via HTTP REST at SIGNALING_BASE in UDPStreamService.ts.
+ * WebRTC and STUN/TURN are no longer used — the app uses its own UDP relay.
+ */
 export const CONFIG = {
-    SIGNALING: {
-        URL: 'ws://129.159.142.124:3001',
-        TIMEOUT_MS: 60000,
-        MAX_RETRIES: 3,
-    },
-
-    // STUN servers (for NAT discovery - always free)
-    STUN_SERVERS: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' },
-        { urls: 'stun:stun4.l.google.com:19302' },
-        { urls: 'stun:stun.services.mozilla.com:3478' },
-        { urls: 'stun:global.stun.twilio.com:3478' },
-    ],
-
-    // Free public TURN servers as emergency fallback
-    // These have rate limits but are better than no relay at all
-    FREE_TURN_SERVERS: [
-        // OpenRelay Project - Free TURN (rate limited)
-        {
-            urls: 'turn:openrelay.metered.ca:80',
-            username: 'openrelayproject',
-            credential: 'openrelayproject',
-        },
-        {
-            urls: 'turn:openrelay.metered.ca:443',
-            username: 'openrelayproject',
-            credential: 'openrelayproject',
-        },
-        {
-            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-            username: 'openrelayproject',
-            credential: 'openrelayproject',
-        },
-        // ExpressTurn - Free tier (limited bandwidth)
-        // NOTE: These are PUBLIC fallback credentials for the free tier
-        // They are rate-limited and shared across all users
-        // For production, configure your own TURN server via .env (TURN_SERVER_URL)
-        {
-            urls: 'turn:relay1.expressturn.com:3478',
-            username: process.env.EXPRESSTURN_USERNAME || 'efJ7UPKR7XCHQHP7PX',
-            credential: process.env.EXPRESSTURN_CREDENTIAL || 'aWxr2yjJi7K17W2J',
-        },
-    ],
-
-    // Legacy ICE_SERVERS for backwards compatibility
-    ICE_SERVERS: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' },
-        { urls: 'stun:stun4.l.google.com:19302' },
-        { urls: 'stun:stun.services.mozilla.com:3478' },
-        { urls: 'stun:global.stun.twilio.com:3478' },
-    ],
-
-    // ICE gathering configuration
-    ICE_CONFIG: {
-        // Time to wait for ICE gathering before giving up (ms)
-        GATHERING_TIMEOUT_MS: 10000,
-        // Prefer relay candidates for better reliability (at cost of latency)
-        PREFER_RELAY: false,
-        // Enable aggressive ICE nomination for faster connection
-        AGGRESSIVE_NOMINATION: true,
+    // Relay server (Oracle VM)
+    RELAY: {
+        IP: '129.159.142.124',
+        PORT: 5000,
+        SIGNALING_HTTP_BASE: 'http://129.159.142.124:3001',
     },
 };

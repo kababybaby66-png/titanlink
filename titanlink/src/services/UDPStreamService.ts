@@ -1,6 +1,7 @@
 /**
  * UDP Stream Service - Replaces WebRTC with Custom UDP Protocol
  * Handles all streaming operations using TitanLink's custom protocol
+ * Signaling is done via HTTP REST — no WebSocket dependency.
  */
 
 import { SmartConnectionManager, ConnectionMode } from '../lib/network/SmartConnectionManager';
@@ -13,10 +14,10 @@ import type {
 import {
     DEFAULT_SETTINGS,
 } from '../../shared/types/ipc';
-
-// Signaling is still needed for session exchange
 import { CONFIG } from '../config';
-const SIGNALING_SERVER = CONFIG.SIGNALING.URL;
+
+// HTTP signaling base URL (now centralized in config.ts)
+const SIGNALING_BASE = CONFIG.RELAY.SIGNALING_HTTP_BASE;
 
 interface UDPServiceCallbacks {
     onStateChange: (state: ConnectionState) => void;
@@ -34,7 +35,6 @@ interface UDPServiceCallbacks {
 }
 
 export class UDPStreamService {
-    private ws: WebSocket | null = null;
     private connectionManager: SmartConnectionManager | null = null;
     private callbacks: UDPServiceCallbacks | null = null;
 
@@ -44,12 +44,16 @@ export class UDPStreamService {
     private role: 'host' | 'client' | null = null;
     private isConnected: boolean = false;
 
+    // HTTP polling for peer-join events (host side)
+    private pollInterval: NodeJS.Timeout | null = null;
+    private pollSince: number = 0;
+
     // Settings
     private settings: StreamSettings = DEFAULT_SETTINGS;
 
-    // Oracle relay server (using actual Oracle VM IP)
-    private relayServerIp: string = '129.159.142.124';
-    private relayServerPort: number = 5000;
+    // Oracle relay server (centralized in config.ts)
+    private relayServerIp: string = CONFIG.RELAY.IP;
+    private relayServerPort: number = CONFIG.RELAY.PORT;
 
     // Hardware capture integration
     private captureInterval: NodeJS.Timeout | null = null;
@@ -132,11 +136,11 @@ export class UDPStreamService {
             useHardwareCapture: this.settings.useHardwareCapture,
         });
 
-        // Connect to signaling to await client
-        await this.connectToSignaling();
+        // Register session on signaling server via HTTP
+        await this.httpCreateSession();
 
-        // Create session on signaling server
-        await this.createSession();
+        // Start polling for client joins (every 2s)
+        this.startPollForClients();
 
         // Initialize connection manager (will connect when client joins)
         this.connectionManager = new SmartConnectionManager();
@@ -178,11 +182,8 @@ export class UDPStreamService {
 
         console.log('[UDPStreamService] Connecting to session:', sessionCode);
 
-        // Connect to signaling
-        await this.connectToSignaling();
-
-        // Join session
-        await this.joinSession();
+        // Join session via HTTP — receives sessionId synchronously
+        await this.httpJoinSession();
 
         // Initialize connection manager
         this.connectionManager = new SmartConnectionManager();
@@ -219,6 +220,8 @@ export class UDPStreamService {
     async disconnect(): Promise<void> {
         console.log('[UDPStreamService] Disconnecting...');
 
+        this.stopPollForClients();
+
         if (this.captureInterval) {
             clearInterval(this.captureInterval);
             this.captureInterval = null;
@@ -235,9 +238,10 @@ export class UDPStreamService {
             this.connectionManager = null;
         }
 
-        if (this.ws) {
-            this.ws.close();
-            this.ws = null;
+        // Best-effort: tell the signaling server the session is gone
+        if (this.role === 'host' && this.sessionCode) {
+            fetch(`${SIGNALING_BASE}/session/${this.sessionCode}`, { method: 'DELETE' })
+                .catch(() => { /* ignore - server will auto-cleanup anyway */ });
         }
 
         this.isConnected = false;
@@ -307,144 +311,92 @@ export class UDPStreamService {
     }
 
     private generateSessionId(): string {
-        // Generate a unique 8-byte session ID
         return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER).toString();
     }
 
-    private async connectToSignaling(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.ws = new WebSocket(SIGNALING_SERVER);
-
-            this.ws.onopen = () => {
-                console.log('[UDPStreamService] Connected to signaling server');
-                resolve();
-            };
-
-            this.ws.onerror = (error) => {
-                console.error('[UDPStreamService] Signaling error:', error);
-                reject(error);
-            };
-
-            this.ws.onmessage = this.handleSignalingMessage.bind(this);
-        });
-    }
-
-    private async createSession(): Promise<void> {
-        if (!this.ws) {
-            throw new Error('Signaling not connected');
-        }
-
-        // Generate a unique host ID
+    /**
+     * Host: register session on the signaling server via HTTP POST
+     */
+    private async httpCreateSession(): Promise<void> {
         const hostId = `host-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
-        this.ws.send(JSON.stringify({
-            type: 'create-session',
-            sessionCode: this.sessionCode,
-            sessionId: this.sessionId, // Send sessionId for relay to clients
-            hostId: hostId,
-        }));
-    }
-
-    private async joinSession(): Promise<void> {
-        if (!this.ws) {
-            throw new Error('Signaling not connected');
-        }
-
-        const ws = this.ws; // Capture reference for closure
-
-        return new Promise((resolve, reject) => {
-            // Generate a unique client ID
-            const clientId = `client-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-
-            let timeout: ReturnType<typeof setTimeout>;
-
-            // Set up one-time handler for the response
-            const handleResponse = (event: MessageEvent) => {
-                try {
-                    const message = JSON.parse(event.data);
-
-                    if (message.type === 'session-joined') {
-                        this.sessionId = message.data.sessionId;
-                        console.log('[UDPStreamService] Joined session, received sessionId:', this.sessionId);
-                        ws.removeEventListener('message', handleResponse);
-                        clearTimeout(timeout);
-                        resolve();
-                    } else if (message.type === 'session-not-found') {
-                        ws.removeEventListener('message', handleResponse);
-                        clearTimeout(timeout);
-                        reject(new Error('Session not found'));
-                    } else if (message.type === 'error') {
-                        ws.removeEventListener('message', handleResponse);
-                        clearTimeout(timeout);
-                        const errorMsg = typeof message.data === 'string'
-                            ? message.data
-                            : (message.data?.message || 'Unknown error');
-                        reject(new Error(errorMsg));
-                    }
-                    // Other message types are handled by handleSignalingMessage
-                } catch (error) {
-                    // Ignore parse errors for other messages
-                }
-            };
-
-            ws.addEventListener('message', handleResponse);
-
-            // Set a timeout for join response
-            timeout = setTimeout(() => {
-                ws.removeEventListener('message', handleResponse);
-                reject(new Error('Join session timeout'));
-            }, 10000);
-
-            ws.send(JSON.stringify({
-                type: 'join-session',
+        const res = await fetch(`${SIGNALING_BASE}/session`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
                 sessionCode: this.sessionCode,
-                clientId: clientId,
-            }));
+                sessionId: this.sessionId,
+                hostId,
+            }),
         });
+
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({})) as { error?: string };
+            throw new Error(body.error ?? `HTTP ${res.status}`);
+        }
+
+        console.log('[UDPStreamService] Session registered on signaling server:', this.sessionCode);
     }
 
-    private handleSignalingMessage(event: MessageEvent): void {
-        try {
-            const message = JSON.parse(event.data);
+    /**
+     * Client: join existing session via HTTP POST, receive sessionId synchronously
+     */
+    private async httpJoinSession(): Promise<void> {
+        const clientId = `client-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
-            switch (message.type) {
-                case 'session-created':
-                    console.log('[UDPStreamService] Session created, waiting for client...');
-                    break;
+        const res = await fetch(`${SIGNALING_BASE}/session/${this.sessionCode}/join`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clientId }),
+        });
 
-                case 'peer-joined':
-                    if (this.role === 'host') {
-                        this.handleClientJoined(message.data);
+        if (res.status === 404) {
+            throw new Error('Session not found');
+        }
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({})) as { error?: string };
+            throw new Error(body.error ?? `HTTP ${res.status}`);
+        }
+
+        const data = await res.json() as { sessionId: string; hostId: string };
+        this.sessionId = data.sessionId;
+        console.log('[UDPStreamService] Joined session, received sessionId:', this.sessionId);
+    }
+
+    /**
+     * Host: poll for client-join events every 2s
+     */
+    private startPollForClients(): void {
+        this.pollSince = Date.now();
+
+        this.pollInterval = setInterval(async () => {
+            try {
+                const res = await fetch(
+                    `${SIGNALING_BASE}/session/${this.sessionCode}?since=${this.pollSince}`
+                );
+                if (!res.ok) return;
+
+                const data = await res.json() as { events: Array<{ type: string; data: any; timestamp: number }> };
+
+                for (const event of data.events) {
+                    if (event.type === 'peer-joined') {
+                        this.pollSince = Math.max(this.pollSince, event.timestamp);
+                        await this.handleClientJoined(event.data);
                     }
-                    break;
-
-                case 'session-joined':
-                    if (this.role === 'client') {
-                        this.sessionId = message.data.sessionId;
-                    }
-                    break;
-
-                case 'peer-left':
-                case 'host-left':
-                    if (this.callbacks) {
-                        this.callbacks.onPeerDisconnected();
-                    }
-                    this.disconnect();
-                    break;
-
-                case 'error':
-                    if (this.callbacks) {
-                        const errorMsg = typeof message.data === 'string'
-                            ? message.data
-                            : (message.data?.message || 'Unknown error');
-                        this.callbacks.onError(errorMsg);
-                    }
-                    break;
+                }
+            } catch {
+                // Ignore transient poll failures
             }
-        } catch (error) {
-            console.error('[UDPStreamService] Failed to handle signaling message:', error);
+        }, 2000);
+    }
+
+    private stopPollForClients(): void {
+        if (this.pollInterval) {
+            clearInterval(this.pollInterval);
+            this.pollInterval = null;
         }
     }
+
 
     private async handleClientJoined(clientInfo: any): Promise<void> {
         console.log('[UDPStreamService] Client joined:', clientInfo);
@@ -453,24 +405,21 @@ export class UDPStreamService {
             return;
         }
 
-        // Connect via relay (P2P could be added later with client's IP)
-        await this.connectionManager.connect({
-            sessionId: this.sessionId,
-            relayIp: this.relayServerIp,
-            relayPort: this.relayServerPort,
-        });
-
+        // The host's relay connection was already established in startHosting().
+        // We only need to mark the session as active and notify the UI.
+        // Bug Fix: Do NOT call connectionManager.connect() again — it is already connected.
         this.isConnected = true;
 
         if (this.callbacks) {
+            // Bug Fix: server sends `{ peerId: clientId }`, not `{ clientId: clientId }`
             this.callbacks.onPeerConnected({
-                peerId: clientInfo.clientId || 'client',
+                peerId: clientInfo.peerId || clientInfo.clientId || 'client',
                 username: 'Client',
                 connectedAt: Date.now(),
             });
         }
 
-        console.log('[UDPStreamService] Host connected via', this.connectionManager.getMode());
+        console.log('[UDPStreamService] Host now active via', this.connectionManager.getMode());
     }
 
     private async startHardwareCapture(displayId: string): Promise<void> {

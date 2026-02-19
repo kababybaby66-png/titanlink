@@ -151,7 +151,7 @@ function App() {
         }
     }, [sessionState.connectionState, sessionState.role]);
 
-    // Create WebRTC callbacks
+    // Create UDP stream callbacks
     const createUDPCallbacks = useCallback(() => ({
         onStateChange: (state: ConnectionState) => {
             setSessionState(prev => ({ ...prev, connectionState: state }));

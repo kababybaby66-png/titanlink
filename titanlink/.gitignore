@@ -41,3 +41,6 @@ native/*.node
 !native/titanlink-capture.win32-x64-msvc.node
 native-cpp/build/
 native-cpp/*.node
+
+# Logo processing scripts
+scripts/process_logo.py

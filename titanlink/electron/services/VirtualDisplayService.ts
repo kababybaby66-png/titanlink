@@ -284,14 +284,14 @@ ${resolutionEntries}
      */
     private restartDriver(): void {
         try {
-            // Disable and re-enable the driver via PowerShell
-            execSync(
-                'powershell -Command "Get-PnpDevice | Where-Object { $_.FriendlyName -like \'*Virtual Display*\' -or $_.FriendlyName -like \'*IddSample*\' } | Disable-PnpDevice -Confirm:$false; Start-Sleep -Seconds 1; Get-PnpDevice | Where-Object { $_.FriendlyName -like \'*Virtual Display*\' -or $_.FriendlyName -like \'*IddSample*\' } | Enable-PnpDevice -Confirm:$false"',
-                { timeout: 15000 }
-            );
-            console.log(`${LOG_PREFIX} Driver restarted successfully`);
+            // Disable and re-enable the driver via elevated PowerShell
+            const script = `Get-PnpDevice | Where-Object { $_.FriendlyName -like '*Virtual Display*' -or $_.FriendlyName -like '*IddSample*' } | Disable-PnpDevice -Confirm:$false; Start-Sleep -Seconds 1; Get-PnpDevice | Where-Object { $_.FriendlyName -like '*Virtual Display*' -or $_.FriendlyName -like '*IddSample*' } | Enable-PnpDevice -Confirm:$false`;
+            const command = `powershell -Command "Start-Process powershell -ArgumentList '-Command \"${script}\"' -Verb RunAs -Wait"`;
+
+            execSync(command, { timeout: 30000 });
+            console.log(`${LOG_PREFIX} Driver restart command sent (elevated)`);
         } catch (e) {
-            console.error(`${LOG_PREFIX} Failed to restart driver (may need admin):`, e);
+            console.error(`${LOG_PREFIX} Failed to restart driver:`, e);
         }
     }
 

@@ -136,28 +136,17 @@ export class DriverManager {
 
             // Launch MSI installer with elevated privileges
             return new Promise((resolve) => {
-                const installer = spawn('msiexec', ['/i', this.vigemInstallerPath, '/passive', '/norestart'], {
-                    shell: true,
-                    stdio: 'ignore',
-                    detached: true,
-                });
+                const command = `powershell -Command "Start-Process msiexec.exe -ArgumentList '/i', \\"${this.vigemInstallerPath}\\", '/passive', '/norestart' -Verb RunAs -Wait"`;
 
-                installer.on('close', async (code) => {
-                    if (code === 0) {
+                exec(command, async (error) => {
+                    if (!error) {
                         // Re-check driver status after installation
                         await this.checkDriverStatus();
                         resolve({ success: true });
                     } else {
-                        resolve({ success: false, error: `Installer exited with code ${code}` });
+                        resolve({ success: false, error: `Installer failed or cancelled: ${error.message}` });
                     }
                 });
-
-                installer.on('error', (err) => {
-                    resolve({ success: false, error: err.message });
-                });
-
-                // Don't wait for installer if running detached
-                installer.unref();
             });
         } catch (error) {
             return {

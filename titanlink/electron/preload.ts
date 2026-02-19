@@ -63,14 +63,6 @@ const electronAPI = {
     },
 
     // ============================================
-    // Signaling Server APIs (Embedded P2P)
-    // ============================================
-    signaling: {
-        start: (): Promise<string> => ipcRenderer.invoke('signaling:start'),
-        getUrl: (): Promise<string | null> => ipcRenderer.invoke('signaling:get-url'),
-    },
-
-    // ============================================
     // TURN Server APIs (Multi-server with health checking)
     // ============================================
     turn: {

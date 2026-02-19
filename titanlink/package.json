@@ -28,6 +28,8 @@
         "@fontsource/space-grotesk": "^5.2.10",
         "@react-three/drei": "^9.99.2",
         "@react-three/fiber": "^8.15.16",
+        "@splinetool/react-spline": "^4.1.0",
+        "@splinetool/runtime": "^1.12.58",
         "@types/three": "^0.160.0",
         "adm-zip": "^0.5.16",
         "dotenv": "^17.2.3",
@@ -113,7 +115,7 @@
             "target": [
                 "nsis"
             ],
-            "requestedExecutionLevel": "requireAdministrator"
+            "requestedExecutionLevel": "asInvoker"
         },
         "nsis": {
             "oneClick": false,

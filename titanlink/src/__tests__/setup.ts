@@ -30,10 +30,6 @@ global.window.electronAPI = {
         maximize: vi.fn(),
         close: vi.fn(),
     },
-    signaling: {
-        start: vi.fn(),
-        getUrl: vi.fn(),
-    },
     turn: {
         getIceServers: vi.fn(),
         isConfigured: vi.fn(),
@@ -63,10 +59,8 @@ global.window.electronAPI = {
     },
 } as any;
 
-// Mock WebRTC APIs
-global.RTCPeerConnection = vi.fn() as any;
-global.RTCSessionDescription = vi.fn() as any;
-global.RTCIceCandidate = vi.fn() as any;
+// WebRTC APIs (kept in case any legacy tests still reference them)
+// global.RTCPeerConnection = vi.fn() as any;
 
 // Mock MediaStream API
 global.MediaStream = vi.fn() as any;
@@ -78,5 +72,4 @@ Object.defineProperty(global.navigator, 'mediaDevices', {
     },
 });
 
-// Mock WebSocket
-global.WebSocket = vi.fn() as any;
+
