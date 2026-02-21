@@ -87,6 +87,11 @@ const electronAPI = {
             ipcRenderer.on('update:status', listener);
             return () => { ipcRenderer.removeListener('update:status', listener); };
         },
+        onDownloadProgress: (callback: (progress: any) => void) => {
+            const listener = (_event: any, progress: any) => callback(progress);
+            ipcRenderer.on('update:download-progress', listener);
+            return () => { ipcRenderer.removeListener('update:download-progress', listener); };
+        },
         restartAndInstall: () => ipcRenderer.send('update:restart-and-install'),
     },
 

@@ -3,18 +3,36 @@ import './Titlebar.css';
 
 export const Titlebar = () => {
     const [updateReady, setUpdateReady] = useState(false);
+    const [updateProgress, setUpdateProgress] = useState<number | null>(null);
+    const [updateStatus, setUpdateStatus] = useState<string>('');
 
     useEffect(() => {
         if (!window.electronAPI?.updater) return;
 
-        const cleanup = window.electronAPI.updater.onStatusChange((status) => {
+        const cleanupStatus = window.electronAPI.updater.onStatusChange((status) => {
             console.log('[Titlebar] Auto-updater status:', status);
+            setUpdateStatus(status);
             if (status === 'downloaded') {
                 setUpdateReady(true);
+                setUpdateProgress(null);
+            } else if (status === 'checking' || status === 'available') {
+                setUpdateProgress(0);
+            } else if (status === 'not-available' || status === 'error') {
+                setUpdateProgress(null);
             }
         });
 
-        return cleanup;
+        let cleanupProgress: (() => void) | undefined;
+        if (window.electronAPI.updater.onDownloadProgress) {
+            cleanupProgress = window.electronAPI.updater.onDownloadProgress((progressObj) => {
+                setUpdateProgress(Math.round(progressObj.percent));
+            });
+        }
+
+        return () => {
+            cleanupStatus();
+            if (cleanupProgress) cleanupProgress();
+        };
     }, []);
 
     const handleRestart = () => {
@@ -50,9 +68,15 @@ export const Titlebar = () => {
             </div>
 
             <div className="titlebar-controls">
+                {updateProgress !== null && !updateReady && (
+                    <div className="flex items-center gap-2 mr-4 text-xs font-mono text-primary/80 mt-1">
+                        <span className="material-symbols-outlined text-[14px] animate-bounce">download</span>
+                        <span>{updateStatus === 'checking' ? 'CHECKING...' : `DL ${updateProgress}%`}</span>
+                    </div>
+                )}
                 {updateReady && (
                     <button className="update-ready-btn" onClick={handleRestart} title="Update Ready! Click to Restart">
-                        <span className="material-symbols-outlined">system_update_alt</span>
+                        <span className="material-symbols-outlined text-[16px]">system_update_alt</span>
                         <span className="btn-text">Update Ready</span>
                     </button>
                 )}
