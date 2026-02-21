@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest]
 
     steps:
       - name: Check out Git repository
@@ -40,8 +40,7 @@ jobs:
         working-directory: ./titanlink
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npx electron-builder --mac --config.mac.identity=null
+        run: npx electron-builder --win
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
