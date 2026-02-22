@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { GlassCard } from '../components/ui/GlassCard';
 import { CircuitNetwork } from '../components/ui/CircuitNetwork';
 import './LandingPage.css';
@@ -7,24 +7,27 @@ interface LandingPageProps {
     onHostClick: () => void;
     onConnectClick: () => void;
     onSettingsClick: () => void;
+    enableBackgroundAnimation?: boolean;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
     onHostClick,
     onConnectClick,
-    onSettingsClick
+    onSettingsClick,
+    enableBackgroundAnimation = false
 }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
     const [scrambleText, setScrambleText] = useState('SYSTEM_READY');
-    const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
-    // Mouse tracking for glow effect
+    // Optimized mouse tracking without re-renders
     const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        setMousePos({
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top,
-        });
-    }, []);
+        if (!enableBackgroundAnimation || !containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        containerRef.current.style.setProperty('--mouse-x', `${x}px`);
+        containerRef.current.style.setProperty('--mouse-y', `${y}px`);
+    }, [enableBackgroundAnimation]);
 
     // Simple scramble effect on mount
     useEffect(() => {
@@ -47,29 +50,30 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
     return (
         <div
-            className="landing-page"
+            ref={containerRef}
+            className={`landing-page ${enableBackgroundAnimation ? 'animated-bg' : ''}`}
             onMouseMove={handleMouseMove}
-            style={{
-                '--mouse-x': `${mousePos.x}px`,
-                '--mouse-y': `${mousePos.y}px`,
-            } as React.CSSProperties}
         >
             {/* Mouse-following glow effect */}
-            <div className="mouse-glow" />
-            <div className="mouse-glow-secondary" />
+            {enableBackgroundAnimation && (
+                <>
+                    <div className="mouse-glow" />
+                    <div className="mouse-glow-secondary" />
+                </>
+            )}
 
             {/* Background elements */}
-            <div className="grid-overlay"></div>
-            <div className="orbital-ring"></div>
+            <div className={`grid-overlay ${enableBackgroundAnimation ? 'animated' : ''}`}></div>
+            <div className={`orbital-ring ${enableBackgroundAnimation ? 'animated' : ''}`}></div>
 
-            {/* Circuit Network - Neural Network Particle System */}
+            {/* Circuit Network */}
             <div style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
                 <CircuitNetwork
                     nodeCount={130}
                     connectionDistance={280}
-                    mouseRadius={280}
                     primaryColor="#00f2ff"
                     secondaryColor="#4abdff"
+                    animated={enableBackgroundAnimation}
                 />
             </div>
 

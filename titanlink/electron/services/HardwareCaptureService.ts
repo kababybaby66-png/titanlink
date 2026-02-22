@@ -196,57 +196,47 @@ export class HardwareCaptureService extends EventEmitter {
         // C++ module might not expose isCaptureRunning, but we track locally
         return this.isRunning;
     }
-    // --- Audio Capture ---
+    // --- Audio Capture (WASAPI loopback via C++ module) ---
 
-    // Check if audio capture loops back is supported (WASAPI)
+    /** WASAPI loopback is always available on Windows 7+. */
     public isAudioSupported(): boolean {
-        if (!this.nativeNet) return false;
-        try {
-            return this.nativeNet.isAudioAvailable();
-        } catch (error) {
-            console.error(`${LOG_PREFIX} Failed to check audio support:`, error);
-            return false;
-        }
+        return !!this.nativeCapture && typeof this.nativeCapture.isAudioSupported === 'function'
+            ? this.nativeCapture.isAudioSupported()
+            : !!this.nativeCapture;
     }
 
-    // Start capturing system audio
-    public startAudio(sampleRate: number = 48000, quality: string = 'game'): boolean {
-        if (!this.nativeNet) {
-            console.error(`${LOG_PREFIX} Native (Rust/Net) addon not loaded`);
+    /** Start WASAPI loopback capture. Frames arrive via 'audio-frame' event. */
+    public startAudio(_sampleRate: number = 48000, _quality: string = 'game'): boolean {
+        if (!this.nativeCapture) {
+            console.error(`${LOG_PREFIX} C++ capture module not loaded — cannot start audio`);
             return false;
         }
 
-        console.log(`${LOG_PREFIX} Starting audio capture (rate: ${sampleRate}, quality: ${quality})`);
+        console.log(`${LOG_PREFIX} Starting WASAPI loopback audio capture...`);
 
         try {
-            // qualityMode: "game" or "voice" (Rust expects String)
-            const qualityMode = quality === 'voice' ? 'voice' : 'game';
-
-            this.nativeNet.startAudioCapture({
-                sampleRate,
-                qualityMode
-            }, (frame: any) => {
+            const ok = this.nativeCapture.startAudioCapture((frame: any) => {
                 this.emit('audio-frame', frame);
             });
 
-            console.log(`${LOG_PREFIX} Audio capture started successfully`);
-            return true;
+            console.log(`${LOG_PREFIX} WASAPI audio capture ${ok ? 'started' : 'failed'}`);
+            return ok;
         } catch (error) {
-            console.error(`${LOG_PREFIX} Failed to start audio capture:`, error);
+            console.error(`${LOG_PREFIX} Failed to start WASAPI audio capture:`, error);
             return false;
         }
     }
 
-    // Stop capturing audio
+    /** Stop WASAPI loopback capture. */
     public stopAudio(): void {
-        if (!this.nativeNet) return;
+        if (!this.nativeCapture) return;
 
-        console.log(`${LOG_PREFIX} Stopping audio capture...`);
+        console.log(`${LOG_PREFIX} Stopping WASAPI audio capture...`);
         try {
-            this.nativeNet.stopAudioCapture();
-            console.log(`${LOG_PREFIX} Audio capture stopped`);
+            this.nativeCapture.stopAudioCapture();
+            console.log(`${LOG_PREFIX} WASAPI audio capture stopped`);
         } catch (error) {
-            console.error(`${LOG_PREFIX} Failed to stop audio capture:`, error);
+            console.error(`${LOG_PREFIX} Failed to stop WASAPI audio capture:`, error);
         }
     }
 }

@@ -67,6 +67,34 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                                     <span className="slider"></span>
                                 </label>
                             </div>
+                            <div className="setting-item">
+                                <div className="setting-info">
+                                    <span className="label">3D Visual Effects</span>
+                                    <span className="desc">Enable GPU-powered 3D components (requires a capable GPU)</span>
+                                </div>
+                                <label className="cyber-switch">
+                                    <input
+                                        type="checkbox"
+                                        checked={localSettings.enable3D}
+                                        onChange={(e) => updateSetting('enable3D', e.target.checked)}
+                                    />
+                                    <span className="slider"></span>
+                                </label>
+                            </div>
+                            <div className="setting-item">
+                                <div className="setting-info">
+                                    <span className="label">Background Animations</span>
+                                    <span className="desc">Enable live UI background effects</span>
+                                </div>
+                                <label className="cyber-switch">
+                                    <input
+                                        type="checkbox"
+                                        checked={localSettings.enableBackgroundAnimation}
+                                        onChange={(e) => updateSetting('enableBackgroundAnimation', e.target.checked)}
+                                    />
+                                    <span className="slider"></span>
+                                </label>
+                            </div>
                         </div>
 
                         {/* NETWORK SETTINGS */}

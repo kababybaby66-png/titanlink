@@ -72,6 +72,14 @@
     "build": {
         "appId": "com.titanlink.app",
         "productName": "TitanLink",
+        "protocols": [
+            {
+                "name": "TitanLink Protocol",
+                "schemes": [
+                    "titanlink"
+                ]
+            }
+        ],
         "directories": {
             "output": "release"
         },

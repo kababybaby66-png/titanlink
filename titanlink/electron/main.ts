@@ -343,20 +343,69 @@ function registerIpcHandlers() {
 }
 
 // ============================================
+// ============================================
 // App Lifecycle
 // ============================================
 
-app.whenReady().then(async () => {
-    await initializeServices();
-    registerIpcHandlers();
-    createWindow();
+// Register protocol client for local dev
+if (process.defaultApp) {
+    if (process.argv.length >= 2) {
+        app.setAsDefaultProtocolClient('titanlink', process.execPath, [path.resolve(process.argv[1])]);
+    }
+} else {
+    app.setAsDefaultProtocolClient('titanlink');
+}
 
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+    app.quit();
+} else {
+    app.on('second-instance', (event, commandLine, workingDirectory) => {
+        // Someone tried to run a second instance, we should focus our window.
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+
+            // Windows: Deep link comes through command shell args
+            const deepLink = commandLine.find(arg => arg.startsWith('titanlink://'));
+            if (deepLink) {
+                mainWindow.webContents.send('app:deep-link', deepLink);
+            }
         }
     });
-});
+
+    // macOS: Handle deep links when app is already open
+    app.on('open-url', (event, url) => {
+        event.preventDefault();
+        if (mainWindow) {
+            mainWindow.webContents.send('app:deep-link', url);
+        }
+    });
+
+    app.whenReady().then(async () => {
+        await initializeServices();
+        registerIpcHandlers();
+        createWindow();
+
+        // Check if app was opened by a deep link (Windows initially)
+        if (process.platform === 'win32') {
+            const deepLink = process.argv.find(arg => arg.startsWith('titanlink://'));
+            if (deepLink && mainWindow) {
+                // Wait for the window to finish loading the React app before sending
+                mainWindow.webContents.once('did-finish-load', () => {
+                    mainWindow!.webContents.send('app:deep-link', deepLink);
+                });
+            }
+        }
+
+        app.on('activate', () => {
+            if (BrowserWindow.getAllWindows().length === 0) {
+                createWindow();
+            }
+        });
+    });
+}
 
 app.on('window-all-closed', () => {
     // Cleanup services

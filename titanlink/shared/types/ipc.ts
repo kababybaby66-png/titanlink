@@ -51,6 +51,11 @@ export interface StreamSettings {
     immersiveMode: boolean;
     preferredPort: number;
     gamepadEmulation: 'xbox' | 'ds4' | 'disabled';
+    // UI Preferences
+    uiVersion: 'v1' | 'v2';
+    // Performance
+    enable3D: boolean;
+    enableBackgroundAnimation: boolean;
 }
 
 export const DEFAULT_SETTINGS: StreamSettings = {
@@ -70,6 +75,9 @@ export const DEFAULT_SETTINGS: StreamSettings = {
     immersiveMode: true,
     preferredPort: 8000,
     gamepadEmulation: 'xbox',
+    uiVersion: 'v1',
+    enable3D: false, // Default OFF for performance
+    enableBackgroundAnimation: false, // Default OFF for performance
 };
 
 // ============================================

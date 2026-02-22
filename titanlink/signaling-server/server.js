@@ -18,6 +18,19 @@ const express = require('express');
 const crypto = require('crypto');
 
 const app = express();
+
+// ─── CORS ─────────────────────────────────────────────────────────────────────
+// Allow any origin (Electron renderer, Vite dev server, etc.)
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(204);
+    }
+    next();
+});
+
 app.use(express.json());
 
 // Map of sessionCode -> session object

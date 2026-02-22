@@ -6,10 +6,11 @@ interface ClientConnectProps {
     onConnect: (sessionCode: string) => Promise<void>;
     onBack: () => void;
     error: string | null;
+    initialSessionCode?: string;
 }
 
-export function ClientConnect({ onConnect, onBack, error }: ClientConnectProps) {
-    const [inputCode, setInputCode] = useState('');
+export function ClientConnect({ onConnect, onBack, error, initialSessionCode }: ClientConnectProps) {
+    const [inputCode, setInputCode] = useState(initialSessionCode || '');
     const [isConnecting, setIsConnecting] = useState(false);
     const [localError, setLocalError] = useState<string | null>(null);
 
@@ -27,6 +28,13 @@ export function ClientConnect({ onConnect, onBack, error }: ClientConnectProps) 
             setIsConnecting(false);
         }
     };
+
+    React.useEffect(() => {
+        if (initialSessionCode && !isConnecting && !error && !localError) {
+            handleConnect();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialSessionCode]);
 
     return (
         <div className="client-connect-page">

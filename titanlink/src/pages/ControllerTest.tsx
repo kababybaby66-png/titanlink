@@ -1,15 +1,25 @@
 /**
- * Controller Test Page - Temporary debug page for testing 3D controller
- * Uses browser Gamepad API to read local controller input
+ * Controller Test Page - Debug page for testing controller visualization
+ * Uses browser Gamepad API to read local controller input.
+ * 3D view is opt-in via the enable3D prop (Settings → 3D Visual Effects).
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { ControllerOverlay } from '../components/ControllerOverlay';
 import type { GamepadInputState } from '../../shared/types/ipc';
 import { XBOX_BUTTONS } from '../../shared/types/ipc';
 import './ControllerTest.css';
 
-export function ControllerTest() {
+// Lazy-load heavy 3D modules so they never load on low-end machines
+const HoloCanvas = lazy(() => import('../components/3d/HoloCanvas').then(m => ({ default: m.HoloCanvas })));
+const Controller3D = lazy(() => import('../components/3d/Controller3D').then(m => ({ default: m.Controller3D })));
+
+interface ControllerTestProps {
+    enable3D?: boolean;
+}
+
+
+export function ControllerTest({ enable3D = false }: ControllerTestProps) {
     const [input, setInput] = useState<GamepadInputState | null>(null);
     const [connected, setConnected] = useState(false);
     const [gamepadName, setGamepadName] = useState<string>('');
@@ -110,7 +120,15 @@ export function ControllerTest() {
 
             <div className="test-container">
                 <div className="controller-display">
-                    <ControllerOverlay input={input} connected={connected} />
+                    {enable3D ? (
+                        <Suspense fallback={<div style={{ color: '#00f2ff', padding: '2rem' }}>Loading 3D…</div>}>
+                            <HoloCanvas>
+                                <Controller3D input={input} connected={connected} />
+                            </HoloCanvas>
+                        </Suspense>
+                    ) : (
+                        <ControllerOverlay input={input} connected={connected} />
+                    )}
                 </div>
 
                 <div className="debug-panel">

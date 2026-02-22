@@ -5,7 +5,6 @@ import type { DisplayInfo, SystemStats, GamepadInputState } from '../../shared/t
 import { GlassCard } from '../components/ui/GlassCard';
 import { StatusVisualizer } from '../components/StatusVisualizer';
 import { ControllerOverlay } from '../components/ControllerOverlay';
-import { AudioBanner } from '../components/AudioBanner';
 import { HardwareStatusWidget } from '../components/HardwareStatusWidget';
 import { udpStreamService } from '../services/UDPStreamService';
 import './HostLobby.css';
@@ -16,6 +15,7 @@ interface HostLobbyProps {
     onStartHosting: (displayId: string) => Promise<string>;
     onBack: () => void;
     error: string | null;
+    enable3D?: boolean;
 }
 
 // Resizable Widget Component - handles resize from entire border
@@ -95,7 +95,7 @@ function ResizableWidget({ id, panel, children, onDragStart, onDrop }: Resizable
     );
 }
 
-export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostLobbyProps) {
+export function HostLobby({ sessionState, onStartHosting, onBack, error, enable3D = false }: HostLobbyProps) {
     const [displays, setDisplays] = useState<DisplayInfo[]>([]);
     const [selectedDisplay, setSelectedDisplay] = useState<string>('');
     const [isStarting, setIsStarting] = useState(false);
@@ -108,12 +108,6 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
     const [currentInput, setCurrentInput] = useState<GamepadInputState | null>(null);
     const [showControllerOverlay, setShowControllerOverlay] = useState(true);
 
-    // Audio banner state - dismissable, remembers user preference
-    const [showAudioBanner, setShowAudioBanner] = useState(() => {
-        // Check if user previously dismissed the banner
-        return localStorage.getItem('titanlink-audio-banner-dismissed') !== 'true';
-    });
-    const [audioInstalled, setAudioInstalled] = useState(false);
 
     // Connection quality metrics
     const [connectionQuality, setConnectionQuality] = useState({
@@ -250,6 +244,12 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
         addLog('Clipboard: Code copied');
     };
 
+    const handleCopyLink = async () => {
+        if (!sessionState.sessionCode) return;
+        navigator.clipboard.writeText(`titanlink://join?code=${sessionState.sessionCode}`);
+        addLog('Clipboard: Invite link copied');
+    };
+
     // -- DRAG HANDLERS --
     const onDragStart = (e: React.DragEvent, id: string, panel: 'left' | 'right') => {
         setDraggedItem(id);
@@ -352,50 +352,24 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
             case 'hardware':
                 return <HardwareStatusWidget />;
             case 'audio':
-                // Audio status widget - only show when hosting
                 if (!isHosting) return null;
-                const hasAudio = audioInstalled;
                 return (
-                    <GlassCard className={`audio-widget ${hasAudio ? 'active' : 'inactive'}`}>
+                    <GlassCard className="audio-widget active">
                         <div className="card-header">
-                            <span className="material-symbols-outlined icon">
-                                {hasAudio ? 'volume_up' : 'volume_off'}
-                            </span>
+                            <span className="material-symbols-outlined icon">volume_up</span>
                             <span className="title">AUDIO</span>
-                            <span className={`status-badge ${hasAudio ? 'connected' : 'disconnected'}`}>
-                                {hasAudio ? 'ACTIVE' : 'SETUP NEEDED'}
-                            </span>
+                            <span className="status-badge connected">WASAPI ACTIVE</span>
                         </div>
-                        {!hasAudio && showAudioBanner && (
-                            <AudioBanner
-                                isVisible={showAudioBanner}
-                                onDismiss={() => {
-                                    setShowAudioBanner(false);
-                                    localStorage.setItem('titanlink-audio-banner-dismissed', 'true');
-                                    addLog('[AUDIO] Setup dismissed - can reinstall from settings');
-                                }}
-                                onInstall={() => {
-                                    setAudioInstalled(true);
-                                    setShowAudioBanner(false);
-                                    addLog('[AUDIO] VB-Cable installed successfully');
-                                }}
-                            />
-                        )}
-                        {!hasAudio && !showAudioBanner && (
-                            <button
-                                className="audio-fix-btn compact"
-                                onClick={() => setShowAudioBanner(true)}
-                            >
-                                <span className="material-symbols-outlined">settings</span>
-                                Setup Audio
-                            </button>
-                        )}
+                        <div className="card-sub" style={{ fontSize: '11px', opacity: 0.6, padding: '4px 0 0' }}>
+                            System loopback capture — no setup required
+                        </div>
                     </GlassCard>
                 );
             case 'reactor':
+                if (!enable3D) return null;
                 return (
                     <div className="status-viz-container" style={{ height: '100%', width: '100%', minHeight: '120px' }}>
-                        <StatusVisualizer cpuUsage={stats.cpuUsage} memUsage={stats.memUsage} />
+                        <StatusVisualizer cpuUsage={stats.cpuUsage} memUsage={stats.memUsage} enable3D={enable3D} />
                     </div>
                 );
             case 'resources':
@@ -571,12 +545,22 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error }: HostL
                             <span className="material-symbols-outlined icon animate-spin">sync</span>
                             <span className="text">SECURE LINK ESTABLISHED</span>
                         </div>
-                        <div className="session-code-display" onClick={handleCopyCode} title="Click to copy">
+                        <div className="session-code-display" onClick={handleCopyCode} title="Click to copy code">
                             <h1 className="code-text glow-text">{sessionState.sessionCode}</h1>
                             <div className="code-status">
                                 <span className="dot animate-pulse"></span>
                                 <span>WAITING FOR CONNECTION...</span>
                             </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '20px' }}>
+                            <button className="secondary-btn action-btn" onClick={handleCopyCode}>
+                                <span className="material-symbols-outlined icon">content_copy</span>
+                                COPY CODE
+                            </button>
+                            <button className="primary-btn action-btn pulse-glow" onClick={handleCopyLink}>
+                                <span className="material-symbols-outlined icon">link</span>
+                                COPY INVITE LINK
+                            </button>
                         </div>
                         <div className="peer-slots">
                             {[...Array(4)].map((_, i) => (

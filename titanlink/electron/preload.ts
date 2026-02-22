@@ -36,6 +36,12 @@ const electronAPI = {
     app: {
         setLaunchOnStartup: (enabled: boolean): Promise<{ success: boolean }> =>
             ipcRenderer.invoke('app:set-launch-on-startup', enabled),
+
+        onDeepLink: (callback: (url: string) => void) => {
+            const listener = (_event: any, url: string) => callback(url);
+            ipcRenderer.on('app:deep-link', listener);
+            return () => { ipcRenderer.removeListener('app:deep-link', listener); };
+        }
     },
 
     // ============================================

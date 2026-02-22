@@ -96,6 +96,7 @@ function App() {
     // videoStream removed - UDP protocol uses pure canvas
 
     const [error, setError] = useState<string | null>(null);
+    const [deepLinkCode, setDeepLinkCode] = useState<string | undefined>();
 
     // Persist settings to localStorage and sync to UDP service whenever they change
     useEffect(() => {
@@ -141,6 +142,36 @@ function App() {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
+    // Handle deep links
+    useEffect(() => {
+        if (window.electronAPI?.app?.onDeepLink) {
+            const cleanup = window.electronAPI.app.onDeepLink((url) => {
+                console.log('[App] Received deep link:', url);
+                try {
+                    if (url.includes('join?code=')) {
+                        let code = '';
+                        // Sometimes Windows passes the URL format cleanly, sometimes with trailing slashes
+                        const idx = url.indexOf('join?code=');
+                        let queryParam = url.substring(idx + 10);
+                        // Clean up trailing slash from Windows passing uri
+                        if (queryParam.endsWith('/')) {
+                            queryParam = queryParam.slice(0, -1);
+                        }
+                        code = queryParam.split('&')[0];
+
+                        if (code) {
+                            setDeepLinkCode(code);
+                            setCurrentView('client-connect');
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error parsing deep link URL', e);
+                }
+            });
+            return cleanup;
+        }
     }, []);
 
     // Handle navigation based on connection state
@@ -305,6 +336,7 @@ function App() {
                         onHostClick={handleStartHosting}
                         onConnectClick={handleStartConnecting}
                         onSettingsClick={handleOpenSettings}
+                        enableBackgroundAnimation={settings.enableBackgroundAnimation}
                     />
                 );
             case 'settings':
@@ -322,6 +354,7 @@ function App() {
                         onStartHosting={handleHostSession}
                         onBack={handleBackToLanding}
                         error={error}
+                        enable3D={settings.enable3D}
                     />
                 );
             case 'client-connect':
@@ -330,6 +363,7 @@ function App() {
                         onConnect={handleConnectToHost}
                         onBack={handleBackToLanding}
                         error={error}
+                        initialSessionCode={deepLinkCode}
                     />
                 );
             case 'streaming':
@@ -340,7 +374,7 @@ function App() {
                     />
                 );
             case 'controller-test':
-                return <ControllerTest />;
+                return <ControllerTest enable3D={settings.enable3D} />;
             default:
                 return null;
         }
