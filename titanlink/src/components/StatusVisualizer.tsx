@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { HoloCanvas, ResourceReactor } from './3d'; // Adjust import based on where this file is placed
 import './StatusVisualizer.css';
 

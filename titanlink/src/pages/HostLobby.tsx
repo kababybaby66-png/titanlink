@@ -6,7 +6,7 @@ import { GlassCard } from '../components/ui/GlassCard';
 import { StatusVisualizer } from '../components/StatusVisualizer';
 import { ControllerOverlay } from '../components/ControllerOverlay';
 import { HardwareStatusWidget } from '../components/HardwareStatusWidget';
-import { udpStreamService } from '../services/UDPStreamService';
+import { getStreamService } from '../services/StreamService';
 import './HostLobby.css';
 
 
@@ -106,8 +106,6 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error, enable3
     // Controller detection state (for when client connects)
     const [controllerConnected, setControllerConnected] = useState(false);
     const [currentInput, setCurrentInput] = useState<GamepadInputState | null>(null);
-    const [showControllerOverlay, setShowControllerOverlay] = useState(true);
-
 
     // Connection quality metrics
     const [connectionQuality, setConnectionQuality] = useState({
@@ -205,7 +203,7 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error, enable3
         if (!isStreaming) return;
 
         const interval = setInterval(() => {
-            const quality = udpStreamService.getConnectionQuality();
+            const quality = getStreamService().getConnectionQuality();
             setConnectionQuality({
                 latency: quality.latency,
                 packetLoss: quality.packetLoss,

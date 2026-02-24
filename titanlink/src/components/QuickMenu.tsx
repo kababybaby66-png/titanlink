@@ -37,7 +37,6 @@ export function QuickMenu({
     sessionCode,
     role,
     latency = 0,
-    peerName,
     volume = 100,
     isMuted = false,
     hasAudio = false,

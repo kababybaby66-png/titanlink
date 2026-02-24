@@ -54,14 +54,15 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
             });
         }
 
-        const handleHardwareFrame = (e: CustomEvent<any>) => {
+        const handleHardwareFrame = (e: Event) => {
+            const customEvent = e as CustomEvent<unknown>;
             if (!isHardwareMode) setIsHardwareMode(true);
-            decoderRef.current?.decode(e.detail);
+            decoderRef.current?.decode(customEvent.detail as { frameNumber: number; timestampUs: bigint; isKeyframe: boolean; data: Uint8Array; });
         };
 
-        window.addEventListener('titanlink:hardware-frame' as any, handleHardwareFrame);
+        window.addEventListener('titanlink:hardware-frame', handleHardwareFrame);
         return () => {
-            window.removeEventListener('titanlink:hardware-frame' as any, handleHardwareFrame);
+            window.removeEventListener('titanlink:hardware-frame', handleHardwareFrame);
             decoderRef.current?.destroy();
             decoderRef.current = null;
         };
@@ -222,11 +223,11 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
         // Subscribe to input events from WebRTC service
         // This is handled through the callbacks in App.tsx
         // We'll use a custom event for this
-        const handler = (e: CustomEvent<GamepadInputState>) => handleInputReceived(e.detail);
-        window.addEventListener('titanlink:input' as any, handler);
+        const handler = (e: Event) => handleInputReceived((e as CustomEvent<GamepadInputState>).detail);
+        window.addEventListener('titanlink:input', handler);
 
         return () => {
-            window.removeEventListener('titanlink:input' as any, handler);
+            window.removeEventListener('titanlink:input', handler);
         };
     }, [sessionState.role]);
 
@@ -261,7 +262,7 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
             }
         }, 3000);
         */
-    }, [isFullscreen, sessionState.connectionState, showQuickMenu]);
+    }, []);
 
     const toggleFullscreen = async () => {
         if (!document.fullscreenElement) {

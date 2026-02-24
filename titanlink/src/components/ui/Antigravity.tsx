@@ -138,7 +138,7 @@ export const Antigravity: React.FC<AntigravityProps> = ({
                     const relativeDist = dist - voidRadius;
 
                     // Linear Fade Out (starts at 1.0)
-                    let fadeOut = 1 - (relativeDist / range);
+                    const fadeOut = 1 - (relativeDist / range);
 
                     // Quick soft entry (0 to 1 in 20px)
                     const fadeIn = Math.min(1, relativeDist / 20);

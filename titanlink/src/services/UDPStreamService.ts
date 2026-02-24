@@ -4,7 +4,7 @@
  * Signaling is done via HTTP REST — no WebSocket dependency.
  */
 
-import { SmartConnectionManager, ConnectionMode } from '../lib/network/SmartConnectionManager';
+import { SmartConnectionManager } from '../lib/network/SmartConnectionManager';
 import type {
     ConnectionState,
     PeerInfo,
@@ -93,7 +93,7 @@ export class UDPStreamService {
             };
         }
 
-        const stats = this.connectionManager.getStats();
+        // const stats = this.connectionManager.getStats();
         // Since custom UDP protocol doesn't yet have dedicated ping packets for RTT,
         // we use a reasonable estimation or wait for future implementation.
         return {
@@ -112,7 +112,8 @@ export class UDPStreamService {
     async startHosting(
         displayId: string,
         callbacks: UDPServiceCallbacks,
-        useDirect: boolean = false,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        _useDirect: boolean = false,
         useHardwareCapture: boolean = true,
     ): Promise<string> {
         this.callbacks = callbacks;
@@ -472,7 +473,8 @@ export class UDPStreamService {
 
                     if (started) {
                         this.audioCaptureActive = true;
-                        window.electronAPI.hardwareCapture.onAudioFrame((frame: any) => {
+                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                        window.electronAPI.hardwareCapture.onAudioFrame((_frame: any) => {
                             // TODO: Send audio frame over UDP
                             // For now just log occasionally to verify flow
                             if (Math.random() < 0.01) {

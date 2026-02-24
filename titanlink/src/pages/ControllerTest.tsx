@@ -12,7 +12,6 @@ import './ControllerTest.css';
 
 // Lazy-load heavy 3D modules so they never load on low-end machines
 const HoloCanvas = lazy(() => import('../components/3d/HoloCanvas').then(m => ({ default: m.HoloCanvas })));
-const Controller3D = lazy(() => import('../components/3d/Controller3D').then(m => ({ default: m.Controller3D })));
 
 interface ControllerTestProps {
     enable3D?: boolean;
@@ -123,7 +122,7 @@ export function ControllerTest({ enable3D = false }: ControllerTestProps) {
                     {enable3D ? (
                         <Suspense fallback={<div style={{ color: '#00f2ff', padding: '2rem' }}>Loading 3D…</div>}>
                             <HoloCanvas>
-                                <Controller3D input={input} connected={connected} />
+                                {/* Controller3D temporarily removed */}
                             </HoloCanvas>
                         </Suspense>
                     ) : (

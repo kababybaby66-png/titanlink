@@ -6,7 +6,7 @@ import { ButtonV2 } from '../../components/ui/v2/ButtonV2';
 import { StatusVisualizer } from '../../components/StatusVisualizer';
 import { ControllerOverlay } from '../../components/ControllerOverlay';
 import { HardwareStatusWidget } from '../../components/HardwareStatusWidget';
-import { udpStreamService } from '../../services/UDPStreamService';
+import { getStreamService } from '../../services/StreamService';
 import '../HostLobby.css';
 
 interface HostLobbyV2Props {
@@ -181,7 +181,7 @@ export function HostLobbyV2({ sessionState, onStartHosting, onBack, error, enabl
     useEffect(() => {
         if (!isStreaming) return;
         const interval = setInterval(() => {
-            const quality = udpStreamService.getConnectionQuality();
+            const quality = getStreamService().getConnectionQuality();
             setConnectionQuality({
                 latency: quality.latency,
                 packetLoss: quality.packetLoss,

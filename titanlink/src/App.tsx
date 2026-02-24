@@ -2,7 +2,7 @@
  * TitanLink - Main App Component
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Titlebar } from './components/Titlebar';
 import { BackgroundEffects } from './components/BackgroundEffects';
 import { LandingPage } from './pages/LandingPage';
@@ -12,50 +12,10 @@ import { StreamView } from './pages/StreamView';
 import { SettingsPage } from './pages/SettingsPage';
 import { ControllerTest } from './pages/ControllerTest';
 import { DriverWarning } from './components/DriverWarning';
-// LAZY IMPORT: udpStreamService is loaded dynamically to prevent production build crashes
-// import { udpStreamService } from './services/UDPStreamService';
-import type { DriverCheckResult, ConnectionState, PeerInfo, StreamSettings } from '../shared/types/ipc';
+// Use the StreamService router to cleanly handle WebRTC vs UDP
+import { initStreamService, getStreamService } from './services/StreamService';
+import type { DriverCheckResult, ConnectionState, PeerInfo, StreamSettings, GamepadInputState } from '../shared/types/ipc';
 import { DEFAULT_SETTINGS } from '../shared/types/ipc';
-
-// Lazy-loaded UDP service reference
-let udpStreamServiceInstance: any = null;
-
-/**
- * Check if native UDP protocol is available on this platform
- */
-function isUdpProtocolSupported(): boolean {
-    if (typeof process === 'undefined') return false;
-    const isWindows = process.platform === 'win32' && process.arch === 'x64';
-    const isMac = process.platform === 'darwin';
-    return isWindows || isMac;
-}
-
-/**
- * Get the UDP stream service (lazy-loaded to prevent production crashes)
- * Throws if platform is not supported (Windows x64 only)
- */
-async function getUdpStreamService() {
-    if (!isUdpProtocolSupported()) {
-        const platform = typeof process !== 'undefined' ? `${process.platform}-${process.arch}` : 'unknown';
-        throw new Error(
-            `This version of TitanLink requires Windows x64 for the low-latency streaming protocol. ` +
-            `Your platform: ${platform}. ` +
-            `Cross-platform support (WebRTC fallback) is coming in a future update.`
-        );
-    }
-
-    if (!udpStreamServiceInstance) {
-        try {
-            const module = await import('./services/UDPStreamService');
-            udpStreamServiceInstance = module.udpStreamService;
-            console.log('[App] UDP Stream Service loaded successfully');
-        } catch (error) {
-            console.error('[App] Failed to load UDP Stream Service:', error);
-            throw error;
-        }
-    }
-    return udpStreamServiceInstance;
-}
 
 type AppView = 'landing' | 'host-lobby' | 'client-connect' | 'streaming' | 'settings' | 'controller-test';
 
@@ -99,12 +59,14 @@ function App() {
     const [error, setError] = useState<string | null>(null);
     const [deepLinkCode, setDeepLinkCode] = useState<string | undefined>();
 
-    // Persist settings to localStorage and sync to UDP service whenever they change
+    // Persist settings to localStorage and sync to stream service whenever they change
     useEffect(() => {
         localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
 
-        if (udpStreamServiceInstance) {
-            udpStreamServiceInstance.updateSettings(settings);
+        try {
+            getStreamService().updateSettings(settings);
+        } catch (e) {
+            // Service might not be initialized yet, which is fine
         }
     }, [settings]);
 
@@ -203,7 +165,7 @@ function App() {
         },
         // onStreamReceived removed - UDP uses onVideoFrameReceived
 
-        onInputReceived: (input: any) => {
+        onInputReceived: (input: GamepadInputState) => {
             // console.log('[App] Input received', input.timestamp);
             // Forward input to StreamView for visualization
             window.dispatchEvent(new CustomEvent('titanlink:input', { detail: input }));
@@ -214,7 +176,12 @@ function App() {
                 window.electronAPI.controller.sendInput(input);
             }
         },
-        onVideoFrameReceived: (frame: any) => {
+        onStreamReceived: (stream: MediaStream) => {
+            // Wait for App to wire this up, currently only WebRTC uses this
+            // We can emit it as a custom event for StreamView to catch
+            window.dispatchEvent(new CustomEvent('titanlink:webrtc-stream', { detail: stream }));
+        },
+        onVideoFrameReceived: (frame: unknown) => {
             // Forward hardware decoded frame to StreamView for WebCodecs
             window.dispatchEvent(new CustomEvent('titanlink:hardware-frame', { detail: frame }));
         }
@@ -259,13 +226,13 @@ function App() {
             console.log(`[App] Using hardware capture: ${useHardware} (Supported: ${hwSupported}, Enabled: ${settings.useHardwareCapture})`);
 
             const callbacks = createUDPCallbacks();
-            const udpService = await getUdpStreamService();
+            const streamService = await initStreamService();
 
             // Ensure service has latest settings
-            udpService.updateSettings(settings);
+            streamService.updateSettings(settings);
 
-            // UDPStreamService will handle hardware capture initialization internally
-            const sessionCode = await udpService.startHosting(displayId, callbacks, false, useHardware);
+            // StreamService will handle hardware capture initialization internally
+            const sessionCode = await streamService.startHosting(displayId, callbacks, false, useHardware);
 
             setSessionState({
                 sessionCode,
@@ -285,12 +252,12 @@ function App() {
     const handleConnectToHost = useCallback(async (sessionCode: string) => {
         try {
             const callbacks = createUDPCallbacks();
-            const udpService = await getUdpStreamService();
+            const streamService = await initStreamService();
 
             // Ensure service has latest settings (e.g. for audio/decoder config)
-            udpService.updateSettings(settings);
+            streamService.updateSettings(settings);
 
-            await udpService.connectToHost(sessionCode, callbacks);
+            await streamService.connectToHost(sessionCode, callbacks);
 
             setSessionState({
                 sessionCode,
@@ -302,12 +269,14 @@ function App() {
             setError(message);
             throw err;
         }
-    }, [createUDPCallbacks]);
+    }, [createUDPCallbacks, settings]);
 
     const handleBackToLanding = useCallback(async () => {
         // Cleanup - only disconnect if service was loaded
-        if (udpStreamServiceInstance) {
-            await udpStreamServiceInstance.disconnect();
+        try {
+            await getStreamService().disconnect();
+        } catch (e) {
+            // Not initialized, ignore
         }
 
         if (window.electronAPI?.controller) {

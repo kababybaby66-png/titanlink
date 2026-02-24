@@ -1,8 +1,7 @@
 
-import { useRef, useMemo } from 'react';
+import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { Edges } from '@react-three/drei';
 
 interface ResourceReactorProps {
     cpuUsage: number;
@@ -18,25 +17,7 @@ export const ResourceReactor = ({ cpuUsage, memUsage }: ResourceReactorProps) =>
     const smoothedCpu = useRef(cpuUsage);
     const smoothedMem = useRef(memUsage);
 
-    // Color interpolation
-    const coreColor = useMemo(() => {
-        const color = new THREE.Color();
-        // Base cyan
-        const cyan = new THREE.Color('#00f2ff');
-        // Warning amber
-        const amber = new THREE.Color('#ffb300');
-        // Danger red
-        const red = new THREE.Color('#ff2a2a');
 
-        if (smoothedCpu.current < 50) {
-            color.copy(cyan).lerp(amber, smoothedCpu.current / 50);
-        } else {
-            color.copy(amber).lerp(red, (smoothedCpu.current - 50) / 50);
-        }
-        return color;
-    }, [cpuUsage]); // React to prop change, but we'll use lerped value in frame for smooth transitions usually, 
-    // but for color direct prop mapping is okay or we can lerp in useFrame too.
-    // For simplicity, let's keep color reactive to prop for now, maybe lerp in useFrame for advanced.
 
     useFrame((state, delta) => {
         // Smooth interpolation

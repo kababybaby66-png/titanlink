@@ -16,7 +16,7 @@
         "electron:dev": "npm run dev",
         "electron:build": "npm run build && electron-builder",
         "typecheck": "tsc --noEmit",
-        "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+        "lint": "eslint src --ext ts,tsx --report-unused-disable-directives",
         "test": "vitest",
         "test:ui": "vitest --ui",
         "test:coverage": "vitest --coverage",

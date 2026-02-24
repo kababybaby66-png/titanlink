@@ -197,7 +197,6 @@ export class SmartConnectionManager {
         this.currentMode = ConnectionMode.CONNECTING;
 
         const relayPort = config.relayPort || 5000;
-        const p2pTimeoutMs = config.p2pTimeoutMs || 500;
 
         const NetworkClientClass = getNativeNetworkClient();
         const relayClient = new NetworkClientClass();
