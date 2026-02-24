@@ -30,6 +30,15 @@ export class DriverManager {
     async checkDriverStatus(): Promise<DriverCheckResult> {
         this.vigemStatus = 'checking';
 
+        // ViGEmBus is Windows only. Return 'installed' on other platforms to bypass warnings.
+        if (process.platform !== 'win32') {
+            this.vigemStatus = 'installed';
+            return {
+                vigembus: 'installed',
+                message: 'Controller driver not required or supported on this platform.'
+            };
+        }
+
         try {
             // Method 1: Check for ViGEmBus service
             const serviceCheck = await this.checkViGEmService();

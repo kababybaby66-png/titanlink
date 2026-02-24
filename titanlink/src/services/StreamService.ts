@@ -41,7 +41,6 @@ export interface IStreamService {
 }
 
 function isUdpProtocolSupported(): boolean {
-    return false; // TEMPORARILY FORCE WEBRTC FOR TESTING
     return typeof process !== 'undefined' &&
         process.platform === 'win32' &&
         process.arch === 'x64';
