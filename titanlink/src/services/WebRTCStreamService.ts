@@ -24,13 +24,13 @@ interface OutgoingSignal {
     clientId?: string;
     to?: string;
     from?: string;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     payload?: any;
 }
 
 interface IncomingSignal {
     type: 'session-created' | 'session-joined' | 'session-not-found' | 'error' | 'peer-joined' | 'peer-left' | 'host-left' | 'signal';
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data?: any;
 }
 
@@ -59,7 +59,7 @@ export const getSignalingMode = (): SignalingMode => currentMode;
 // Get signaling server URL based on mode
 const getSignalingServerUrl = async (): Promise<string> => {
     // If using embedded/direct mode, try to get URL from electron
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const api = window.electronAPI as any;
     if (currentMode === 'direct' && api?.signaling?.getUrl) {
         const url = await api.signaling.getUrl();
@@ -130,6 +130,146 @@ export interface ConnectionQuality {
     networkQuality: NetworkQualityLevel;
     currentBitrate: number; // Current adjusted bitrate in Mbps
     targetBitrate: number;  // Original target bitrate in Mbps
+}
+
+// REST Signaling Client to simulate WebSocket over HTTP REST
+class RESTSignalingClient extends EventTarget {
+    private url: string;
+    private sessionCode: string = '';
+    private peerId: string = '';
+    private role: 'host' | 'client' = 'client';
+    private pollInterval: ReturnType<typeof setInterval> | null = null;
+    private lastPollTime: number = 0;
+
+    public readyState: number = 0; // WebSocket.CONNECTING
+    public onopen: (() => void) | null = null;
+    public onclose: (() => void) | null = null;
+    public onerror: ((ev: any) => void) | null = null;
+    public onmessage: ((ev: { data: string }) => void) | null = null;
+
+    constructor(url: string) {
+        super();
+        this.url = url;
+        // The service connects instantly in REST model
+        setTimeout(() => {
+            this.readyState = 1; // WebSocket.OPEN
+            if (this.onopen) this.onopen();
+        }, 100);
+    }
+
+    setCredentials(sessionCode: string, peerId: string, role: 'host' | 'client') {
+        this.sessionCode = sessionCode;
+        this.peerId = peerId;
+        this.role = role;
+
+        if (this.pollInterval) clearInterval(this.pollInterval);
+        this.lastPollTime = 0; // fetch all events initially
+        this.pollInterval = setInterval(() => this.poll(), 1000);
+    }
+
+    private async poll() {
+        if (!this.sessionCode || !this.peerId) return;
+
+        try {
+            if (this.role === 'host') {
+                const res = await fetch(`${this.url}/session/${this.sessionCode}?since=${this.lastPollTime}`);
+                if (!res.ok) return;
+                const data = await res.json();
+
+                if (data.events && data.events.length > 0) {
+                    // Update lastPollTime to newest
+                    this.lastPollTime = Math.max(...data.events.map((e: any) => e.timestamp), this.lastPollTime);
+
+                    for (const ev of data.events) {
+                        if (ev.type === 'peer-joined') {
+                            this.emitMessage({ type: 'session-joined', data: { hostId: this.peerId } }); // to unlock host's await
+                            this.emitMessage({ type: 'peer-joined', data: { peerId: ev.data.clientId } });
+                        } else if (ev.type === 'webrtc-message') {
+                            this.emitMessage({ type: 'signal', data: ev.data });
+                        }
+                    }
+                }
+            } else {
+                const res = await fetch(`${this.url}/session/${this.sessionCode}/messages/${this.peerId}?since=${this.lastPollTime}`);
+                if (!res.ok) return;
+                const data = await res.json();
+
+                if (data.messages && data.messages.length > 0) {
+                    this.lastPollTime = Math.max(...data.messages.map((m: any) => m.timestamp), this.lastPollTime);
+                    for (const msg of data.messages) {
+                        this.emitMessage({ type: 'signal', data: msg });
+                    }
+                }
+            }
+        } catch (e) {
+            // silent fail on poll
+        }
+    }
+
+    private emitMessage(msg: any) {
+        const ev = { data: JSON.stringify(msg) };
+        if (this.onmessage) this.onmessage(ev as any);
+        // Dispatch to addEventListener('message')
+        this.dispatchEvent(new MessageEvent('message', ev));
+    }
+
+    async send(dataStr: string) {
+        try {
+            const data = JSON.parse(dataStr);
+            if (data.type === 'create-session') {
+                this.setCredentials(data.sessionCode, data.hostId, 'host');
+                const res = await fetch(`${this.url}/session`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sessionCode: data.sessionCode, sessionId: this.peerId, hostId: data.hostId })
+                });
+                if (res.ok) {
+                    this.emitMessage({ type: 'session-created' });
+                } else {
+                    const err = await res.json();
+                    this.emitMessage({ type: 'error', data: err.error });
+                }
+            } else if (data.type === 'join-session') {
+                this.setCredentials(data.sessionCode, data.clientId, 'client');
+                const res = await fetch(`${this.url}/session/${data.sessionCode}/join`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ clientId: data.clientId })
+                });
+                if (res.ok) {
+                    const result = await res.json();
+                    this.emitMessage({ type: 'session-joined', data: { hostId: result.hostId } });
+                } else {
+                    this.emitMessage({ type: 'session-not-found' });
+                }
+            } else if (data.type === 'leave-session') {
+                if (this.role === 'host') {
+                    await fetch(`${this.url}/session/${data.sessionCode}`, { method: 'DELETE' }).catch(() => { });
+                }
+            } else if (data.type === 'signal') {
+                // Forward via message endpoint. Fix: We map the signal payload back as webrtc-message payload
+                const sessionCode = data.sessionCode || this.sessionCode;
+                await fetch(`${this.url}/session/${sessionCode}/message`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        from: this.peerId,
+                        to: data.to,
+                        type: data.payload.type || 'ice',
+                        payload: data.payload
+                    })
+                });
+            }
+        } catch (e) {
+            console.error('[REST Signaler Error]', e);
+        }
+    }
+
+    close() {
+        if (this.pollInterval) clearInterval(this.pollInterval);
+        this.readyState = 3; // WebSocket.CLOSED
+        if (this.onclose) this.onclose();
+    }
 }
 
 class WebRTCService {
@@ -219,7 +359,7 @@ class WebRTCService {
             callbacks.onStateChange('connecting');
 
             // If using direct mode, start the embedded signaling server
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const api = window.electronAPI as any;
             if (useDirect && api?.signaling?.start) {
                 const url = await api.signaling.start();
@@ -419,9 +559,9 @@ class WebRTCService {
                         // CRITICAL: Do NOT specify chromeMediaSourceId for audio on Windows!
                         // The audio should capture system-wide, not per-display
                     }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 } as any,
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 video: videoConstraints as any,
             });
 
@@ -475,7 +615,7 @@ class WebRTCService {
                     // Get fresh video
                     videoStream = await navigator.mediaDevices.getUserMedia({
                         audio: false,
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         video: videoConstraints as any,
                     });
                 }
@@ -521,7 +661,7 @@ class WebRTCService {
             console.log('[WebRTC] Fallback: Fresh video-only capture...');
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
                 audio: false,
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 video: videoConstraints as any,
             });
             console.log('[WebRTC] ✓ Video capture successful (NO AUDIO)');
@@ -562,16 +702,17 @@ class WebRTCService {
                 }
             }, connectionTimeout);
 
-            console.log(`Connecting to signaling server (attempt ${retryCount + 1}/${maxRetries + 1})...`);
-            this.ws = new WebSocket(serverUrl);
+            console.log(`Connecting to REST signaling server (attempt ${retryCount + 1}/${maxRetries + 1})...`);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            this.ws = new RESTSignalingClient(serverUrl) as any;
 
-            this.ws.onopen = () => {
+            this.ws!.onopen = () => {
                 clearTimeout(timeout);
                 console.log('Connected to signaling server');
                 resolve();
             };
 
-            this.ws.onerror = (error) => {
+            this.ws!.onerror = (error) => {
                 clearTimeout(timeout);
                 console.error('Signaling connection error:', error);
                 if (retryCount < maxRetries) {
@@ -584,7 +725,7 @@ class WebRTCService {
                 }
             };
 
-            this.ws.onmessage = async (event) => {
+            this.ws!.onmessage = async (event) => {
                 console.log('[WebRTC] Raw message received:', event.data);
                 try {
                     const message: IncomingSignal = JSON.parse(event.data);
@@ -629,7 +770,7 @@ class WebRTCService {
                 }
             };
 
-            this.ws.onclose = () => {
+            this.ws!.onclose = () => {
                 console.log('WebSocket disconnected');
             };
         });
@@ -790,7 +931,7 @@ class WebRTCService {
         };
 
         // Listen for ICE gathering errors (critical for debugging TURN)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         this.peerConnection.onicecandidateerror = (event: any) => {
             console.error(`[WebRTC] ICE Error ${event.errorCode}: ${event.errorText} at ${event.url || 'unknown URL'}`);
         };
@@ -868,7 +1009,7 @@ class WebRTCService {
 
                 // LOW LATENCY: Set content hint to 'motion' for fast motion optimization
                 if ('contentHint' in videoTrack) {
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     (videoTrack as any).contentHint = 'motion';
                     console.log('[WebRTC] Video track contentHint set to "motion" for low latency');
                 }
@@ -1045,7 +1186,7 @@ class WebRTCService {
         }
     }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private async handleSignalMessage(message: any): Promise<void> {
         if (!this.peerConnection) return;
 
@@ -1371,7 +1512,7 @@ class WebRTCService {
             // 4. L1T1 scalability mode - no temporal layers = lower latency
             // This disables B-frames and temporal scalability
             // This disables B-frames and temporal scalability
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (encoding as any).scalabilityMode = 'L1T1';
 
             await this.videoSender.setParameters(params);
