@@ -125,13 +125,66 @@ app.get('/session/:code', (req, res) => {
     }
 
     const newClients = session.clients.filter(c => c.joinedAt > since);
-    const events = newClients.map(c => ({
+    const events = [...newClients.map(c => ({
         type: 'peer-joined',
         data: { peerId: c.clientId, clientId: c.clientId },
         timestamp: c.joinedAt,
-    }));
+    }))];
+
+    // Also include messages addressed to the host
+    if (session.messages) {
+        const newMessages = session.messages.filter(m => m.timestamp > since && m.to === 'host');
+        events.push(...newMessages.map(m => ({
+            type: 'webrtc-message',
+            data: m,
+            timestamp: m.timestamp,
+        })));
+        events.sort((a, b) => a.timestamp - b.timestamp);
+    }
 
     res.json({ events });
+});
+
+// ─── POST /session/:code/message ──────────────────────────────────────────────
+// Send a message (SDP, ICE, etc.)
+// Body: { from: string, to: string, type: string, payload: any }
+app.post('/session/:code/message', (req, res) => {
+    const sessionCode = req.params.code.toUpperCase();
+    const session = sessions.get(sessionCode);
+    if (!session) {
+        return res.status(404).json({ error: 'Session not found' });
+    }
+
+    if (!session.messages) {
+        session.messages = [];
+    }
+
+    const msg = {
+        from: req.body.from,
+        to: req.body.to,
+        type: req.body.type,
+        payload: req.body.payload,
+        timestamp: Date.now()
+    };
+
+    session.messages.push(msg);
+    res.json({ ok: true });
+});
+
+// ─── GET /session/:code/messages/:peerId ──────────────────────────────────────
+// Client polls for new messages
+app.get('/session/:code/messages/:peerId', (req, res) => {
+    const sessionCode = req.params.code.toUpperCase();
+    const peerId = req.params.peerId;
+    const since = parseInt(req.query.since || '0', 10);
+
+    const session = sessions.get(sessionCode);
+    if (!session || !session.messages) {
+        return res.json({ messages: [] });
+    }
+
+    const newMessages = session.messages.filter(m => m.timestamp > since && m.to === peerId);
+    res.json({ messages: newMessages });
 });
 
 // ─── DELETE /session/:code ────────────────────────────────────────────────────
