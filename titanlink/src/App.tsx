@@ -24,9 +24,10 @@ let udpStreamServiceInstance: any = null;
  * Check if native UDP protocol is available on this platform
  */
 function isUdpProtocolSupported(): boolean {
-    return typeof process !== 'undefined' &&
-        process.platform === 'win32' &&
-        process.arch === 'x64';
+    if (typeof process === 'undefined') return false;
+    const isWindows = process.platform === 'win32' && process.arch === 'x64';
+    const isMac = process.platform === 'darwin';
+    return isWindows || isMac;
 }
 
 /**
