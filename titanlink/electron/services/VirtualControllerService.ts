@@ -7,6 +7,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import { app } from 'electron';
+import { hardwareCaptureService } from './HardwareCaptureService';
 import type { GamepadInputState } from '../../shared/types/ipc';
 import { isButtonPressed } from '../../shared/types/ipc';
 
@@ -32,9 +33,16 @@ export class VirtualControllerService {
     }
 
     /**
-     * Create and connect a virtual Xbox 360 controller
+     * Create and connect a virtual Xbox 360 controller (or Mac KBM emulator)
      */
     async createController(): Promise<{ success: boolean; error?: string }> {
+        if (process.platform === 'darwin') {
+            // Mac MVP: We emulate KBM using CGEvent, so no process needed
+            console.log('[VirtualController] macOS detected, utilizing native KBM CGEvent injection instead of ViGEmBus');
+            this.isConnected = true;
+            return { success: true };
+        }
+
         try {
             const feederPath = this.getFeederPath();
 
@@ -110,6 +118,12 @@ export class VirtualControllerService {
      * Destroy the virtual controller and disconnect
      */
     async destroyController(): Promise<void> {
+        if (process.platform === 'darwin') {
+            this.isConnected = false;
+            console.log('[VirtualController] macOS CGEvent injection disconnected');
+            return;
+        }
+
         try {
             const process = this.feederProcess;
             if (process) {
@@ -140,6 +154,10 @@ export class VirtualControllerService {
      * Called for each received input packet
      */
     updateInput(input: GamepadInputState): void {
+        if (process.platform === 'darwin') {
+            this.updateInputMac(input);
+            return;
+        }
         if (!this.feederProcess || !this.isConnected) {
             return;
         }
@@ -193,9 +211,61 @@ export class VirtualControllerService {
     }
 
     /**
+     * Map Gamepad input to basic macOS Mouse/Keyboard events (MVP)
+     */
+    private updateInputMac(input: GamepadInputState): void {
+        // Drop outdated inputs
+        if (input.timestamp <= this.lastInputTimestamp) {
+            return;
+        }
+        this.lastInputTimestamp = input.timestamp;
+
+        try {
+            // Emulate basic mouse movement using Right Stick
+            if (Math.abs(input.rightStickX) > 0.1 || Math.abs(input.rightStickY) > 0.1) {
+                // In production, we need a way to move relatively.
+                // For MVP, we pass a dummy 'mouse' type which moves to an absolute coordinate,
+                // but we would need relative displacement. We will send a basic event for now.
+                // CGEvent in MacHostCapture handles absolute (x,y) currently.
+            }
+
+            // Emulate basic clicks (A = Left click, B = Right click)
+            const leftClick = isButtonPressed(input.buttons, 'A');
+            const rightClick = isButtonPressed(input.buttons, 'B');
+
+            if (leftClick) {
+                hardwareCaptureService.injectInput({ type: 'mouse', button: 'left', down: true });
+            } else {
+                hardwareCaptureService.injectInput({ type: 'mouse', button: 'left', down: false });
+            }
+
+            if (rightClick) {
+                hardwareCaptureService.injectInput({ type: 'mouse', button: 'right', down: true });
+            } else {
+                hardwareCaptureService.injectInput({ type: 'mouse', button: 'right', down: false });
+            }
+
+            // Map D-Pad or Left Stick to arrow keys (WASD could also work)
+            // macOS CGKeyCode: W=13, A=0, S=1, D=2, Up=126, Down=125, Left=123, Right=124
+            const up = isButtonPressed(input.buttons, 'DPAD_UP') || input.leftStickY < -0.5;
+            const down = isButtonPressed(input.buttons, 'DPAD_DOWN') || input.leftStickY > 0.5;
+            const left = isButtonPressed(input.buttons, 'DPAD_LEFT') || input.leftStickX < -0.5;
+            const right = isButtonPressed(input.buttons, 'DPAD_RIGHT') || input.leftStickX > 0.5;
+
+            hardwareCaptureService.injectInput({ type: 'key', keyCode: 126, down: up });
+            hardwareCaptureService.injectInput({ type: 'key', keyCode: 125, down: down });
+            hardwareCaptureService.injectInput({ type: 'key', keyCode: 123, down: left });
+            hardwareCaptureService.injectInput({ type: 'key', keyCode: 124, down: right });
+
+        } catch (error) {
+            console.error('[VirtualController] Error injecting mac input:', error);
+        }
+    }
+
+    /**
      * Check if controller is currently active
      */
     isActive(): boolean {
-        return this.isConnected && this.feederProcess !== null;
+        return this.isConnected;
     }
 }

@@ -3,6 +3,8 @@ import { GlassCard } from './ui/GlassCard';
 
 interface HardwareSupport {
     nvenc: boolean;
+    amf: boolean;
+    quicksync: boolean;
     software: boolean;
 }
 
@@ -13,6 +15,8 @@ interface HardwareSupport {
 export function HardwareStatusWidget() {
     const [hwSupport, setHwSupport] = useState<HardwareSupport>({
         nvenc: false,
+        amf: false,
+        quicksync: false,
         software: false,
     });
 
@@ -42,8 +46,16 @@ export function HardwareStatusWidget() {
                     <span className="label">NVENC</span>
                     <span className="status-dot"></span>
                 </div>
+                <div className={`hw-item ${hwSupport.amf ? 'active' : 'inactive'}`}>
+                    <span className="label">AMF</span>
+                    <span className="status-dot"></span>
+                </div>
+                <div className={`hw-item ${hwSupport.quicksync ? 'active' : 'inactive'}`}>
+                    <span className="label">QSV</span>
+                    <span className="status-dot"></span>
+                </div>
                 <div className={`hw-item ${hwSupport.software ? 'active' : 'inactive'}`}>
-                    <span className="label">SW_CAP</span>
+                    <span className="label">SW</span>
                     <span className="status-dot"></span>
                 </div>
             </div>

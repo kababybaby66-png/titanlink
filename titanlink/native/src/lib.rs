@@ -2,10 +2,14 @@
 
 #![deny(clippy::all)]
 
+#[cfg(target_os = "windows")]
 mod capture;
+#[cfg(target_os = "windows")]
 mod encoder;
 mod network;
+#[cfg(target_os = "windows")]
 mod pipeline; // Custom UDP protocol
+
 
 // Re-export NetworkClient for NAPI-RS bindings
 pub use network::NetworkClient;
@@ -32,11 +36,23 @@ pub struct EncoderSupport {
 
 #[napi]
 pub fn get_encoder_support() -> EncoderSupport {
-    EncoderSupport {
-        nvenc: encoder::nvenc::is_available(),
-        amf: false,
-        quicksync: encoder::quicksync::is_available(),
-        software: true,
+    #[cfg(target_os = "windows")]
+    {
+        EncoderSupport {
+            nvenc: encoder::nvenc::is_available(),
+            amf: false,
+            quicksync: encoder::quicksync::is_available(),
+            software: true,
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        EncoderSupport {
+            nvenc: false,
+            amf: false,
+            quicksync: false,
+            software: true,
+        }
     }
 }
 
@@ -52,8 +68,15 @@ pub struct DisplayInfo {
 
 #[napi]
 pub fn get_displays() -> Result<Vec<DisplayInfo>> {
-    capture::dxgi::enumerate_displays()
-        .map_err(|e| Error::from_reason(format!("Failed to enumerate displays: {}", e)))
+    #[cfg(target_os = "windows")]
+    {
+        capture::dxgi::enumerate_displays()
+            .map_err(|e| Error::from_reason(format!("Failed to enumerate displays: {}", e)))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(vec![])
+    }
 }
 
 #[napi(object)]
@@ -102,13 +125,25 @@ pub fn start_capture(
             Ok(vec![ctx.value])
         })?;
 
-    std::thread::spawn(move || {
-        if let Err(e) = pipeline::run_capture_pipeline(settings, tsfn.clone()) {
-            eprintln!("[TitanLink] Pipeline error: {:?}", e);
-        }
-        CAPTURE_RUNNING.store(false, Ordering::SeqCst);
-        tsfn.abort().ok();
-    });
+    #[cfg(target_os = "windows")]
+    {
+        std::thread::spawn(move || {
+            if let Err(e) = pipeline::run_capture_pipeline(settings, tsfn.clone()) {
+                eprintln!("[TitanLink] Pipeline error: {:?}", e);
+            }
+            CAPTURE_RUNNING.store(false, Ordering::SeqCst);
+            tsfn.abort().ok();
+        });
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::thread::spawn(move || {
+            eprintln!("[TitanLink] Hardware capture is not yet implemented on this platform");
+            CAPTURE_RUNNING.store(false, Ordering::SeqCst);
+            tsfn.abort().ok();
+        });
+    }
 
     Ok(())
 }
@@ -150,7 +185,14 @@ pub struct AudioFrame {
 
 #[napi]
 pub fn is_audio_available() -> bool {
-    capture::audio::wasapi::is_available()
+    #[cfg(target_os = "windows")]
+    {
+        capture::audio::wasapi::is_available()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        false
+    }
 }
 
 #[napi]
@@ -167,32 +209,44 @@ pub fn start_audio_capture(
             Ok(vec![ctx.value])
         })?;
 
-    let wasapi_settings = capture::audio::wasapi::AudioCaptureSettings {
-        sample_rate: settings.sample_rate,
-        quality_mode: settings.quality_mode,
-    };
+    #[cfg(target_os = "windows")]
+    {
+        let wasapi_settings = capture::audio::wasapi::AudioCaptureSettings {
+            sample_rate: settings.sample_rate,
+            quality_mode: settings.quality_mode,
+        };
 
-    std::thread::spawn(move || {
-        let tsfn_clone = tsfn.clone();
-        let result = capture::audio::wasapi::run_audio_capture(wasapi_settings, move |buffer| {
-            let frame = AudioFrame {
-                data: Buffer::from(buffer.data),
-                sample_rate: buffer.format.sample_rate,
-                channels: buffer.format.channels as u32,
-                bits_per_sample: buffer.format.bits_per_sample as u32,
-                frame_count: buffer.frame_count,
-                timestamp_us: buffer.timestamp_us,
-            };
-            tsfn_clone.call(Ok(frame), napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking);
+        std::thread::spawn(move || {
+            let tsfn_clone = tsfn.clone();
+            let result = capture::audio::wasapi::run_audio_capture(wasapi_settings, move |buffer| {
+                let frame = AudioFrame {
+                    data: Buffer::from(buffer.data),
+                    sample_rate: buffer.format.sample_rate,
+                    channels: buffer.format.channels as u32,
+                    bits_per_sample: buffer.format.bits_per_sample as u32,
+                    frame_count: buffer.frame_count,
+                    timestamp_us: buffer.timestamp_us,
+                };
+                tsfn_clone.call(Ok(frame), napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking);
+            });
+
+            if let Err(e) = result {
+                eprintln!("[TitanLink] Audio capture error: {:?}", e);
+            }
+
+            AUDIO_RUNNING.store(false, Ordering::SeqCst);
+            tsfn.abort().ok();
         });
+    }
 
-        if let Err(e) = result {
-            eprintln!("[TitanLink] Audio capture error: {:?}", e);
-        }
-
-        AUDIO_RUNNING.store(false, Ordering::SeqCst);
-        tsfn.abort().ok();
-    });
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::thread::spawn(move || {
+            eprintln!("[TitanLink] Audio capture is not yet implemented on this platform");
+            AUDIO_RUNNING.store(false, Ordering::SeqCst);
+            tsfn.abort().ok();
+        });
+    }
 
     Ok(())
 }
@@ -202,7 +256,10 @@ pub fn stop_audio_capture() -> Result<()> {
     if !AUDIO_RUNNING.swap(false, Ordering::SeqCst) {
         return Err(Error::from_reason("Audio capture not running"));
     }
-    capture::audio::wasapi::stop_capture();
+    #[cfg(target_os = "windows")]
+    {
+        capture::audio::wasapi::stop_capture();
+    }
     Ok(())
 }
 

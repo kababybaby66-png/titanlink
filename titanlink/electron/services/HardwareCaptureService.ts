@@ -239,6 +239,18 @@ export class HardwareCaptureService extends EventEmitter {
             console.error(`${LOG_PREFIX} Failed to stop WASAPI audio capture:`, error);
         }
     }
+
+    /**
+     * Input injection (Phase 2 Mac Host MVP)
+     */
+    public injectInput(inputData: any): void {
+        if (!this.nativeCapture || typeof this.nativeCapture.injectInput !== 'function') return;
+        try {
+            this.nativeCapture.injectInput(inputData);
+        } catch (error) {
+            console.error(`${LOG_PREFIX} Failed to inject input:`, error);
+        }
+    }
 }
 
 export const hardwareCaptureService = new HardwareCaptureService();

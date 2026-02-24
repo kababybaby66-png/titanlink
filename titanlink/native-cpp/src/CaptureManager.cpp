@@ -1,7 +1,7 @@
 #include "CaptureManager.h"
 #include <iostream>
 #include <chrono>
-
+#include "MfH264Encoder.h"
 void CaptureManager::InitD3D11() {
     if (m_device) return;
 
@@ -54,9 +54,19 @@ void CaptureManager::CaptureLoop(EncoderSettings settings, uint32_t displayIndex
             return;
         }
         
-        NvencEngine encoder;
-        if (!encoder.Init(settings, m_device, m_context)) {
-            std::cerr << "[CPP] Init Encoder Failed" << std::endl;
+        NvencEngine nvencEncoder;
+        MfH264Encoder mfEncoder;
+        bool usingNvenc = false;
+        bool usingMf = false;
+
+        if (nvencEncoder.Init(settings, m_device, m_context)) {
+            usingNvenc = true;
+            std::cout << "[CPP] NVENC Encoder Initialized" << std::endl;
+        } else if (mfEncoder.Init(settings, m_device, m_context)) {
+            usingMf = true;
+            std::cout << "[CPP] MediaFoundation HW Encoder Initialized" << std::endl;
+        } else {
+            std::cerr << "[CPP] Init Encoder Failed for all hardware encoders" << std::endl;
             m_running = false;
             return;
         }
@@ -76,7 +86,14 @@ void CaptureManager::CaptureLoop(EncoderSettings settings, uint32_t displayIndex
                 uint64_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now - startTime).count();
                 
                 EncodedPacket packet;
-                if (encoder.EncodeFrame(frameTexture, timestamp, packet)) {
+                bool encodeSuccess = false;
+                if (usingNvenc) {
+                    encodeSuccess = nvencEncoder.EncodeFrame(frameTexture, timestamp, packet);
+                } else if (usingMf) {
+                    encodeSuccess = mfEncoder.EncodeFrame(frameTexture, timestamp, packet);
+                }
+
+                if (encodeSuccess) {
                     // Send to JS
                     // Use NonBlockingCall to avoid hanging the capture thread if JS is slow
                     auto status = m_callback.NonBlockingCall([packet, frameCount](Napi::Env env, Napi::Function jsCallback) {

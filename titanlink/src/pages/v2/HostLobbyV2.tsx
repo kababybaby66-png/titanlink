@@ -1,0 +1,512 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import type { SessionState } from '../../App';
+import type { DisplayInfo, SystemStats, GamepadInputState } from '../../../shared/types/ipc';
+import { CardV2 } from '../../components/ui/v2/CardV2';
+import { ButtonV2 } from '../../components/ui/v2/ButtonV2';
+import { StatusVisualizer } from '../../components/StatusVisualizer';
+import { ControllerOverlay } from '../../components/ControllerOverlay';
+import { HardwareStatusWidget } from '../../components/HardwareStatusWidget';
+import { udpStreamService } from '../../services/UDPStreamService';
+import '../HostLobby.css';
+
+interface HostLobbyV2Props {
+    sessionState: SessionState;
+    onStartHosting: (displayId: string) => Promise<string>;
+    onBack: () => void;
+    error: string | null;
+    enable3D?: boolean;
+}
+
+interface ResizableWidgetProps {
+    id: string;
+    panel: 'left' | 'right';
+    children: React.ReactNode;
+    onDragStart: (e: React.DragEvent, id: string, panel: 'left' | 'right') => void;
+    onDrop: (e: React.DragEvent, id: string, panel: 'left' | 'right') => void;
+}
+
+function ResizableWidget({ id, panel, children, onDragStart, onDrop }: ResizableWidgetProps) {
+    const widgetRef = useRef<HTMLDivElement>(null);
+    const [isResizing, setIsResizing] = useState(false);
+    const [height, setHeight] = useState<number | undefined>(undefined);
+    const startY = useRef(0);
+    const startHeight = useRef(0);
+
+    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+        const rect = widgetRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const distToTop = e.clientY - rect.top;
+        const distToBottom = rect.bottom - e.clientY;
+        const edgeThreshold = 12;
+        if (distToTop <= edgeThreshold || distToBottom <= edgeThreshold) {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsResizing(true);
+            startY.current = e.clientY;
+            startHeight.current = rect.height;
+            widgetRef.current?.classList.add('resizing');
+        }
+    }, []);
+
+    const handleMouseMove = useCallback((e: MouseEvent) => {
+        if (!isResizing) return;
+        const deltaY = e.clientY - startY.current;
+        const newHeight = Math.max(80, startHeight.current + deltaY);
+        setHeight(newHeight);
+    }, [isResizing]);
+
+    const handleMouseUp = useCallback(() => {
+        if (isResizing) {
+            setIsResizing(false);
+            widgetRef.current?.classList.remove('resizing');
+        }
+    }, [isResizing]);
+
+    useEffect(() => {
+        if (isResizing) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+            return () => {
+                window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mouseup', handleMouseUp);
+            };
+        }
+    }, [isResizing, handleMouseMove, handleMouseUp]);
+
+    return (
+        <div
+            ref={widgetRef}
+            className={`draggable-widget ${isResizing ? 'resizing' : ''}`}
+            style={{ height: height ? `${height}px` : undefined }}
+            draggable={!isResizing}
+            onDragStart={(e) => !isResizing && onDragStart(e, id, panel)}
+            onDrop={(e) => onDrop(e, id, panel)}
+            onMouseDown={handleMouseDown}
+        >
+            {children}
+        </div>
+    );
+}
+
+export function HostLobbyV2({ sessionState, onStartHosting, onBack, error, enable3D = false }: HostLobbyV2Props) {
+    const [displays, setDisplays] = useState<DisplayInfo[]>([]);
+    const [selectedDisplay, setSelectedDisplay] = useState<string>('');
+    const [isStarting, setIsStarting] = useState(false);
+    const [logs, setLogs] = useState<string[]>(['[SYSTEM] Daemon started...', '[SYSTEM] Verifying integrity... OK']);
+    const [localError, setLocalError] = useState<string | null>(null);
+    const [stats, setStats] = useState<SystemStats>({ cpuUsage: 0, memUsage: 0, totalMem: 0, freeMem: 0 });
+
+    const [controllerConnected, setControllerConnected] = useState(false);
+    const [currentInput, setCurrentInput] = useState<GamepadInputState | null>(null);
+
+
+    const [connectionQuality, setConnectionQuality] = useState({
+        latency: 0,
+        packetLoss: 0,
+        jitter: 0,
+        networkQuality: 'excellent' as string,
+    });
+
+    const isHosting = sessionState.connectionState !== 'disconnected';
+    const isStreaming = sessionState.connectionState === 'streaming';
+
+    const [panels, setPanels] = useState<{ left: string[], right: string[] }>(() => {
+        const saved = localStorage.getItem('titanlink_lobby_layout_v2');
+        if (saved) {
+            try { return JSON.parse(saved); } catch { /* ignore */ }
+        }
+        return {
+            left: ['latency', 'region', 'protocol', 'audio', 'client', 'quality', 'hardware'],
+            right: ['reactor', 'resources', 'controller', 'logs', 'stopbtn'],
+        };
+    });
+
+    useEffect(() => {
+        localStorage.setItem('titanlink_lobby_layout_v2', JSON.stringify(panels));
+    }, [panels]);
+
+    const [draggedItem, setDraggedItem] = useState<string | null>(null);
+    const [dragSourcePanel, setDragSourcePanel] = useState<'left' | 'right' | null>(null);
+
+    const addLog = (msg: string) => {
+        const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+        setLogs(prev => [...prev.slice(-6), `[${time}] ${msg}`]);
+    };
+
+    useEffect(() => {
+        const loadDisplays = async () => {
+            try {
+                if (window.electronAPI?.system) {
+                    const availableDisplays = await window.electronAPI.system.getDisplays();
+                    setDisplays(availableDisplays);
+                    if (availableDisplays.length > 0) setSelectedDisplay(availableDisplays[0].id);
+                }
+            } catch (err) {
+                console.error('Error loading displays:', err);
+            }
+        };
+        loadDisplays();
+    }, []);
+
+    useEffect(() => {
+        const interval = setInterval(async () => {
+            if (window.electronAPI?.system?.getStats) {
+                try {
+                    const s = await window.electronAPI.system.getStats();
+                    setStats(s);
+                } catch (err) {
+                    console.warn('[Stats] Failed:', err);
+                }
+            }
+        }, 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    useEffect(() => {
+        if (sessionState.connectionState === 'waiting-for-peer') addLog('Status: Broadcasting Beacon');
+        else if (sessionState.connectionState === 'connecting') addLog('Status: Peer Negotiation');
+        else if (sessionState.connectionState === 'streaming') addLog('Status: Uplink Established');
+    }, [sessionState.connectionState]);
+
+    useEffect(() => {
+        if (!isStreaming) return;
+        const handleInputReceived = (e: CustomEvent<GamepadInputState>) => {
+            setCurrentInput(e.detail);
+            setControllerConnected(true);
+        };
+        window.addEventListener('titanlink:input' as any, handleInputReceived);
+        return () => window.removeEventListener('titanlink:input' as any, handleInputReceived);
+    }, [isStreaming]);
+
+    useEffect(() => {
+        if (!isStreaming) return;
+        const interval = setInterval(() => {
+            const quality = udpStreamService.getConnectionQuality();
+            setConnectionQuality({
+                latency: quality.latency,
+                packetLoss: quality.packetLoss,
+                jitter: quality.jitter,
+                networkQuality: quality.networkQuality,
+            });
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [isStreaming]);
+
+    const handleStartHosting = async () => {
+        if (!selectedDisplay) return;
+        setIsStarting(true);
+        setLocalError(null);
+        addLog('Init sequence started...');
+        try {
+            await onStartHosting(selectedDisplay);
+            addLog('Session Created successfully');
+        } catch (err) {
+            setLocalError(err instanceof Error ? err.message : 'Failed');
+            addLog('[ERROR] Init failed');
+        } finally {
+            setIsStarting(false);
+        }
+    };
+
+    const handleCopyCode = async () => {
+        if (!sessionState.sessionCode) return;
+        navigator.clipboard.writeText(sessionState.sessionCode);
+        addLog('Clipboard: Code copied');
+    };
+
+    const onDragStart = (e: React.DragEvent, id: string, panel: 'left' | 'right') => {
+        setDraggedItem(id);
+        setDragSourcePanel(panel);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const onDragOver = (e: React.DragEvent) => { e.preventDefault(); };
+
+    const onDrop = (e: React.DragEvent, targetId: string, targetPanel: 'left' | 'right') => {
+        e.preventDefault();
+        if (!draggedItem || !dragSourcePanel || draggedItem === targetId) return;
+        const newPanels = { left: [...panels.left], right: [...panels.right] };
+        const sourceIndex = newPanels[dragSourcePanel].indexOf(draggedItem);
+        if (sourceIndex === -1) return;
+        newPanels[dragSourcePanel].splice(sourceIndex, 1);
+        const targetIndex = newPanels[targetPanel].indexOf(targetId);
+        if (targetIndex !== -1) {
+            newPanels[targetPanel].splice(targetIndex, 0, draggedItem);
+        } else {
+            newPanels[targetPanel].push(draggedItem);
+        }
+        setPanels(newPanels);
+        setDraggedItem(null);
+        setDragSourcePanel(null);
+    };
+
+    const onDropContainer = (e: React.DragEvent, panel: 'left' | 'right') => {
+        e.preventDefault();
+        if (e.target !== e.currentTarget || !draggedItem || !dragSourcePanel) return;
+        const newPanels = { left: [...panels.left], right: [...panels.right] };
+        const sourceIndex = newPanels[dragSourcePanel].indexOf(draggedItem);
+        if (sourceIndex === -1) return;
+        newPanels[dragSourcePanel].splice(sourceIndex, 1);
+        newPanels[panel].push(draggedItem);
+        setPanels(newPanels);
+        setDraggedItem(null);
+        setDragSourcePanel(null);
+    };
+
+    const renderWidget = (id: string) => {
+        switch (id) {
+            case 'latency':
+                return (
+                    <CardV2 className="telemetry-card">
+                        <div className="card-header">
+                            <span className="material-symbols-outlined icon">speed</span>
+                            <span className="title">LATENCY</span>
+                        </div>
+                        <div className="card-value large">{connectionQuality.latency}<span className="unit">ms</span></div>
+                    </CardV2>
+                );
+            case 'region':
+                return (
+                    <CardV2 className="info-card">
+                        <div className="card-header">
+                            <span className="material-symbols-outlined icon">public</span>
+                            <span className="title">REGION</span>
+                        </div>
+                        <div className="card-value">US-EAST-VA</div>
+                        <div className="card-sub">NODE: #8821</div>
+                    </CardV2>
+                );
+            case 'protocol':
+                return (
+                    <CardV2 className="info-card">
+                        <div className="card-header">
+                            <span className="material-symbols-outlined icon">hub</span>
+                            <span className="title">PROTOCOL</span>
+                        </div>
+                        <div className="card-value">UDP/P2P</div>
+                        <span className="badge-secure">SECURE</span>
+                    </CardV2>
+                );
+            case 'hardware':
+                return <HardwareStatusWidget />;
+            case 'audio':
+                if (!isHosting) return null;
+                return (
+                    <CardV2 className="audio-widget active">
+                        <div className="card-header">
+                            <span className="material-symbols-outlined icon">volume_up</span>
+                            <span className="title">AUDIO</span>
+                            <span className="status-badge connected">WASAPI ACTIVE</span>
+                        </div>
+                        <div className="card-sub" style={{ fontSize: '11px', opacity: 0.6, padding: '4px 0 0' }}>
+                            System loopback capture — no setup required
+                        </div>
+                    </CardV2>
+                );
+            case 'reactor':
+                if (!enable3D) return null;
+                return (
+                    <div className="status-viz-container" style={{ height: '100%', width: '100%', minHeight: '120px' }}>
+                        <StatusVisualizer cpuUsage={stats.cpuUsage} memUsage={stats.memUsage} enable3D={enable3D} />
+                    </div>
+                );
+            case 'resources':
+                return (
+                    <div className="resources-container">
+                        <CardV2 className="resource-card" style={{ flex: 1 }}>
+                            <div className="card-header"><span className="title">CPU</span></div>
+                            <div className="card-value">{stats.cpuUsage}<span className="unit">%</span></div>
+                            <div className="progress-bar"><div className="fill" style={{ width: `${stats.cpuUsage}%` }}></div></div>
+                        </CardV2>
+                        <CardV2 className="resource-card" style={{ flex: 1 }}>
+                            <div className="card-header"><span className="title">MEM</span></div>
+                            <div className="card-value">{stats.memUsage}<span className="unit">%</span></div>
+                            <div className="progress-bar purple"><div className="fill" style={{ width: `${stats.memUsage}%` }}></div></div>
+                        </CardV2>
+                    </div>
+                );
+            case 'logs':
+                return (
+                    <div className="system-log-panel" style={{ height: '100%' }}>
+                        <div className="log-header">
+                            <span>SYSTEM LOG</span>
+                            <span className="material-symbols-outlined icon">terminal</span>
+                        </div>
+                        <div className="log-content custom-scrollbar">
+                            {logs.map((log, i) => (
+                                <div key={i} className="log-entry"><span className="entry-text">{log}</span></div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            case 'stopbtn':
+                if (!isHosting) return null;
+                return (
+                    <ButtonV2 variant="danger" onClick={onBack}>
+                        <span className="material-symbols-outlined">power_settings_new</span>
+                        STOP HOSTING
+                    </ButtonV2>
+                );
+            case 'controller':
+                if (!isStreaming) return null;
+                return (
+                    <CardV2 className="controller-widget">
+                        <div className="card-header">
+                            <span className="material-symbols-outlined icon">gamepad</span>
+                            <span className="title">CONTROLLER</span>
+                            <span className={`status-badge ${controllerConnected ? 'connected' : 'disconnected'}`}>
+                                {controllerConnected ? 'ACTIVE' : 'WAITING'}
+                            </span>
+                        </div>
+                        <div className="controller-preview">
+                            <ControllerOverlay input={currentInput} connected={controllerConnected} />
+                        </div>
+                    </CardV2>
+                );
+            case 'client':
+                if (!isStreaming) return null;
+                return (
+                    <CardV2 className="client-widget">
+                        <div className="card-header">
+                            <span className="material-symbols-outlined icon">person</span>
+                            <span className="title">CLIENT</span>
+                        </div>
+                        <div className="client-info">
+                            <div className="client-name">{sessionState.peerInfo?.username || 'Remote User'}</div>
+                            <div className="client-stats">
+                                <div className="stat">
+                                    <span className="label">Quality</span>
+                                    <span className={`value quality-${connectionQuality.networkQuality}`}>
+                                        {connectionQuality.networkQuality.toUpperCase()}
+                                    </span>
+                                </div>
+                                <div className="stat">
+                                    <span className="label">Loss</span>
+                                    <span className="value">{connectionQuality.packetLoss.toFixed(1)}%</span>
+                                </div>
+                                <div className="stat">
+                                    <span className="label">Jitter</span>
+                                    <span className="value">{connectionQuality.jitter.toFixed(0)}ms</span>
+                                </div>
+                            </div>
+                        </div>
+                    </CardV2>
+                );
+            case 'quality':
+                if (!isStreaming) return null;
+                return (
+                    <CardV2 className="quality-widget">
+                        <div className="card-header">
+                            <span className="material-symbols-outlined icon">signal_cellular_alt</span>
+                            <span className="title">NETWORK</span>
+                        </div>
+                        <div className={`quality-indicator ${connectionQuality.networkQuality}`}>
+                            <div className="quality-bars">
+                                <div className={`bar ${['excellent', 'good', 'fair', 'poor', 'critical'].indexOf(connectionQuality.networkQuality) <= 0 ? 'active' : ''}`}></div>
+                                <div className={`bar ${['excellent', 'good', 'fair', 'poor'].indexOf(connectionQuality.networkQuality) <= 1 ? 'active' : ''}`}></div>
+                                <div className={`bar ${['excellent', 'good', 'fair'].indexOf(connectionQuality.networkQuality) <= 2 ? 'active' : ''}`}></div>
+                                <div className={`bar ${['excellent', 'good'].indexOf(connectionQuality.networkQuality) <= 1 ? 'active' : ''}`}></div>
+                                <div className={`bar ${connectionQuality.networkQuality === 'excellent' ? 'active' : ''}`}></div>
+                            </div>
+                            <div className="quality-label">{connectionQuality.networkQuality.toUpperCase()}</div>
+                        </div>
+                    </CardV2>
+                );
+            default:
+                return null;
+        }
+    };
+
+    return (
+        <div className="host-lobby-grid">
+            <aside
+                className="lobby-panel left-panel"
+                onDragOver={onDragOver}
+                onDrop={(e) => onDropContainer(e, 'left')}
+            >
+                {panels.left.map(id => {
+                    const content = renderWidget(id);
+                    if (!content) return null;
+                    return (
+                        <ResizableWidget key={id} id={id} panel="left" onDragStart={onDragStart} onDrop={onDrop}>
+                            {content}
+                        </ResizableWidget>
+                    );
+                })}
+            </aside>
+
+            <section className="lobby-center">
+                <div className="center-decoration"></div>
+                {!isHosting ? (
+                    <div className="setup-mode">
+                        <h2 className="setup-title">CONFIGURE UPLINK</h2>
+                        <div className="display-selector">
+                            <label className="section-label">SELECT SOURCE FEED</label>
+                            <div className="display-grid">
+                                {displays.map((display) => (
+                                    <div
+                                        key={display.id}
+                                        className={`display-option ${selectedDisplay === display.id ? 'active' : ''}`}
+                                        onClick={() => setSelectedDisplay(display.id)}
+                                    >
+                                        <span className="material-symbols-outlined icon">monitor</span>
+                                        <div className="display-details">
+                                            <span className="name">{display.name}</span>
+                                            <span className="res">{display.width}x{display.height}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="setup-actions">
+                            <ButtonV2 variant="secondary" onClick={onBack}>ABORT</ButtonV2>
+                            <ButtonV2
+                                variant="primary"
+                                onClick={handleStartHosting}
+                                disabled={isStarting || !selectedDisplay}
+                            >
+                                {isStarting ? 'INITIALIZING...' : 'ACTIVATE BEACON'}
+                            </ButtonV2>
+                        </div>
+                        {(error || localError) ? <div className="error-msg">{error || localError}</div> : null}
+                    </div>
+                ) : (
+                    <div className="active-mode">
+                        <div className="status-indicator">
+                            <span className="material-symbols-outlined icon animate-spin">sync</span>
+                            <span className="text">SECURE LINK ESTABLISHED</span>
+                        </div>
+                        <div className="session-code-display" onClick={handleCopyCode} title="Click to copy">
+                            <h1 className="code-text glow-text">{sessionState.sessionCode}</h1>
+                            <div className="code-status">
+                                <span className="dot animate-pulse"></span>
+                                <span>WAITING FOR CONNECTION...</span>
+                            </div>
+                        </div>
+                        <div className="peer-slots">
+                            {[...Array(4)].map((_, i) => (
+                                <div key={i} className="peer-slot empty"><span className="material-symbols-outlined">person</span></div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </section>
+
+            <aside
+                className="lobby-panel right-panel"
+                onDragOver={onDragOver}
+                onDrop={(e) => onDropContainer(e, 'right')}
+            >
+                {panels.right.map(id => {
+                    const content = renderWidget(id);
+                    if (!content) return null;
+                    return (
+                        <ResizableWidget key={id} id={id} panel="right" onDragStart={onDragStart} onDrop={onDrop}>
+                            {content}
+                        </ResizableWidget>
+                    );
+                })}
+            </aside>
+        </div>
+    );
+}

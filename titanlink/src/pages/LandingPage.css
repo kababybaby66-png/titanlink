@@ -26,10 +26,11 @@
             rgba(0, 242, 255, 0.015) 30%,
             rgba(0, 242, 255, 0.005) 50%,
             transparent 70%);
-    transform: translate(-50%, -50%);
-    left: var(--mouse-x);
-    top: var(--mouse-y);
+    transform: translate3d(var(--mouse-x), var(--mouse-y), 0) translate(-50%, -50%);
+    left: 0;
+    top: 0;
     z-index: 2;
+    will-change: transform;
     mix-blend-mode: screen;
 }
 
@@ -43,10 +44,11 @@
             rgba(255, 255, 255, 0.015) 0%,
             rgba(200, 220, 255, 0.008) 40%,
             transparent 70%);
-    transform: translate(-50%, -50%);
-    left: var(--mouse-x);
-    top: var(--mouse-y);
+    transform: translate3d(var(--mouse-x), var(--mouse-y), 0) translate(-50%, -50%);
+    left: 0;
+    top: 0;
     z-index: 2;
+    will-change: transform;
     mix-blend-mode: screen;
 }
 
@@ -58,10 +60,13 @@
         linear-gradient(rgba(0, 242, 255, 0.03) 1px, transparent 1px),
         linear-gradient(90deg, rgba(0, 242, 255, 0.03) 1px, transparent 1px);
     background-size: 50px 50px;
-    perspective: 1000px;
-    transform: perspective(500px) rotateX(60deg) translateY(-100px) scale(2);
+    /* Static perspective — no animation loop unless .animated */
+    transform: perspective(500px) rotateX(60deg) translateY(-50px) scale(2);
     opacity: 0.5;
     pointer-events: none;
+}
+
+.grid-overlay.animated {
     animation: gridFlow 20s linear infinite;
 }
 
@@ -79,12 +84,16 @@
     position: absolute;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
+    /* Static — no spin animation for performance unless .animated */
+    transform: translate(-50%, -50%) rotate(45deg);
     width: 60vh;
     height: 60vh;
     border: 1px dashed rgba(0, 242, 255, 0.1);
     border-radius: 50%;
     pointer-events: none;
+}
+
+.orbital-ring.animated {
     animation: spin 30s linear infinite;
 }
 
