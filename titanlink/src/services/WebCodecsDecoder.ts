@@ -13,6 +13,9 @@ export class WebCodecsDecoder {
     private lastRenderTime = 0;
     private onFpsUpdate?: (fps: number) => void;
 
+    private isConfiguring = false;
+    private chunkQueue: EncodedVideoChunk[] = [];
+
     constructor(canvas: HTMLCanvasElement, onFpsUpdate?: (fps: number) => void) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
@@ -43,12 +46,13 @@ export class WebCodecsDecoder {
         'avc1.42E01F', // Baseline Profile, Level 3.1
     ];
 
-    private isConfiguring = false;
+    private hasReceivedKeyframe = false;
 
     private async configure(width: number, height: number): Promise<void> {
         if (!this.decoder || this.isConfiguring || this.isConfigured) return;
 
         this.isConfiguring = true;
+        this.hasReceivedKeyframe = false;
         console.log(`[WebCodecs] Configuring decoder for ${width}x${height}...`);
 
         for (const codec of this.CODEC_PREFERENCES) {
@@ -67,6 +71,23 @@ export class WebCodecsDecoder {
                     this.decoder.configure(config);
                     this.isConfigured = true;
                     this.isConfiguring = false;
+
+                    // Flush queue
+                    for (const queuedChunk of this.chunkQueue) {
+                        try {
+                            if (!this.hasReceivedKeyframe) {
+                                if (queuedChunk.type === 'key') {
+                                    this.hasReceivedKeyframe = true;
+                                } else {
+                                    continue; // Drop frame until keyframe
+                                }
+                            }
+                            this.decoder.decode(queuedChunk);
+                        } catch (e) {
+                            console.error('[WebCodecs] Queued decode failed:', e);
+                        }
+                    }
+                    this.chunkQueue = [];
                     return;
                 }
             } catch (e) {
@@ -76,14 +97,11 @@ export class WebCodecsDecoder {
 
         console.error('[WebCodecs] No supported H.264 codec found');
         this.isConfiguring = false;
+        this.chunkQueue = []; // Clear queue on failure
     }
 
     public decode(frame: { frameNumber: number; timestampUs: bigint; isKeyframe: boolean; data: Uint8Array }): void {
         if (!this.decoder) return;
-
-        if (!this.isConfigured) {
-            this.configure(1920, 1080);
-        }
 
         try {
             const chunk = new EncodedVideoChunk({
@@ -91,6 +109,23 @@ export class WebCodecsDecoder {
                 timestamp: Number(frame.timestampUs),
                 data: frame.data,
             });
+
+            if (!this.isConfigured) {
+                this.chunkQueue.push(chunk);
+                if (!this.isConfiguring) {
+                    this.configure(1920, 1080);
+                }
+                return;
+            }
+
+            if (!this.hasReceivedKeyframe) {
+                if (chunk.type === 'key') {
+                    this.hasReceivedKeyframe = true;
+                } else {
+                    return; // Drop delta frames until we get a keyframe
+                }
+            }
+
             this.decoder.decode(chunk);
         } catch (e) {
             console.error('[WebCodecs] Decode chunk failed:', e);
@@ -124,7 +159,9 @@ export class WebCodecsDecoder {
 
         if (elapsed >= FPS_UPDATE_INTERVAL_MS) {
             const fps = Math.round((this.frameCount * 1000) / elapsed);
-            console.log(`[WebCodecsDecoder] FPS Updated: ${fps} (frameCount: ${this.frameCount}, elapsed: ${elapsed.toFixed(0)}ms)`);
+            if (fps > 0) { // Only log if we're actually decoding
+                console.log(`[WebCodecsDecoder] FPS Updated: ${fps} (frameCount: ${this.frameCount}, elapsed: ${elapsed.toFixed(0)}ms)`);
+            }
             this.onFpsUpdate?.(fps);
             this.frameCount = 0;
             this.lastRenderTime = now;
@@ -137,5 +174,6 @@ export class WebCodecsDecoder {
         }
         this.decoder = null;
         this.isConfigured = false;
+        this.chunkQueue = [];
     }
 }
