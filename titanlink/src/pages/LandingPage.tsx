@@ -82,7 +82,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <header className="landing-head">
                     <div className="brand-lockup">
                         <div className="logo-glitch" data-text="TITANLINK">TITANLINK</div>
-                        <div className="version-tag">Build v1.0.4 // STABLE</div>
+                        <div className="version-tag">Build v1.2.0 // STABLE</div>
                     </div>
 
                     <div className="system-status-pill">

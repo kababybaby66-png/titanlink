@@ -71,7 +71,7 @@ export const LandingPageV2: React.FC<LandingPageV2Props> = ({
                 <header className="landing-head">
                     <div className="brand-lockup">
                         <div className="logo-glitch" data-text="TITANLINK">TITANLINK</div>
-                        <div className="version-tag">Build v2.0.0 // V2 UI</div>
+                        <div className="version-tag">Build v1.2.0 // V2 UI</div>
                     </div>
 
                     <div className="system-status-pill">
