@@ -56,17 +56,28 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
 
         const handleHardwareFrame = (e: Event) => {
             const customEvent = e as CustomEvent<unknown>;
-            if (!isHardwareMode) setIsHardwareMode(true);
+            setIsHardwareMode(prev => {
+                if (!prev) return true;
+                return prev;
+            });
             decoderRef.current?.decode(customEvent.detail as { frameNumber: number; timestampUs: bigint; isKeyframe: boolean; data: Uint8Array; });
         };
 
         window.addEventListener('titanlink:hardware-frame', handleHardwareFrame);
         return () => {
             window.removeEventListener('titanlink:hardware-frame', handleHardwareFrame);
-            decoderRef.current?.destroy();
-            decoderRef.current = null;
         };
-    }, [sessionState.role, isHardwareMode]);
+    }, [sessionState.role]);
+
+    // Separate effect for destroying decoder
+    useEffect(() => {
+        return () => {
+            if (decoderRef.current) {
+                decoderRef.current.destroy();
+                decoderRef.current = null;
+            }
+        };
+    }, []);
 
     // Poll connection quality metrics and update FPS from hardware decoder
     useEffect(() => {
