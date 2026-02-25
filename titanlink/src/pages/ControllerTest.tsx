@@ -123,6 +123,7 @@ export function ControllerTest({ enable3D = false }: ControllerTestProps) {
                         <Suspense fallback={<div style={{ color: '#00f2ff', padding: '2rem' }}>Loading 3D…</div>}>
                             <HoloCanvas>
                                 {/* Controller3D temporarily removed */}
+                                <React.Fragment />
                             </HoloCanvas>
                         </Suspense>
                     ) : (

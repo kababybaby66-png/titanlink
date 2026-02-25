@@ -257,13 +257,13 @@ function App() {
             // Ensure service has latest settings (e.g. for audio/decoder config)
             streamService.updateSettings(settings);
 
-            await streamService.connectToHost(sessionCode, callbacks);
-
             setSessionState({
                 sessionCode,
                 role: 'client',
                 connectionState: 'connecting',
             });
+
+            await streamService.connectToHost(sessionCode, callbacks);
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Failed to connect';
             setError(message);
