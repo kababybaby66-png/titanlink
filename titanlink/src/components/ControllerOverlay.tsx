@@ -47,7 +47,7 @@ export function ControllerOverlay({ input, connected }: ControllerOverlayProps) 
         return (
             <div className="controller-overlay disconnected">
                 <div className="controller-icon">🎮</div>
-                <span className="controller-status">WAITING FOR INPUT...</span>
+                <span className="controller-status">Waiting for link</span>
             </div>
         );
     }
@@ -290,7 +290,7 @@ export function ControllerOverlay({ input, connected }: ControllerOverlayProps) 
             {/* Status indicator */}
             <div className="controller-status-badge connected">
                 <span className="status-dot"></span>
-                <span className="status-text">INPUT ACTIVE</span>
+                <span className="status-text">Input Active</span>
             </div>
         </div>
     );

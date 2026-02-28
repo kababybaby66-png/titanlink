@@ -1,28 +1,16 @@
-/**
- * TitanLink - Electron Main Process
- * Handles native system access, driver management, IPC coordination, and embedded signaling
- */
-
 import { app, BrowserWindow, ipcMain, desktopCapturer, screen } from 'electron';
 import path from 'path';
 import os from 'os';
 import dotenv from 'dotenv';
 
-// Load environment variables from .env file
 dotenv.config({ path: path.join(__dirname, '../.env') });
-console.log('[Main] Loading .env from:', path.join(__dirname, '../.env'));
 
-// FORCE DISCRETE GPU: Try to force usage of high-performance GPU
-// This is critical for NVENC availability on hybrid systems (Optimuss/Muxless)
 app.commandLine.appendSwitch('force_high_performance_gpu');
-// app.commandLine.appendSwitch('disable-gpu-sandbox'); // Use only if absolutely necessary
 
-// DEBUG: Log environment details to help diagnose native module issues
-console.log('[Main] === Environment Debug ===');
-console.log(`[Main] Platform: ${process.platform}, Arch: ${process.arch}`);
-console.log(`[Main] PATH: ${process.env.PATH}`);
-console.log(`[Main] System32 exists: ${require('fs').existsSync('C:\\Windows\\System32')}`);
-console.log('[Main] =========================');
+// Log minimal platform info (dev only — avoid leaking environment in production)
+if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
+    console.log(`[Main] Platform: ${process.platform}, Arch: ${process.arch}`);
+}
 
 import { DriverManager } from './services/DriverManager';
 import { VirtualControllerService } from './services/VirtualControllerService';
@@ -31,10 +19,7 @@ import { hardwareCaptureService } from './services/HardwareCaptureService';
 import { virtualDisplayService } from './services/VirtualDisplayService';
 import type { DisplayInfo, GamepadInputState } from '../shared/types/ipc';
 
-// Keep a global reference of the window object
 let mainWindow: BrowserWindow | null = null;
-
-// Services
 let driverManager: DriverManager;
 let virtualController: VirtualControllerService;
 
@@ -49,14 +34,15 @@ function createWindow() {
         height: 800,
         minWidth: 900,
         minHeight: 600,
-        frame: false, // Custom titlebar
+        frame: false,
         titleBarStyle: 'hidden',
         backgroundColor: '#0a0a0f',
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
-            nodeIntegration: true,
-            contextIsolation: false,
-            sandbox: false, // Required for some native modules
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
+            webSecurity: true,
         },
         icon: path.join(__dirname, '../resources/icon.png'),
     });
@@ -74,44 +60,26 @@ function createWindow() {
     });
 }
 
-// Initialize services
 async function initializeServices() {
     driverManager = new DriverManager();
     virtualController = new VirtualControllerService();
-
-    // Check driver status on startup
     const driverStatus = await driverManager.checkDriverStatus();
     console.log('Driver status:', driverStatus);
 }
 
-// ============================================
-// IPC Handlers
-// ============================================
-
 function registerIpcHandlers() {
-    // System handlers
-    ipcMain.handle('system:check-drivers', async () => {
-        return await driverManager.checkDriverStatus();
-    });
-
-    ipcMain.handle('system:install-vigembus', async () => {
-        return await driverManager.installViGEmBus();
-    });
+    ipcMain.handle('system:check-drivers', async () => driverManager.checkDriverStatus());
+    ipcMain.handle('system:install-vigembus', async () => driverManager.installViGEmBus());
 
     ipcMain.handle('system:get-displays', async (): Promise<DisplayInfo[]> => {
         const sources = await desktopCapturer.getSources({
             types: ['screen'],
-            thumbnailSize: { width: 0, height: 0 } // Performance optimization
+            thumbnailSize: { width: 0, height: 0 },
         });
-
         const displays = screen.getAllDisplays();
-
         return sources.map((source, index) => {
-            // Match sources to displays roughly by index as desktopCapturer doesn't rely reliably on display ID
             const display = displays[index] || displays[0];
             const scaleFactor = display.scaleFactor || 1;
-
-            // CRITICAL: Return ONLY simple serializable data to avoid "Bad IPC Message" crash
             return {
                 id: source.id,
                 name: source.name,
@@ -131,12 +99,12 @@ function registerIpcHandlers() {
         let idle = 0;
         let total = 0;
 
-        cpus.forEach(cpu => {
+        for (const cpu of cpus) {
             for (const type in cpu.times) {
                 total += (cpu.times as any)[type];
             }
             idle += cpu.times.idle;
-        });
+        }
 
         let cpuUsage = 0;
         if (previousCpu.total > 0) {
@@ -148,7 +116,6 @@ function registerIpcHandlers() {
         }
         previousCpu = { idle, total };
 
-        // Memory Usage
         const totalMem = os.totalmem();
         const freeMem = os.freemem();
         const memUsage = Math.round(((totalMem - freeMem) / totalMem) * 100);
@@ -157,93 +124,67 @@ function registerIpcHandlers() {
             cpuUsage,
             memUsage,
             totalMem: parseFloat((totalMem / (1024 ** 3)).toFixed(1)),
-            freeMem: parseFloat((freeMem / (1024 ** 3)).toFixed(1))
+            freeMem: parseFloat((freeMem / (1024 ** 3)).toFixed(1)),
         };
     });
 
-    // Controller handlers - these run in main process for native access
-    ipcMain.handle('controller:create-virtual', async () => {
-        return await virtualController.createController();
-    });
+    ipcMain.handle('controller:create-virtual', async () => virtualController.createController());
+    ipcMain.handle('controller:destroy-virtual', async () => virtualController.destroyController());
+    ipcMain.on('controller:input', (_event, input: GamepadInputState) => virtualController.updateInput(input));
 
-    ipcMain.handle('controller:destroy-virtual', async () => {
-        return await virtualController.destroyController();
-    });
-
-    // Receive controller input from renderer (which receives it from WebRTC)
-    ipcMain.on('controller:input', (_event, input: GamepadInputState) => {
-        virtualController.updateInput(input);
-    });
-
-    // Window control handlers (for custom titlebar)
     ipcMain.on('window:minimize', () => mainWindow?.minimize());
-    ipcMain.on('window:maximize', () => {
-        if (mainWindow?.isMaximized()) {
-            mainWindow.unmaximize();
-        } else {
-            mainWindow?.maximize();
-        }
-    });
+    ipcMain.on('window:maximize', () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow?.maximize());
     ipcMain.on('window:close', () => mainWindow?.close());
 
-    // TURN Server handlers (priority: Self-hosted > Free Public TURN > STUN fallback)
     ipcMain.handle('turn:get-ice-servers', async () => {
-        // Priority 1: Self-hosted coturn server(s) with health checking
         if (selfHostedTurnService.isConfigured()) {
-            console.log('[TURN] Using self-hosted TURN server(s) with health check');
+            console.log('[TURN] Using self-hosted TURN server(s)');
             return await selfHostedTurnService.getIceServers();
         }
-
-        // Fallback: Free public TURN + STUN (limited but better than nothing)
-        console.log('[TURN] No self-hosted TURN configured, using free public TURN fallback');
+        console.log('[TURN] No self-hosted TURN configured, using public fallback');
         return [
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
             { urls: 'stun:stun2.l.google.com:19302' },
-            // OpenRelay free TURN
             { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
             { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
             { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
         ];
     });
 
-    ipcMain.handle('turn:is-configured', () => {
-        return selfHostedTurnService.isConfigured();
-    });
+    ipcMain.handle('turn:is-configured', () => selfHostedTurnService.isConfigured());
 
-    // Configure self-hosted TURN (coturn)
     ipcMain.handle('turn:configure-selfhosted', (_event, serverUrl: string, secret: string) => {
+        if (typeof serverUrl !== 'string' || serverUrl.length > 512 ||
+            typeof secret !== 'string' || secret.length > 256) {
+            throw new Error('Invalid TURN server configuration');
+        }
+        if (!/^turns?:[\w.-]+:\d+/.test(serverUrl)) throw new Error('Invalid TURN server URL format');
         selfHostedTurnService.configure(serverUrl, secret);
         return { success: true };
     });
 
-    // Get current TURN configuration status with server health info
-    ipcMain.handle('turn:get-status', () => {
-        return selfHostedTurnService.getStatus();
-    });
+    ipcMain.handle('turn:get-status', () => selfHostedTurnService.getStatus());
 
-    // Launch on startup handler
     ipcMain.handle('app:set-launch-on-startup', (_event, enabled: boolean) => {
-        app.setLoginItemSettings({
-            openAtLogin: enabled,
-            path: app.getPath('exe'),
-        });
-        console.log(`[Main] Launch on startup sets to: ${enabled}`);
+        if (typeof enabled !== 'boolean') throw new Error('Invalid argument');
+        app.setLoginItemSettings({ openAtLogin: enabled, path: app.getPath('exe') });
         return { success: true };
     });
 
-    // Force health check on all TURN servers
     ipcMain.handle('turn:run-health-check', async () => {
         await selfHostedTurnService.runHealthChecks();
         return selfHostedTurnService.getStatus();
     });
 
-    // Logging handler - allows renderer to log to main terminal
-    ipcMain.on('system:log', (_event, level: 'info' | 'warn' | 'error', message: string) => {
+    ipcMain.on('system:log', (_event, level: string, message: string) => {
+        if (!['info', 'warn', 'error'].includes(level)) return;
+        if (typeof message !== 'string') return;
+        const sanitized = message.slice(0, 2048);
         const prefix = `[Renderer:${level.toUpperCase()}]`;
-        if (level === 'error') console.error(prefix, message);
-        else if (level === 'warn') console.warn(prefix, message);
-        else console.log(prefix, message);
+        if (level === 'error') console.error(prefix, sanitized);
+        else if (level === 'warn') console.warn(prefix, sanitized);
+        else console.log(prefix, sanitized);
     });
 
     // ============================================
@@ -263,91 +204,72 @@ function registerIpcHandlers() {
     });
 
     ipcMain.handle('hardware-capture:start', async (_event, settings) => {
-        console.log('[Main] Starting hardware capture with settings:', settings);
-        const result = hardwareCaptureService.start(settings);
-        console.log('[Main] Hardware capture start result:', result);
-        return result;
+        // [SECURITY] Validate all fields before passing to native module
+        if (!settings || typeof settings !== 'object') throw new Error('Invalid settings');
+        const { displayIndex, fps, bitrate, useHardwareEncoder, codec, bitrateMode } = settings;
+        if (typeof displayIndex !== 'number' || displayIndex < 0 || displayIndex > 16) throw new Error('Invalid displayIndex');
+        if (typeof fps !== 'number' || fps < 1 || fps > 300) throw new Error('Invalid fps');
+        if (typeof bitrate !== 'number' || bitrate < 100_000 || bitrate > 100_000_000) throw new Error('Invalid bitrate');
+        if (typeof useHardwareEncoder !== 'boolean') throw new Error('Invalid useHardwareEncoder');
+        if (!['h264', 'hevc', 'av1'].includes(codec)) throw new Error('Invalid codec');
+        if (!['cbr', 'vbr'].includes(bitrateMode)) throw new Error('Invalid bitrateMode');
+        return hardwareCaptureService.start({ displayIndex, fps, bitrate, useHardwareEncoder, codec, bitrateMode });
     });
 
-    ipcMain.handle('hardware-capture:stop', async () => {
-        console.log('[Main] Stopping hardware capture');
-        return hardwareCaptureService.stop();
-    });
+    ipcMain.handle('hardware-capture:stop', async () => hardwareCaptureService.stop());
+    ipcMain.handle('hardware-capture:is-active', async () => hardwareCaptureService.isCaptureActive());
+    ipcMain.on('update:restart-and-install', () => autoUpdater.quitAndInstall(false, true));
 
-    ipcMain.handle('hardware-capture:is-active', async () => {
-        return hardwareCaptureService.isCaptureActive();
-    });
+    hardwareCaptureService.on('frame', (frame) => mainWindow?.webContents.send('hardware-capture:frame', frame));
+    hardwareCaptureService.on('audio-frame', (frame) => mainWindow?.webContents.send('hardware-capture:audio-frame', frame));
 
-    ipcMain.on('update:restart-and-install', () => {
-        autoUpdater.quitAndInstall(false, true);
-    });
-
-    // Forward native capture frames to renderer
-    hardwareCaptureService.on('frame', (frame) => {
-        if (mainWindow) {
-            mainWindow.webContents.send('hardware-capture:frame', frame);
-        }
-    });
-
-    // Forward native audio frames to renderer
-    hardwareCaptureService.on('audio-frame', (frame) => {
-        if (mainWindow) {
-            mainWindow.webContents.send('hardware-capture:audio-frame', frame);
-        }
-    });
-
-    ipcMain.handle('hardware-capture:audio-supported', async () => {
-        return hardwareCaptureService.isAudioSupported();
-    });
+    ipcMain.handle('hardware-capture:audio-supported', async () => hardwareCaptureService.isAudioSupported());
 
     ipcMain.handle('hardware-capture:start-audio', async (_event, settings) => {
-        console.log('[Main] Starting audio capture:', settings);
-        return hardwareCaptureService.startAudio(settings.sampleRate, settings.quality);
+        if (!settings || typeof settings !== 'object') throw new Error('Invalid settings');
+        const { sampleRate, quality } = settings;
+        if (typeof sampleRate !== 'number' || ![22050, 44100, 48000].includes(sampleRate)) throw new Error('Invalid sampleRate');
+        if (!['low', 'medium', 'high', 'game'].includes(quality)) throw new Error('Invalid quality');
+        return hardwareCaptureService.startAudio(sampleRate, quality);
     });
 
-    ipcMain.handle('hardware-capture:stop-audio', async () => {
-        console.log('[Main] Stopping audio capture');
-        return hardwareCaptureService.stopAudio();
-    });
+    ipcMain.handle('hardware-capture:stop-audio', async () => hardwareCaptureService.stopAudio());
 
-    // ============================================
-    // Virtual Display Driver Handlers
-    // ============================================
-
-    ipcMain.handle('virtual-display:get-status', async () => {
-        return virtualDisplayService.getStatus();
-    });
-
-    ipcMain.handle('virtual-display:check-installed', async () => {
-        return virtualDisplayService.checkInstallation();
-    });
-
-    ipcMain.handle('virtual-display:install', async () => {
-        return virtualDisplayService.installDriver();
-    });
+    ipcMain.handle('virtual-display:get-status', async () => virtualDisplayService.getStatus());
+    ipcMain.handle('virtual-display:check-installed', async () => virtualDisplayService.checkInstallation());
+    ipcMain.handle('virtual-display:install', async () => virtualDisplayService.installDriver());
 
     ipcMain.handle('virtual-display:create', async (_event, config) => {
-        console.log('[Main] Creating virtual display:', config);
-        return virtualDisplayService.createDisplay(config);
+        if (!config || typeof config !== 'object') throw new Error('Invalid config');
+        const { width, height, refreshRate } = config;
+        if (typeof width !== 'number' || width < 640 || width > 7680) throw new Error('Invalid width');
+        if (typeof height !== 'number' || height < 480 || height > 4320) throw new Error('Invalid height');
+        if (typeof refreshRate !== 'number' || refreshRate < 24 || refreshRate > 360) throw new Error('Invalid refreshRate');
+        return virtualDisplayService.createDisplay({ width, height, refreshRate });
     });
 
     ipcMain.handle('virtual-display:remove', async (_event, index) => {
-        console.log('[Main] Removing virtual display at index:', index);
+        if (typeof index !== 'number' || index < 0 || index > 16) throw new Error('Invalid index');
         return virtualDisplayService.removeDisplay(index);
     });
 
-    ipcMain.handle('virtual-display:remove-all', async () => {
-        console.log('[Main] Removing all virtual displays');
-        return virtualDisplayService.removeAllDisplays();
-    });
+    ipcMain.handle('virtual-display:remove-all', async () => virtualDisplayService.removeAllDisplays());
 }
 
-// ============================================
-// ============================================
-// App Lifecycle
-// ============================================
+function validateDeepLink(url: string): string | null {
+    if (!url || typeof url !== 'string') return null;
+    if (!url.startsWith('titanlink://')) return null;
+    try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== 'titanlink:') return null;
+        const allowedHosts = ['join', 'connect', 'invite'];
+        if (!allowedHosts.includes(parsed.hostname)) return null;
+        return parsed.toString();
+    } catch {
+        return null;
+    }
+}
 
-// Register protocol client for local dev
 if (process.defaultApp) {
     if (process.argv.length >= 2) {
         app.setAsDefaultProtocolClient('titanlink', process.execPath, [path.resolve(process.argv[1])]);
@@ -361,26 +283,20 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
     app.quit();
 } else {
-    app.on('second-instance', (event, commandLine, workingDirectory) => {
-        // Someone tried to run a second instance, we should focus our window.
+    app.on('second-instance', (_event, commandLine) => {
         if (mainWindow) {
             if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.focus();
-
-            // Windows: Deep link comes through command shell args
-            const deepLink = commandLine.find(arg => arg.startsWith('titanlink://'));
-            if (deepLink) {
-                mainWindow.webContents.send('app:deep-link', deepLink);
-            }
+            const rawLink = commandLine.find(arg => arg.startsWith('titanlink://'));
+            const deepLink = rawLink ? validateDeepLink(rawLink) : null;
+            if (deepLink) mainWindow.webContents.send('app:deep-link', deepLink);
         }
     });
 
-    // macOS: Handle deep links when app is already open
     app.on('open-url', (event, url) => {
         event.preventDefault();
-        if (mainWindow) {
-            mainWindow.webContents.send('app:deep-link', url);
-        }
+        const deepLink = validateDeepLink(url);
+        if (mainWindow && deepLink) mainWindow.webContents.send('app:deep-link', deepLink);
     });
 
     app.whenReady().then(async () => {
@@ -388,11 +304,10 @@ if (!gotTheLock) {
         registerIpcHandlers();
         createWindow();
 
-        // Check if app was opened by a deep link (Windows initially)
         if (process.platform === 'win32') {
-            const deepLink = process.argv.find(arg => arg.startsWith('titanlink://'));
+            const rawLink = process.argv.find(arg => arg.startsWith('titanlink://'));
+            const deepLink = rawLink ? validateDeepLink(rawLink) : null;
             if (deepLink && mainWindow) {
-                // Wait for the window to finish loading the React app before sending
                 mainWindow.webContents.once('did-finish-load', () => {
                     mainWindow!.webContents.send('app:deep-link', deepLink);
                 });
@@ -400,102 +315,79 @@ if (!gotTheLock) {
         }
 
         app.on('activate', () => {
-            if (BrowserWindow.getAllWindows().length === 0) {
-                createWindow();
-            }
+            if (BrowserWindow.getAllWindows().length === 0) createWindow();
         });
     });
 }
 
 app.on('window-all-closed', () => {
-    // Cleanup services
     virtualController?.destroyController();
-
-    if (process.platform !== 'darwin') {
-        app.quit();
-    }
+    if (process.platform !== 'darwin') app.quit();
 });
 
-// Handle app shutdown gracefully
 app.on('before-quit', async () => {
     await virtualController?.destroyController();
     await virtualDisplayService.cleanup();
 });
 
-// ============================================
-// Auto Updater
-// ============================================
-
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 
-// Configure logging
 log.transports.file.level = 'info';
 autoUpdater.logger = log;
 
-// Auto-updater events
+const UPDATE_INTERVAL_MS = 60 * 60 * 1000;
+
 autoUpdater.on('checking-for-update', () => {
     log.info('Checking for update...');
-    if (mainWindow) mainWindow.webContents.send('update:status', 'checking');
+    mainWindow?.webContents.send('update:status', 'checking');
 });
 
 autoUpdater.on('update-available', (info) => {
     log.info('Update available.', info);
-    if (mainWindow) mainWindow.webContents.send('update:status', 'available');
+    mainWindow?.webContents.send('update:status', 'available');
 });
 
 autoUpdater.on('update-not-available', (info) => {
     log.info('Update not available.', info);
-    if (mainWindow) mainWindow.webContents.send('update:status', 'not-available');
+    mainWindow?.webContents.send('update:status', 'not-available');
 });
 
 autoUpdater.on('error', (err) => {
-    log.error('Error in auto-updater. ' + err);
-    if (mainWindow) mainWindow.webContents.send('update:status', 'error', err.toString());
+    log.error(`Error in auto-updater: ${err}`);
+    mainWindow?.webContents.send('update:status', 'error', err.toString());
 });
 
 autoUpdater.on('download-progress', (progressObj) => {
-    let log_message = "Download speed: " + progressObj.bytesPerSecond;
-    log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
-    log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
-    log.info(log_message);
-    if (mainWindow) mainWindow.webContents.send('update:download-progress', progressObj);
+    log.info(`Download speed: ${progressObj.bytesPerSecond} - Downloaded ${progressObj.percent}% (${progressObj.transferred}/${progressObj.total})`);
+    mainWindow?.webContents.send('update:download-progress', progressObj);
 });
 
 autoUpdater.on('update-downloaded', (info) => {
     log.info('Update downloaded', info);
-    if (mainWindow) mainWindow.webContents.send('update:status', 'downloaded');
-    // Silent update or prompt? 
-    // We notify frontend and wait for user click to restart
+    mainWindow?.webContents.send('update:status', 'downloaded');
 });
 
 function initAutoUpdater() {
-    if (app.isPackaged) {
-        log.info('App is packaged, initializing autoUpdater...');
-        autoUpdater.autoDownload = true;
-        autoUpdater.autoInstallOnAppQuit = true;
-
+    if (!app.isPackaged) {
+        log.info('App is not packaged, skipping auto-update check.');
+        return;
+    }
+    log.info('Initializing autoUpdater...');
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+    try {
+        autoUpdater.checkForUpdatesAndNotify();
+    } catch (err) {
+        log.error('Failed to check for updates on startup:', err);
+    }
+    setInterval(() => {
         try {
             autoUpdater.checkForUpdatesAndNotify();
         } catch (err) {
-            log.error('Failed to check for updates on startup:', err);
+            log.error('Periodic update check failed:', err);
         }
-
-        // Check for updates every 1 hour
-        setInterval(() => {
-            log.info('Periodic update check...');
-            try {
-                autoUpdater.checkForUpdatesAndNotify();
-            } catch (err) {
-                log.error('Periodic update check failed:', err);
-            }
-        }, 60 * 60 * 1000);
-    } else {
-        log.info('App is not packaged, skipping auto-update check.');
-    }
+    }, UPDATE_INTERVAL_MS);
 }
 
-// Ensure it connects to ready event (avoiding double triggers via whenReady/onReady if possible)
-app.on('ready', () => {
-    initAutoUpdater();
-});
+app.on('ready', () => initAutoUpdater());

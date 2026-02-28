@@ -212,4 +212,11 @@ input:checked+.slider:before {
 .secondary-btn.small {
     padding: 0.5rem 1.5rem;
     font-size: 0.85rem;
+    transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+    cursor: pointer;
+}
+
+.primary-btn.small:hover,
+.secondary-btn.small:hover {
+    transform: translateY(-2px);
 }

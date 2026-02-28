@@ -1,6 +1,9 @@
-import React from 'react';
-import { HoloCanvas, ResourceReactor } from './3d'; // Adjust import based on where this file is placed
+import React, { Suspense } from 'react';
 import './StatusVisualizer.css';
+
+// Lazy-load 3D components so Three.js (~650KB) is only loaded when enable3D is true
+const HoloCanvas = React.lazy(() => import('./3d/HoloCanvas').then(m => ({ default: m.HoloCanvas })));
+const ResourceReactor = React.lazy(() => import('./3d/ResourceReactor').then(m => ({ default: m.ResourceReactor })));
 
 interface StatusVisualizerProps {
     cpuUsage?: number;
@@ -17,9 +20,15 @@ export const StatusVisualizer = ({ cpuUsage = 0, memUsage = 0, enable3D = false 
             </h3>
             <div className="status-viewport">
                 {enable3D ? (
-                    <HoloCanvas>
-                        <ResourceReactor cpuUsage={cpuUsage} memUsage={memUsage} />
-                    </HoloCanvas>
+                    <Suspense fallback={
+                        <div className="static-core-fallback">
+                            <div className="static-core-ring" style={{ width: '40px', height: '40px', border: '1px solid #4abdff', borderRadius: '50%', margin: '0 auto', top: '50%', position: 'relative', transform: 'translateY(-50%)', opacity: 0.5 }}></div>
+                        </div>
+                    }>
+                        <HoloCanvas>
+                            <ResourceReactor cpuUsage={cpuUsage} memUsage={memUsage} />
+                        </HoloCanvas>
+                    </Suspense>
                 ) : (
                     <div className="static-core-fallback">
                         <div className="static-core-ring" style={{ width: '40px', height: '40px', border: '1px solid #4abdff', borderRadius: '50%', margin: '0 auto', top: '50%', position: 'relative', transform: 'translateY(-50%)', opacity: 0.5 }}></div>

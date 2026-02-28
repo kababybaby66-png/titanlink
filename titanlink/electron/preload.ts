@@ -1,8 +1,3 @@
-/**
- * TitanLink - Preload Script
- * Secure bridge between Renderer and Main processes
- */
-
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
     DriverCheckResult,
@@ -10,12 +5,7 @@ import type {
     GamepadInputState,
 } from '../shared/types/ipc';
 
-// Expose protected methods that allow the renderer process to use
-// ipcRenderer without exposing the entire object
 const electronAPI = {
-    // ============================================
-    // System APIs
-    // ============================================
     system: {
         checkDrivers: (): Promise<DriverCheckResult> =>
             ipcRenderer.invoke('system:check-drivers'),
@@ -30,9 +20,6 @@ const electronAPI = {
             ipcRenderer.invoke('system:get-stats'),
     },
 
-    // ============================================
-    // Application APIs
-    // ============================================
     app: {
         setLaunchOnStartup: (enabled: boolean): Promise<{ success: boolean }> =>
             ipcRenderer.invoke('app:set-launch-on-startup', enabled),
@@ -44,9 +31,6 @@ const electronAPI = {
         }
     },
 
-    // ============================================
-    // Controller APIs
-    // ============================================
     controller: {
         createVirtual: (): Promise<{ success: boolean; error?: string }> =>
             ipcRenderer.invoke('controller:create-virtual'),
@@ -54,23 +38,16 @@ const electronAPI = {
         destroyVirtual: (): Promise<void> =>
             ipcRenderer.invoke('controller:destroy-virtual'),
 
-        // Send controller input to main process (host receives from WebRTC, forwards here)
         sendInput: (input: GamepadInputState) =>
             ipcRenderer.send('controller:input', input),
     },
 
-    // ============================================
-    // Window Control APIs (Custom Titlebar)
-    // ============================================
     window: {
         minimize: () => ipcRenderer.send('window:minimize'),
         maximize: () => ipcRenderer.send('window:maximize'),
         close: () => ipcRenderer.send('window:close'),
     },
 
-    // ============================================
-    // TURN Server APIs (Multi-server with health checking)
-    // ============================================
     turn: {
         getIceServers: (): Promise<Array<{ urls: string | string[]; username?: string; credential?: string }>> =>
             ipcRenderer.invoke('turn:get-ice-servers'),
@@ -84,9 +61,6 @@ const electronAPI = {
             ipcRenderer.invoke('turn:configure-selfhosted', serverUrl, secret),
     },
 
-    // ============================================
-    // Auto-Updater APIs
-    // ============================================
     updater: {
         onStatusChange: (callback: (status: string, error?: string) => void) => {
             const listener = (_event: any, status: string, error?: string) => callback(status, error);
@@ -101,9 +75,6 @@ const electronAPI = {
         restartAndInstall: () => ipcRenderer.send('update:restart-and-install'),
     },
 
-    // ============================================
-    // Audio / VB-Cable APIs
-    // ============================================
     audio: {
         checkVBCableInstalled: (): Promise<{ installed: boolean; reason?: string }> =>
             ipcRenderer.invoke('audio:check-vbcable-installed'),
@@ -122,9 +93,6 @@ const electronAPI = {
         },
     },
 
-    // ============================================
-    // Hardware Capture APIs (DXGI + NVENC)
-    // ============================================
     hardwareCapture: {
         isSupported: (): Promise<{ nvenc: boolean; amf: boolean; quicksync: boolean; software: boolean }> =>
             ipcRenderer.invoke('hardware-capture:is-supported'),
@@ -147,7 +115,6 @@ const electronAPI = {
             return () => { ipcRenderer.removeListener('hardware-capture:frame', listener); };
         },
 
-        // Audio
         isAudioSupported: (): Promise<boolean> =>
             ipcRenderer.invoke('hardware-capture:audio-supported'),
 
@@ -185,18 +152,10 @@ const electronAPI = {
     },
 };
 
-// Type-safe API exposure
 export type ElectronAPI = typeof electronAPI;
 
-// Expose API based on isolation state
-if (process.contextIsolated) {
-    contextBridge.exposeInMainWorld('electronAPI', electronAPI);
-} else {
-    // When nodeIntegration is on and contextIsolation is off
-    window.electronAPI = electronAPI;
-}
+contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 
-// Also expose for TypeScript type checking in renderer
 declare global {
     interface Window {
         electronAPI: ElectronAPI;

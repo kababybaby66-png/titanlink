@@ -70,15 +70,9 @@ export class SelfHostedTurnService {
         const secretsEnv = process.env.TURN_SERVER_SECRET || '';
 
         if (!urlsEnv || !secretsEnv) {
-            console.log('[TurnManager] No TURN servers in env, using default Oracle config');
-            // Hardcoded fallback for production (since .env isn't packaged)
-            this.servers.push({
-                url: 'turn:129.159.142.124:3478',
-                secret: 'bdd04d11598125464972e35f3dffc634c449177114639527ec56185856426725',
-                priority: 0,
-                label: 'Oracle-Cloud',
-                healthy: true,
-            });
+            // [SECURITY] No hardcoded credentials — configure via .env or UI Settings.
+            // Falls through to free public TURN servers as the fallback.
+            console.warn('[TurnManager] No TURN_SERVER_URL / TURN_SERVER_SECRET in environment. Using free public TURN fallback. Configure a self-hosted TURN server for better performance.');
             return;
         }
 

@@ -215,6 +215,7 @@ export const SettingsPageV2: React.FC<SettingsPageV2Props> = ({ settings, onSave
                                         value={localSettings.resolution}
                                         onChange={(e) => updateSetting('resolution', e.target.value as any)}
                                     >
+                                        <option value="detect">Auto/Detect Desktop</option>
                                         <option value="1080p">1920x1080 (1080p)</option>
                                         <option value="1440p">2560x1440 (1440p)</option>
                                         <option value="4k">3840x2160 (4K)</option>
@@ -270,22 +271,14 @@ export const SettingsPageV2: React.FC<SettingsPageV2Props> = ({ settings, onSave
                             <div className="input-row">
                                 <div className="input-field">
                                     <label>Bitrate Mode</label>
-                                    <div className="flex gap-2">
-                                        <ButtonV2
-                                            variant={localSettings.bitrateMode === 'cbr' ? 'primary' : 'ghost'}
-                                            size="sm"
-                                            onClick={() => updateSetting('bitrateMode', 'cbr')}
-                                        >
-                                            CBR (Stable)
-                                        </ButtonV2>
-                                        <ButtonV2
-                                            variant={localSettings.bitrateMode === 'vbr' ? 'primary' : 'ghost'}
-                                            size="sm"
-                                            onClick={() => updateSetting('bitrateMode', 'vbr')}
-                                        >
-                                            VBR (Quality)
-                                        </ButtonV2>
-                                    </div>
+                                    <select
+                                        className="cyber-select"
+                                        value={localSettings.bitrateMode}
+                                        onChange={(e) => updateSetting('bitrateMode', e.target.value as any)}
+                                    >
+                                        <option value="cbr">CBR (Stable)</option>
+                                        <option value="vbr">VBR (Quality)</option>
+                                    </select>
                                 </div>
                                 <div className="input-field">
                                     <label>Audio Mode</label>

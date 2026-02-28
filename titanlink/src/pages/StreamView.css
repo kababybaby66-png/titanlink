@@ -366,6 +366,37 @@
     pointer-events: none;
 }
 
+.desktop-dock.minimized {
+    transform: translateX(-50%) translateY(calc(-100% - 20px));
+}
+
+.dock-minimize-btn {
+    position: absolute;
+    bottom: -24px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 24px;
+    background: rgba(13, 13, 17, 0.7);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: none;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #888;
+    cursor: pointer;
+    transition: color 0.2s, background 0.2s;
+    pointer-events: auto;
+}
+
+.dock-minimize-btn:hover {
+    color: #fff;
+    background: rgba(30, 30, 40, 0.9);
+}
+
 .dock-left,
 .dock-right {
     display: flex;
@@ -406,6 +437,7 @@
 .dock-btn:hover {
     background: rgba(255, 255, 255, 0.1);
     color: white;
+    transform: translateY(-2px);
 }
 
 .dock-btn.active {
@@ -428,6 +460,7 @@
 .dock-btn.disabled:hover {
     background: transparent;
     color: #888;
+    transform: none;
 }
 
 .connection-pill {
@@ -497,6 +530,21 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
     color: #aaa;
+}
+
+/* --- WebRTC VIDEO ELEMENT --- */
+.stream-video.webrtc-video {
+    display: none;
+    background: #000;
+}
+
+.stream-video.webrtc-video.active {
+    display: block;
+}
+
+/* Hide canvas when WebRTC mode is active */
+.stream-video.hidden-canvas {
+    display: none;
 }
 
 /* --- HARDWARE ACCELERATION STYLES --- */

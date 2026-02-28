@@ -15,7 +15,8 @@ export default defineConfig({
                 vite: {
                     build: {
                         outDir: 'dist-electron',
-                        sourcemap: true,
+                        // [SECURITY] No source maps in production — prevents source reconstruction
+                        sourcemap: process.env.NODE_ENV === 'development',
                         rollupOptions: {
                             external: ['electron', 'vigemclient', 'ws'],
                         },
@@ -28,7 +29,8 @@ export default defineConfig({
                 vite: {
                     build: {
                         outDir: 'dist-electron',
-                        sourcemap: true,
+                        // [SECURITY] No source maps in production
+                        sourcemap: process.env.NODE_ENV === 'development',
                     },
                 },
                 onstart(options) {
@@ -51,7 +53,16 @@ export default defineConfig({
     build: {
         outDir: 'dist',
         emptyOutDir: true,
-        sourcemap: true,
+        // [SECURITY] No source maps in production — prevents source reconstruction
+        sourcemap: process.env.NODE_ENV === 'development',
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    // Split Three.js ecosystem into separate chunk (only loaded when enable3D=true)
+                    'three-vendor': ['three', '@react-three/fiber', '@react-three/drei'],
+                },
+            },
+        },
     },
     server: {
         port: 5173,

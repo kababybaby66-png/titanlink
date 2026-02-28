@@ -62,7 +62,7 @@ export const Titlebar = () => {
                     </div>
                     <div className="flex flex-col">
                         <h2 className="text-white text-sm font-bold tracking-widest uppercase">TitanLink // Client</h2>
-                        <span className="text-[10px] text-primary/70 font-mono leading-none sys-status">SYS.STATUS: ONLINE</span>
+                        <span className="text-[10px] text-primary/70 font-mono leading-none sys-status">System: Online</span>
                     </div>
                 </div>
             </div>
@@ -71,7 +71,7 @@ export const Titlebar = () => {
                 {updateProgress !== null && !updateReady && (
                     <div className="flex items-center gap-2 mr-4 text-xs font-mono text-primary/80 mt-1">
                         <span className="material-symbols-outlined text-[14px] animate-bounce">download</span>
-                        <span>{updateStatus === 'checking' ? 'CHECKING...' : `DL ${updateProgress}%`}</span>
+                        <span>{updateStatus === 'checking' ? 'Checking...' : `DL ${updateProgress}%`}</span>
                     </div>
                 )}
                 {updateReady && (

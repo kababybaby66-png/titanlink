@@ -33,7 +33,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     useEffect(() => {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_#@';
         let iter = 0;
-        const target = 'SYSTEM_READY';
+        const target = 'System Ready';
 
         const interval = setInterval(() => {
             setScrambleText(target.split('').map((c, i) => {
@@ -82,7 +82,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <header className="landing-head">
                     <div className="brand-lockup">
                         <div className="logo-glitch" data-text="TITANLINK">TITANLINK</div>
-                        <div className="version-tag">Build v1.2.0 // STABLE</div>
+                        <div className="version-tag">Build v1.2.0</div>
                     </div>
 
                     <div className="system-status-pill">
@@ -100,11 +100,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             <div className="icon-frame">
                                 <span className="material-symbols-outlined">broadcast_on_personal</span>
                             </div>
-                            <h2 className="panel-title">INITIATE HOST</h2>
-                            <p className="panel-desc">Broadcast local neural feed to remote clients.</p>
+                            <h2 className="panel-title">Host Session</h2>
+                            <p className="panel-desc">Share your screen and let friends play with you.</p>
 
                             <div className="panel-footer">
-                                <span className="cmd-prompt">&gt; EXECUTE_PROTOCOL</span>
+                                <span className="cmd-prompt">&gt; START_HOST</span>
                                 <span className="material-symbols-outlined arrow">arrow_forward</span>
                             </div>
                             <div className="scanline"></div>
@@ -118,11 +118,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             <div className="icon-frame">
                                 <span className="material-symbols-outlined">link</span>
                             </div>
-                            <h2 className="panel-title">JOIN SESSION</h2>
-                            <p className="panel-desc">Establish secure uplink to existing beacon.</p>
+                            <h2 className="panel-title">Join Session</h2>
+                            <p className="panel-desc">Connect to a friend's PC using their code.</p>
 
                             <div className="panel-footer">
-                                <span className="cmd-prompt">&gt; CONNECT_REMOTE</span>
+                                <span className="cmd-prompt">&gt; CONNECT</span>
                                 <span className="material-symbols-outlined arrow">arrow_forward</span>
                             </div>
                             <div className="scanline"></div>
@@ -135,17 +135,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     <GlassCard className="utility-bar">
                         <div className="utility-item" onClick={onSettingsClick}>
                             <span className="material-symbols-outlined">tune</span>
-                            <span>CONFIGURATION</span>
+                            <span>Settings</span>
                         </div>
                         <div className="separator"></div>
                         <div className="utility-item">
                             <span className="material-symbols-outlined">help</span>
-                            <span>MANUAL</span>
+                            <span>Help</span>
                         </div>
                         <div className="separator"></div>
                         <div className="utility-item inactive">
                             <span className="material-symbols-outlined">security</span>
-                            <span>SECURE_BOOT: ON</span>
+                            <span>System Ready</span>
                         </div>
                     </GlassCard>
                 </footer>

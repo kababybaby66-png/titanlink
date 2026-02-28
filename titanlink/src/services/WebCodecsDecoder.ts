@@ -159,9 +159,6 @@ export class WebCodecsDecoder {
 
         if (elapsed >= FPS_UPDATE_INTERVAL_MS) {
             const fps = Math.round((this.frameCount * 1000) / elapsed);
-            if (fps > 0) { // Only log if we're actually decoding
-                console.log(`[WebCodecsDecoder] FPS Updated: ${fps} (frameCount: ${this.frameCount}, elapsed: ${elapsed.toFixed(0)}ms)`);
-            }
             this.onFpsUpdate?.(fps);
             this.frameCount = 0;
             this.lastRenderTime = now;

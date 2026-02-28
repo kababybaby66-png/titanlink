@@ -4,8 +4,27 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: http: https:; font-src 'self' https://fonts.gstatic.com; media-src 'self' blob:;">
+  <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self';
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      font-src 'self' https://fonts.gstatic.com;
+      img-src 'self' data: blob: https:;
+      media-src 'self' blob:;
+      worker-src 'self' blob:;
+      connect-src 'self'
+        http://localhost:3001
+        http://localhost:5000
+        http://129.159.142.124:3001
+        https://stun.l.google.com
+        https://stun1.l.google.com
+        https://stun2.l.google.com
+        turn:openrelay.metered.ca;
+      object-src 'none';
+      base-uri 'self';
+      form-action 'self';
+    ">
+
   <title>TitanLink - P2P Gaming</title>
   <meta name="description" content="Low-latency peer-to-peer gaming client for remote multiplayer" />
   <link rel="preconnect" href="https://fonts.googleapis.com">

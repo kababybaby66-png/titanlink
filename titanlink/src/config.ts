@@ -1,14 +1,20 @@
 /**
  * TitanLink Application Config
  *
- * Signaling is now done via HTTP REST at SIGNALING_BASE in UDPStreamService.ts.
- * WebRTC and STUN/TURN are no longer used — the app uses its own UDP relay.
+ * Signaling is done via HTTP REST at SIGNALING_HTTP_BASE in UDPStreamService.ts.
+ * Configure via environment variables set before bundling (Vite inlines VITE_ prefixed vars).
  */
+
+// [SECURITY] Never commit real IPs or secrets here.
+// Set VITE_RELAY_IP and VITE_RELAY_PORT in your .env file.
+const RELAY_IP = import.meta.env.VITE_RELAY_IP || '127.0.0.1';
+const RELAY_PORT = parseInt(import.meta.env.VITE_RELAY_PORT || '5000', 10);
+const SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || `http://${RELAY_IP}:3001`;
+
 export const CONFIG = {
-    // Relay server (Oracle VM)
     RELAY: {
-        IP: '129.159.142.124',
-        PORT: 5000,
-        SIGNALING_HTTP_BASE: 'http://129.159.142.124:3001',
+        IP: RELAY_IP,
+        PORT: RELAY_PORT,
+        SIGNALING_HTTP_BASE: SIGNALING_URL,
     },
 };

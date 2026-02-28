@@ -14,7 +14,7 @@ export function DriverWarning({ status, onClose, onInstall }: DriverWarningProps
         <div className="modal-overlay" onClick={onClose}>
             <div className="driver-warning-panel panel" onClick={(e) => e.stopPropagation()}>
                 <div className="panel-header warning-header">
-                    <h2 className="text-danger">SYSTEM ALERT // DRIVER_MISSING</h2>
+                    <h2 className="text-danger">System Alert: Driver Missing</h2>
                     <div className="header-decoration danger-deco"></div>
                 </div>
 
@@ -22,7 +22,7 @@ export function DriverWarning({ status, onClose, onInstall }: DriverWarningProps
                     <div className="warning-icon">⚠</div>
                     <div className="warning-text">
                         <p className="primary-msg">
-                            VIGEMBUS_DRIVER_REQUIRED_FOR_HOSTING
+                            Controller Driver Required
                         </p>
                         <p className="secondary-msg text-muted">
                             {status?.message || 'Virtual controller emulation driver is missing. Proceed to install required dependencies.'}
@@ -31,7 +31,7 @@ export function DriverWarning({ status, onClose, onInstall }: DriverWarningProps
                 </div>
 
                 <div className="warning-details">
-                    <h3 className="tech-label">COMPONENT_DETAILS</h3>
+                    <h3 className="tech-label">Component Details</h3>
                     <p className="text-sm">
                         ViGEmBus creates a virtual Xbox controller interface, allowing remote input to be recognized as local hardware.
                     </p>
@@ -39,10 +39,10 @@ export function DriverWarning({ status, onClose, onInstall }: DriverWarningProps
 
                 <div className="actions-row">
                     <CyberButton variant="ghost" onClick={onClose}>
-                        IGNORE_AND_CONTINUE
+                        Ignore and Continue
                     </CyberButton>
                     <CyberButton variant="danger" onClick={onInstall}>
-                        INSTALL_DEPENDENCY
+                        Install Driver
                     </CyberButton>
                 </div>
             </div>

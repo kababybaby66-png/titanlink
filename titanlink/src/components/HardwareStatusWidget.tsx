@@ -39,7 +39,7 @@ export function HardwareStatusWidget() {
         <GlassCard className="info-card hardware-status-card">
             <div className="card-header">
                 <span className="material-symbols-outlined icon">bolt</span>
-                <span className="title">HARDWARE</span>
+                <span className="title">Hardware</span>
             </div>
             <div className="hw-status-grid">
                 <div className={`hw-item ${hwSupport.nvenc ? 'active' : 'inactive'}`}>
@@ -55,11 +55,11 @@ export function HardwareStatusWidget() {
                     <span className="status-dot"></span>
                 </div>
                 <div className={`hw-item ${hwSupport.software ? 'active' : 'inactive'}`}>
-                    <span className="label">SW</span>
+                    <span className="label">CPU</span>
                     <span className="status-dot"></span>
                 </div>
             </div>
-            <div className="card-sub">PIPELINE: DXGI_DD</div>
+            <div className="card-sub">Pipeline: DXGI Desktop Duplication</div>
         </GlassCard>
     );
 }

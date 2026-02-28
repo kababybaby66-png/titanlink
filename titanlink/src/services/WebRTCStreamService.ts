@@ -515,6 +515,7 @@ class WebRTCService {
         let height = 1080;
 
         switch (this.settings.resolution) {
+            case 'detect': /* Native resolution */ break;
             case '720p': width = 1280; height = 720; break;
             case '1080p': width = 1920; height = 1080; break;
             case '1440p': width = 2560; height = 1440; break;
@@ -522,18 +523,21 @@ class WebRTCService {
         }
 
         // Video constraints - always needs the specific displayId
-        const videoConstraints = {
+        const videoConstraints: any = {
             mandatory: {
                 chromeMediaSource: 'desktop',
                 chromeMediaSourceId: displayId,
-                minWidth: width,
-                maxWidth: width,
-                minHeight: height,
-                maxHeight: height,
                 minFrameRate: 30,
                 maxFrameRate: this.settings.fps,
             },
         };
+
+        if (this.settings.resolution !== 'detect') {
+            videoConstraints.mandatory.minWidth = width;
+            videoConstraints.mandatory.maxWidth = width;
+            videoConstraints.mandatory.minHeight = height;
+            videoConstraints.mandatory.maxHeight = height;
+        }
 
         // Check available audio devices for debugging
         try {

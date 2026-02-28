@@ -28,7 +28,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                     <div className="settings-header">
                         <div className="flex items-center gap-3">
                             <span className="material-symbols-outlined text-primary text-3xl">tune</span>
-                            <h2>SYSTEM CONFIGURATION</h2>
+                            <h2>Settings</h2>
                         </div>
                         <button className="close-btn" onClick={onBack}>
                             <span className="material-symbols-outlined">close</span>
@@ -38,11 +38,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                     <div className="settings-content custom-scrollbar">
                         {/* GENERAL SETTINGS */}
                         <div className="settings-section">
-                            <h3 className="section-title">GENERAL</h3>
+                            <h3 className="section-title">General</h3>
                             <div className="setting-item">
                                 <div className="setting-info">
-                                    <span className="label">Launch on Startup</span>
-                                    <span className="desc">Automatically initialize daemon on system boot</span>
+                                    <span className="label">Launch on start</span>
+                                    <span className="desc">Start TitanLink automatically when you turn on your PC</span>
                                 </div>
                                 <label className="cyber-switch">
                                     <input
@@ -55,8 +55,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                             </div>
                             <div className="setting-item">
                                 <div className="setting-info">
-                                    <span className="label">Hardware Acceleration</span>
-                                    <span className="desc">Use GPU for encoding/decoding</span>
+                                    <span className="label">Hardware acceleration</span>
+                                    <span className="desc">Use your graphics card to improve performance</span>
                                 </div>
                                 <label className="cyber-switch">
                                     <input
@@ -69,8 +69,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                             </div>
                             <div className="setting-item">
                                 <div className="setting-info">
-                                    <span className="label">3D Visual Effects</span>
-                                    <span className="desc">Enable GPU-powered 3D components (requires a capable GPU)</span>
+                                    <span className="label">3D visual effects</span>
+                                    <span className="desc">Turn on advanced 3D visual effects</span>
                                 </div>
                                 <label className="cyber-switch">
                                     <input
@@ -83,8 +83,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                             </div>
                             <div className="setting-item">
                                 <div className="setting-info">
-                                    <span className="label">Background Animations</span>
-                                    <span className="desc">Enable live UI background effects</span>
+                                    <span className="label">Background animations</span>
+                                    <span className="desc">Turn on moving background effects for the interface</span>
                                 </div>
                                 <label className="cyber-switch">
                                     <input
@@ -99,11 +99,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
 
                         {/* NETWORK SETTINGS */}
                         <div className="settings-section">
-                            <h3 className="section-title">NETWORK</h3>
+                            <h3 className="section-title">Network</h3>
                             <div className="setting-item">
                                 <div className="setting-info">
-                                    <span className="label">UPnP Port Mapping</span>
-                                    <span className="desc">Automatically configure router ports</span>
+                                    <span className="label">Automatic port mapping</span>
+                                    <span className="desc">Let the app automatically configure your router</span>
                                 </div>
                                 <label className="cyber-switch">
                                     <input
@@ -116,7 +116,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                             </div>
                             <div className="input-row">
                                 <div className="input-field">
-                                    <label>Preferred Port</label>
+                                    <label>Preferred port</label>
                                     <input
                                         type="number"
                                         className="cyber-input-sm"
@@ -125,7 +125,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                                     />
                                 </div>
                                 <div className="input-field">
-                                    <label>Bitrate Limit (Mbps)</label>
+                                    <label>Bitrate limit (Mbps)</label>
                                     <input
                                         type="number"
                                         className="cyber-input-sm"
@@ -138,11 +138,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
 
                         {/* INPUT SETTINGS */}
                         <div className="settings-section">
-                            <h3 className="section-title">INPUT</h3>
+                            <h3 className="section-title">Input</h3>
                             <div className="setting-item">
                                 <div className="setting-info">
-                                    <span className="label">Immersive Mode</span>
-                                    <span className="desc">Pass Windows hotkeys (Alt+Tab) to host</span>
+                                    <span className="label">Pass system shortcuts</span>
+                                    <span className="desc">Pass shortcuts like Alt+Tab directly to the host PC</span>
                                 </div>
                                 <label className="cyber-switch">
                                     <input
@@ -155,7 +155,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                             </div>
                             <div className="input-row">
                                 <div className="input-field">
-                                    <label>Gamepad Emulation</label>
+                                    <label>Gamepad emulation</label>
                                     <select
                                         className="cyber-select"
                                         value={localSettings.gamepadEmulation}
@@ -171,10 +171,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
 
                         {/* AUDIO SETTINGS */}
                         <div className="settings-section">
-                            <h3 className="section-title">AUDIO</h3>
+                            <h3 className="section-title">Audio</h3>
                             <div className="input-row">
                                 <div className="input-field">
-                                    <label>Sample Rate</label>
+                                    <label>Sample rate</label>
                                     <select
                                         className="cyber-select"
                                         value={localSettings.audioSampleRate}
@@ -188,7 +188,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                                     </div>
                                 </div>
                                 <div className="input-field">
-                                    <label>Audio Bitrate</label>
+                                    <label>Audio bitrate</label>
                                     <select
                                         className="cyber-select"
                                         value={localSettings.audioBitrate}
@@ -209,7 +209,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
 
                         {/* VIDEO SETTINGS */}
                         <div className="settings-section">
-                            <h3 className="section-title">VIDEO</h3>
+                            <h3 className="section-title">Video</h3>
                             <div className="input-row">
                                 <div className="input-field">
                                     <label>Resolution</label>
@@ -218,13 +218,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                                         value={localSettings.resolution}
                                         onChange={(e) => updateSetting('resolution', e.target.value as any)}
                                     >
+                                        <option value="detect">Auto/Detect Desktop</option>
                                         <option value="1080p">1920x1080 (1080p)</option>
                                         <option value="1440p">2560x1440 (1440p)</option>
                                         <option value="4k">3840x2160 (4K)</option>
                                     </select>
                                 </div>
                                 <div className="input-field">
-                                    <label>Frame Rate (Hertz)</label>
+                                    <label>Frame rate (Hertz)</label>
                                     <select
                                         className="cyber-select"
                                         value={localSettings.fps}
@@ -254,7 +255,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                             <div className="setting-item">
                                 <div className="setting-info">
                                     <span className="label">VSync (Buffer)</span>
-                                    <span className="desc">Reduces tearing, increases latency</span>
+                                    <span className="desc">Prevent screen tearing (may slightly increase delay)</span>
                                 </div>
                                 <label className="cyber-switch">
                                     <input
@@ -269,26 +270,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
 
                         {/* ADVANCED NETWORK */}
                         <div className="settings-section">
-                            <h3 className="section-title">ADVANCED NETWORK</h3>
+                            <h3 className="section-title">Advanced Network</h3>
                             <div className="input-row">
                                 <div className="input-field">
-                                    <label>Bitrate Mode</label>
-                                    <div className="flex gap-2">
-                                        <button
-                                            className={`flex-1 px-3 py-2 text-xs font-bold rounded ${localSettings.bitrateMode === 'cbr' ? 'bg-primary text-black' : 'bg-white/5 text-white/60'}`}
-                                            onClick={() => updateSetting('bitrateMode', 'cbr')}
-                                            title="Constant Bitrate: Maintains a steady data stream. Better for consistency and preventing lag spikes."
-                                        >
-                                            CBR (Stable)
-                                        </button>
-                                        <button
-                                            className={`flex-1 px-3 py-2 text-xs font-bold rounded ${localSettings.bitrateMode === 'vbr' ? 'bg-primary text-black' : 'bg-white/5 text-white/60'}`}
-                                            onClick={() => updateSetting('bitrateMode', 'vbr')}
-                                            title="Variable Bitrate: Adjusts bandwidth usage based on complexity. Can look better but might cause spikes."
-                                        >
-                                            VBR (Quality)
-                                        </button>
-                                    </div>
+                                    <label>Bitrate mode</label>
+                                    <select
+                                        className="cyber-select"
+                                        value={localSettings.bitrateMode}
+                                        onChange={(e) => updateSetting('bitrateMode', e.target.value as any)}
+                                    >
+                                        <option value="cbr">CBR (Stable)</option>
+                                        <option value="vbr">VBR (Quality)</option>
+                                    </select>
                                     <div className="text-[10px] text-white/40 mt-1">
                                         {localSettings.bitrateMode === 'cbr'
                                             ? 'CBR forces consistent quality. Recommended for most connections.'
@@ -296,7 +289,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                                     </div>
                                 </div>
                                 <div className="input-field">
-                                    <label>Audio Mode</label>
+                                    <label>Audio mode</label>
                                     <select
                                         className="cyber-select"
                                         value={localSettings.audioQualityMode}
@@ -318,8 +311,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, on
                     <div className="settings-footer">
                         <span className="version">TitanLink v1.0.4 build 2209</span>
                         <div className="footer-actions">
-                            <button className="secondary-btn small" onClick={onBack}>CANCEL</button>
-                            <button className="primary-btn small" onClick={handleSave}>APPLY CHANGES</button>
+                            <button className="secondary-btn small" onClick={onBack}>Cancel</button>
+                            <button className="primary-btn small" onClick={handleSave}>Apply Changes</button>
                         </div>
                     </div>
                 </GlassCard>

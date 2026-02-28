@@ -1,7 +1,11 @@
-# Environment variables (contains secrets)
+# Environment variables — NEVER commit these (they contain secrets)
 .env
 .env.local
 .env.*.local
+.env.production
+.env.staging
+# Allow the example template to be committed
+!.env.example
 
 # Dependencies
 node_modules/

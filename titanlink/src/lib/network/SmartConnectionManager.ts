@@ -144,8 +144,8 @@ export interface ConnectionConfig {
 
 export interface ConnectionStats {
     mode: ConnectionMode;
-    connectedAt?: Date;
-    lastPacketAt?: Date;
+    connectedAt?: number;
+    lastPacketAt?: number;
     bytesSent: number;
     bytesReceived: number;
 }
@@ -232,7 +232,7 @@ export class SmartConnectionManager {
         this.stats.mode = ConnectionMode.RELAY;
         console.log('[SmartConnection] Forcing RELAY mode (Priority 1)');
 
-        this.stats.connectedAt = new Date();
+        this.stats.connectedAt = Date.now();
         this.startKeepAlive();
     }
 
@@ -282,7 +282,7 @@ export class SmartConnectionManager {
 
         client.sendVideoFrame(frameNumber, codec, isKeyframe, frameData);
         this.stats.bytesSent += frameData.length + 24; // frame + header
-        this.stats.lastPacketAt = new Date();
+        this.stats.lastPacketAt = Date.now();
     }
 
     /**
@@ -315,7 +315,7 @@ export class SmartConnectionManager {
         );
 
         this.stats.bytesSent += 38; // input packet size
-        this.stats.lastPacketAt = new Date();
+        this.stats.lastPacketAt = Date.now();
     }
 
     /**
@@ -399,7 +399,7 @@ export class SmartConnectionManager {
                 break;
             case 6: // KeepAlive
                 // Update stats
-                this.stats.lastPacketAt = new Date();
+                this.stats.lastPacketAt = Date.now();
                 break;
         }
 

@@ -177,9 +177,9 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error, enable3
     }, []);
 
     useEffect(() => {
-        if (sessionState.connectionState === 'waiting-for-peer') addLog('Status: Broadcasting Beacon');
-        else if (sessionState.connectionState === 'connecting') addLog('Status: Peer Negotiation');
-        else if (sessionState.connectionState === 'streaming') addLog('Status: Uplink Established');
+        if (sessionState.connectionState === 'waiting-for-peer') addLog('Status: Waiting for connection...');
+        else if (sessionState.connectionState === 'connecting') addLog('Status: Connecting...');
+        else if (sessionState.connectionState === 'streaming') addLog('Status: Connected');
     }, [sessionState.connectionState]);
 
     // Listen for controller input from connected client
@@ -219,10 +219,10 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error, enable3
         if (!selectedDisplay) return;
         setIsStarting(true);
         setLocalError(null);
-        addLog('Init sequence started...');
+        addLog('Starting host mode...');
         try {
             await onStartHosting(selectedDisplay);
-            addLog('Session Created successfully');
+            addLog('Ready to connect');
 
             // Check if audio was captured - if not, show the audio setup modal
             // UDP service manages audio internally
@@ -230,7 +230,7 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error, enable3
             // Audio status handled by inline banner - no auto-popup
         } catch (err) {
             setLocalError(err instanceof Error ? err.message : 'Failed');
-            addLog('[ERROR] Init failed');
+            addLog('[ERROR] Start failed');
         } finally {
             setIsStarting(false);
         }
@@ -239,7 +239,7 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error, enable3
     const handleCopyCode = async () => {
         if (!sessionState.sessionCode) return;
         navigator.clipboard.writeText(sessionState.sessionCode);
-        addLog('Clipboard: Code copied');
+        addLog('Clipboard: Session code copied');
     };
 
     const handleCopyLink = async () => {
@@ -344,7 +344,7 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error, enable3
                             <span className="title">PROTOCOL</span>
                         </div>
                         <div className="card-value">UDP/P2P</div>
-                        <span className="badge-secure">SECURE</span>
+                        <span className="badge-secure">Secure</span>
                     </GlassCard>
                 );
             case 'hardware':
@@ -404,7 +404,7 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error, enable3
                 return (
                     <button className="stop-hosting-btn" onClick={onBack}>
                         <span className="material-symbols-outlined">power_settings_new</span>
-                        STOP HOSTING
+                        Stop Hosting
                     </button>
                 );
             case 'controller':
@@ -416,7 +416,7 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error, enable3
                             <span className="material-symbols-outlined icon">gamepad</span>
                             <span className="title">CONTROLLER</span>
                             <span className={`status-badge ${controllerConnected ? 'connected' : 'disconnected'}`}>
-                                {controllerConnected ? 'ACTIVE' : 'WAITING'}
+                                {controllerConnected ? 'Active' : 'Waiting'}
                             </span>
                         </div>
                         <div className="controller-preview">
@@ -510,9 +510,9 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error, enable3
                 <div className="center-decoration"></div>
                 {!isHosting ? (
                     <div className="setup-mode">
-                        <h2 className="setup-title">CONFIGURE UPLINK</h2>
+                        <h2 className="setup-title">Host Setup</h2>
                         <div className="display-selector">
-                            <label className="section-label">SELECT SOURCE FEED</label>
+                            <label className="section-label">Select Display</label>
                             <div className="display-grid">
                                 {displays.map((display) => (
                                     <div
@@ -530,9 +530,9 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error, enable3
                             </div>
                         </div>
                         <div className="setup-actions">
-                            <button className="secondary-btn" onClick={onBack}>ABORT</button>
+                            <button className="secondary-btn" onClick={onBack}>Cancel</button>
                             <button className="primary-btn pulse-glow" onClick={handleStartHosting} disabled={isStarting || !selectedDisplay}>
-                                {isStarting ? 'INITIALIZING...' : 'ACTIVATE BEACON'}
+                                {isStarting ? 'Starting...' : 'Start Hosting'}
                             </button>
                         </div>
                         {error || localError ? <div className="error-msg">{error || localError}</div> : null}
@@ -541,23 +541,23 @@ export function HostLobby({ sessionState, onStartHosting, onBack, error, enable3
                     <div className="active-mode">
                         <div className="status-indicator">
                             <span className="material-symbols-outlined icon animate-spin">sync</span>
-                            <span className="text">SECURE LINK ESTABLISHED</span>
+                            <span className="text">Connected</span>
                         </div>
                         <div className="session-code-display" onClick={handleCopyCode} title="Click to copy code">
                             <h1 className="code-text glow-text">{sessionState.sessionCode}</h1>
                             <div className="code-status">
                                 <span className="dot animate-pulse"></span>
-                                <span>WAITING FOR CONNECTION...</span>
+                                <span>Waiting for connection...</span>
                             </div>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '20px' }}>
                             <button className="secondary-btn action-btn" onClick={handleCopyCode}>
                                 <span className="material-symbols-outlined icon">content_copy</span>
-                                COPY CODE
+                                Copy Code
                             </button>
                             <button className="primary-btn action-btn pulse-glow" onClick={handleCopyLink}>
                                 <span className="material-symbols-outlined icon">link</span>
-                                COPY INVITE LINK
+                                Copy Invite Link
                             </button>
                         </div>
                         <div className="peer-slots">

@@ -68,7 +68,7 @@ export function QuickMenu({
                 <div className="drawer-header">
                     <div className="flex items-center gap-3">
                         <span className="material-symbols-outlined text-primary animate-spin-slow">settings_motion_mode</span>
-                        <h2 className="text-white text-lg font-bold tracking-wide uppercase">QUICK MENU</h2>
+                        <h2 className="text-white text-lg font-bold tracking-wide">Quick Menu</h2>
                     </div>
                     <button className="close-btn" onClick={onClose}>
                         <span className="material-symbols-outlined">close</span>
@@ -78,7 +78,7 @@ export function QuickMenu({
                 <div className="drawer-content customs-scrollbar">
                     {/* INPUT CONFIG */}
                     <div className="menu-section">
-                        <p className="section-label">INPUT CONFIG</p>
+                        <p className="section-label">Input Config</p>
 
                         <button className={`menu-item ${showControllerOverlay ? 'active' : ''}`} onClick={onToggleControllerOverlay}>
                             <div className="item-icon-box">
@@ -86,7 +86,7 @@ export function QuickMenu({
                             </div>
                             <div className="item-details">
                                 <p className="label">Controller Overlay</p>
-                                <p className="sub">{showControllerOverlay ? 'VISIBLE' : 'HIDDEN'}</p>
+                                <p className="sub">{showControllerOverlay ? 'Visible' : 'Hidden'}</p>
                             </div>
                             <span className="hotkey">C</span>
                         </button>
@@ -97,7 +97,7 @@ export function QuickMenu({
                             </div>
                             <div className="item-details">
                                 <p className="label">Fullscreen</p>
-                                <p className="sub">{isFullscreen ? 'ENABLED' : 'DISABLED'}</p>
+                                <p className="sub">{isFullscreen ? 'Enabled' : 'Disabled'}</p>
                             </div>
                             <span className="hotkey">F11</span>
                         </button>
@@ -105,7 +105,7 @@ export function QuickMenu({
 
                     {/* AUDIO CONTROLS */}
                     <div className="menu-section">
-                        <p className="section-label">AUDIO</p>
+                        <p className="section-label">Audio</p>
 
                         <button
                             className={`menu-item ${isMuted ? '' : 'active'}`}
@@ -119,7 +119,7 @@ export function QuickMenu({
                             </div>
                             <div className="item-details">
                                 <p className="label">{!hasAudio ? 'Audio Unavailable' : isMuted ? 'Unmute Audio' : 'Mute Audio'}</p>
-                                <p className="sub">{!hasAudio ? 'No audio track' : isMuted ? 'MUTED' : 'PLAYING'}</p>
+                                <p className="sub">{!hasAudio ? 'No audio track' : isMuted ? 'Muted' : 'Playing'}</p>
                             </div>
                             <span className="hotkey">M</span>
                         </button>
@@ -144,18 +144,18 @@ export function QuickMenu({
 
                     {/* TELEMETRY */}
                     <div className="menu-section">
-                        <p className="section-label">TELEMETRY</p>
+                        <p className="section-label">Telemetry</p>
                         <GlassCard className="telemetry-box">
                             <div className="telemetry-row">
-                                <span className="label">LATENCY</span>
+                                <span className="label">Latency</span>
                                 <div className="flex items-center gap-2">
                                     <StatusBadge status={latency < 50 ? 'online' : latency < 100 ? 'busy' : 'error'} label=" " pulse />
                                     <span className="value-large">{latency}<span className="unit">ms</span></span>
                                 </div>
                             </div>
                             <div className="telemetry-details">
-                                <span className={packetLoss > 1 ? 'text-warn' : ''}>LOSS: {packetLoss}%</span>
-                                <span className={jitter > 5 ? 'text-warn' : ''}>JITTER: {jitter}ms</span>
+                                <span className={packetLoss > 1 ? 'text-warn' : ''}>Loss: {packetLoss}%</span>
+                                <span className={jitter > 5 ? 'text-warn' : ''}>Jitter: {jitter}ms</span>
                             </div>
                             {/* Animated Decoration */}
                             <div className="telemetry-anim-bar">
@@ -166,22 +166,22 @@ export function QuickMenu({
 
                     {/* SESSION INFO */}
                     <div className="menu-section">
-                        <p className="section-label">SESSION INFO</p>
+                        <p className="section-label">Session Info</p>
                         <div className="session-info-grid">
                             <div className="info-item">
-                                <span className="label">ROLE</span>
-                                <span className="value">{role?.toUpperCase()}</span>
+                                <span className="label">Role</span>
+                                <span className="value" style={{ textTransform: 'capitalize' }}>{role}</span>
                             </div>
                             {sessionCode && (
                                 <div className="info-item">
-                                    <span className="label">CODE</span>
+                                    <span className="label">Code</span>
                                     <span className="value text-primary">{sessionCode}</span>
                                 </div>
                             )}
                             <div className="info-item">
-                                <span className="label">AUDIO</span>
+                                <span className="label">Audio</span>
                                 <span className={`value ${hasAudio ? 'text-success' : 'text-warn'}`}>
-                                    {hasAudio ? 'ACTIVE' : 'N/A'}
+                                    {hasAudio ? 'Active' : 'N/A'}
                                 </span>
                             </div>
                         </div>
@@ -195,7 +195,7 @@ export function QuickMenu({
                         onClick={handleDisconnect}
                     >
                         <span className="material-symbols-outlined">power_settings_new</span>
-                        <span>{confirmDisconnect ? 'CONFIRM ABORT?' : 'DISCONNECT'}</span>
+                        <span>{confirmDisconnect ? 'Disconnect?' : 'Disconnect'}</span>
                     </button>
                 </div>
             </aside>

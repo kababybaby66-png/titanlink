@@ -33,7 +33,7 @@ export interface SessionInfo {
 // ============================================
 
 export interface StreamSettings {
-    resolution: '1080p' | '720p' | '1440p' | '4k';
+    resolution: 'detect' | '1080p' | '720p' | '1440p' | '4k';
     fps: 30 | 60 | 120 | 144 | 240;
     bitrate: number; // in Mbps
     codec: 'h264' | 'hevc' | 'vp8' | 'vp9' | 'av1';
@@ -59,7 +59,7 @@ export interface StreamSettings {
 }
 
 export const DEFAULT_SETTINGS: StreamSettings = {
-    resolution: '1080p',
+    resolution: 'detect',
     fps: 60,
     bitrate: 10,
     codec: 'h264',

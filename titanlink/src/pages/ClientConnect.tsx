@@ -42,12 +42,12 @@ export function ClientConnect({ onConnect, onBack, error, initialSessionCode }: 
                 <GlassCard className="connect-module" hoverEffect>
                     <div className="module-header">
                         <span className="material-symbols-outlined icon animate-spin-slow">hub</span>
-                        <h2>ESTABLISH UPLINK</h2>
+                        <h2>Connect to Host</h2>
                     </div>
 
                     <form onSubmit={handleConnect} className="connect-form">
                         <div className="input-group">
-                            <label className="input-label">TARGET SESSION CODE</label>
+                            <label className="input-label">Session Code</label>
                             <div className="input-wrapper">
                                 <input
                                     type="text"
@@ -72,15 +72,15 @@ export function ClientConnect({ onConnect, onBack, error, initialSessionCode }: 
 
                         <div className="telemetry-grid">
                             <div className="telemetry-item">
-                                <span className="label">SIGNAL_INTEGRITY</span>
+                                <span className="label">Connection</span>
                                 <span className="value text-primary">100%</span>
                             </div>
                             <div className="telemetry-item">
-                                <span className="label">ENCRYPTION</span>
+                                <span className="label">Security</span>
                                 <span className="value text-primary">TLS 1.3</span>
                             </div>
                             <div className="telemetry-item">
-                                <span className="label">PROTOCOL</span>
+                                <span className="label">Protocol</span>
                                 <span className="value text-primary">UDP/P2P</span>
                             </div>
                         </div>
@@ -88,7 +88,7 @@ export function ClientConnect({ onConnect, onBack, error, initialSessionCode }: 
                         <div className="actions-row">
                             <button type="button" className="secondary-btn" onClick={onBack}>
                                 <span className="material-symbols-outlined">arrow_back</span>
-                                ABORT
+                                Cancel
                             </button>
                             <button
                                 type="submit"
@@ -98,12 +98,12 @@ export function ClientConnect({ onConnect, onBack, error, initialSessionCode }: 
                                 {isConnecting ? (
                                     <>
                                         <span className="material-symbols-outlined animate-spin">sync</span>
-                                        CONNECTING...
+                                        Connecting...
                                     </>
                                 ) : (
                                     <>
                                         <span className="material-symbols-outlined">bolt</span>
-                                        INITIATE LINK
+                                        Connect
                                     </>
                                 )}
                             </button>

@@ -10,6 +10,16 @@ import './StreamView.css';
 import { CyberButton } from '../components/CyberButton';
 import { WebCodecsDecoder } from '../services/WebCodecsDecoder';
 
+/**
+ * Check if the current platform supports the native UDP protocol.
+ * Non-Windows clients use WebRTC which delivers video via MediaStream.
+ */
+function isUdpPlatform(): boolean {
+    return typeof process !== 'undefined' &&
+        process.platform === 'win32' &&
+        process.arch === 'x64';
+}
+
 interface StreamViewProps {
     sessionState: SessionState;
     onDisconnect: () => void;
@@ -19,6 +29,7 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
     // videoRef removed - pure canvas rendering for UDP
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [showOverlay, setShowOverlay] = useState(true);
+    const [isDockMinimized, setIsDockMinimized] = useState(false);
     const [controllerConnected, setControllerConnected] = useState(false);
     const [showControllerOverlay, setShowControllerOverlay] = useState(false);
     const [showQuickMenu, setShowQuickMenu] = useState(false);
@@ -26,8 +37,10 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
     const overlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastGuidePress = useRef<number>(0);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const videoRef = useRef<HTMLVideoElement>(null);
     const decoderRef = useRef<WebCodecsDecoder | null>(null);
     const [isHardwareMode, setIsHardwareMode] = useState(false);
+    const [isWebRTCMode, setIsWebRTCMode] = useState(false);
     const [hwFps, setHwFps] = useState(0);
 
     // Audio state
@@ -40,7 +53,35 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
     const [jitter, setJitter] = useState(0);
     const [actualFps, setActualFps] = useState(0);
 
-    // WebRTC MediaStream handling removed - pure WebCodecs path used
+    // WebRTC MediaStream handling - for non-Windows clients (Mac/Linux)
+    useEffect(() => {
+        if (sessionState.role !== 'client') return;
+
+        const handleWebRTCStream = (e: Event) => {
+            const stream = (e as CustomEvent<MediaStream>).detail;
+            console.log('[StreamView] Received WebRTC MediaStream:', stream.id,
+                'video tracks:', stream.getVideoTracks().length,
+                'audio tracks:', stream.getAudioTracks().length);
+
+            if (videoRef.current && stream.getVideoTracks().length > 0) {
+                videoRef.current.srcObject = stream;
+                videoRef.current.play().catch(err => {
+                    console.error('[StreamView] Failed to play WebRTC video:', err);
+                });
+                setIsWebRTCMode(true);
+                console.log('[StreamView] WebRTC video element activated');
+            }
+        };
+
+        window.addEventListener('titanlink:webrtc-stream', handleWebRTCStream);
+        return () => {
+            window.removeEventListener('titanlink:webrtc-stream', handleWebRTCStream);
+            // Clean up video element
+            if (videoRef.current) {
+                videoRef.current.srcObject = null;
+            }
+        };
+    }, [sessionState.role]);
 
 
     // Handle Hardware Accelerated Frames
@@ -54,12 +95,13 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
             });
         }
 
+        let hardwareModeSet = false;
         const handleHardwareFrame = (e: Event) => {
             const customEvent = e as CustomEvent<unknown>;
-            setIsHardwareMode(prev => {
-                if (!prev) return true;
-                return prev;
-            });
+            if (!hardwareModeSet) {
+                hardwareModeSet = true;
+                setIsHardwareMode(true);
+            }
             decoderRef.current?.decode(customEvent.detail as { frameNumber: number; timestampUs: bigint; isKeyframe: boolean; data: Uint8Array; });
         };
 
@@ -148,7 +190,10 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
     useEffect(() => {
         if (sessionState.role !== 'client') return;
         let animationFrame: number;
-        let lastInputState: string = '';
+        // Track last state as numeric values to avoid JSON.stringify GC pressure
+        let lastButtons = -1;
+        let lastLX = -999, lastLY = -999, lastRX = -999, lastRY = -999;
+        let lastLT = -999, lastRT = -999;
 
         const pollGamepad = () => {
             const gamepads = navigator.getGamepads();
@@ -188,18 +233,19 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
                     }
                 }
 
-                const stateKey = JSON.stringify({
-                    buttons: input.buttons,
-                    lx: Math.round(input.leftStickX * 100),
-                    ly: Math.round(input.leftStickY * 100),
-                    rx: Math.round(input.rightStickX * 100),
-                    ry: Math.round(input.rightStickY * 100),
-                    lt: Math.round(input.leftTrigger * 100),
-                    rt: Math.round(input.rightTrigger * 100),
-                });
+                // Fast numeric comparison — avoids JSON.stringify GC pressure (~60 allocs/s)
+                const lx = Math.round(input.leftStickX * 100);
+                const ly = Math.round(input.leftStickY * 100);
+                const rx = Math.round(input.rightStickX * 100);
+                const ry = Math.round(input.rightStickY * 100);
+                const lt = Math.round(input.leftTrigger * 100);
+                const rt = Math.round(input.rightTrigger * 100);
 
-                if (stateKey !== lastInputState) {
-                    lastInputState = stateKey;
+                if (input.buttons !== lastButtons || lx !== lastLX || ly !== lastLY ||
+                    rx !== lastRX || ry !== lastRY || lt !== lastLT || rt !== lastRT) {
+                    lastButtons = input.buttons;
+                    lastLX = lx; lastLY = ly; lastRX = rx; lastRY = ry;
+                    lastLT = lt; lastRT = rt;
                     udpStreamService.sendInput(input);
                 }
             } else {
@@ -308,9 +354,18 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
             onMouseMove={handleMouseMove}
         >
             <div className="stream-video-wrapper">
+                {/* WebRTC video element - shown for non-Windows clients using WebRTC */}
+                <video
+                    ref={videoRef}
+                    className={`stream-video webrtc-video ${isWebRTCMode ? 'active' : ''}`}
+                    autoPlay
+                    playsInline
+                    muted={false}
+                />
+                {/* Canvas for hardware-decoded frames (UDP/WebCodecs path) */}
                 <canvas
                     ref={canvasRef}
-                    className="stream-video hardware-accelerated"
+                    className={`stream-video hardware-accelerated ${isWebRTCMode ? 'hidden-canvas' : ''}`}
                 />
 
                 {isHardwareMode && (
@@ -323,8 +378,8 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
                 {sessionState.role === 'host' && (
                     <div className="host-broadcast-indicator">
                         <div className="broadcast-icon">📡</div>
-                        <div className="broadcast-text">UPLINK ESTABLISHED</div>
-                        <div className="broadcast-sub">Transmitting Data to Client</div>
+                        <div className="broadcast-text">Connected to Client</div>
+                        <div className="broadcast-sub">Transmitting Video & Audio</div>
                     </div>
                 )}
             </div>
@@ -333,7 +388,18 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
             {sessionState.role === 'client' ? (
                 <div className="client-desktop-interface">
                     {/* Top Menu Bar / Dock */}
-                    <div className={`desktop-dock ${!showOverlay ? 'hidden' : ''}`}>
+                    <div className={`desktop-dock ${!showOverlay ? 'hidden' : ''} ${isDockMinimized ? 'minimized' : ''}`}>
+                        {/* Minimize/Expand Toggle Tab */}
+                        <button
+                            className="dock-minimize-btn"
+                            onClick={() => setIsDockMinimized(!isDockMinimized)}
+                            title={isDockMinimized ? "Expand Dock" : "Minimize Dock"}
+                        >
+                            <span className="material-symbols-outlined">
+                                {isDockMinimized ? 'expand_more' : 'expand_less'}
+                            </span>
+                        </button>
+
                         <div className="dock-left">
                             <div className="dock-logo">TitanLink OS</div>
                             <div className="dock-divider"></div>
@@ -480,25 +546,25 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
                     <div className="hud-top-bar">
                         <div className="connection-status">
                             <div className={`status-led ${sessionState.connectionState === 'streaming' ? 'stable' : 'warn'}`}></div>
-                            <span className="mono-text">UPLINK_STABLE</span>
+                            <span className="mono-text">Connection Stable</span>
                         </div>
 
                         <div className="telemetry-grid">
                             <div className="telemetry-item">
-                                <span className="t-label">PING</span>
+                                <span className="t-label">Ping</span>
                                 <span className={`t-val ${sessionState.latency && sessionState.latency < 50 ? 'text-cyan' : 'text-warn'}`}>
-                                    {sessionState.latency || 0} MS
+                                    {sessionState.latency || 0} ms
                                 </span>
                             </div>
                             <div className="telemetry-item">
-                                <span className="t-label">CTRL</span>
+                                <span className="t-label">Controller</span>
                                 <span className={`t-val ${controllerConnected ? 'text-success' : 'text-dim'}`}>
-                                    {controllerConnected ? 'ENGAGED' : 'NO_SIGNAL'}
+                                    {controllerConnected ? 'Connected' : 'Not Detected'}
                                 </span>
                             </div>
                             {sessionState.role === 'host' && sessionState.sessionCode && (
                                 <div className="telemetry-item session-code-display">
-                                    <span className="t-label">CODE</span>
+                                    <span className="t-label">Session Code</span>
                                     <span className="t-val text-cyan session-code-value">{sessionState.sessionCode}</span>
                                 </div>
                             )}
@@ -515,10 +581,10 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
                     {/* CONTROLS BOTTOM BAR */}
                     <div className="hud-bottom-bar">
                         <CyberButton variant="ghost" size="sm" onClick={() => setShowQuickMenu(true)}>
-                            [MENU]
+                            Menu
                         </CyberButton>
                         <div className="peer-tag">
-                            Hosting Session: <span className="text-cyan">{sessionState.peerInfo?.username || 'REMOTE_TARGET'}</span>
+                            Hosting Session: <span className="text-cyan">{sessionState.peerInfo?.username || 'Client'}</span>
                         </div>
 
                         <CyberButton
@@ -528,11 +594,11 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
                             className={showControllerOverlay ? 'active' : ''}
                             title="Toggle Controller Overlay"
                         >
-                            [🎮]
+                            🎮
                         </CyberButton>
 
                         <CyberButton variant="danger" size="sm" onClick={onDisconnect}>
-                            STOP_STREAM
+                            Stop Streaming
                         </CyberButton>
                     </div>
 

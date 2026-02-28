@@ -1,7 +1,3 @@
-/**
- * TitanLink - Main App Component
- */
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Titlebar } from './components/Titlebar';
 import { BackgroundEffects } from './components/BackgroundEffects';
@@ -12,7 +8,6 @@ import { StreamView } from './pages/StreamView';
 import { SettingsPage } from './pages/SettingsPage';
 import { ControllerTest } from './pages/ControllerTest';
 import { DriverWarning } from './components/DriverWarning';
-// Use the StreamService router to cleanly handle WebRTC vs UDP
 import { initStreamService, getStreamService } from './services/StreamService';
 import type { DriverCheckResult, ConnectionState, PeerInfo, StreamSettings, GamepadInputState } from '../shared/types/ipc';
 import { DEFAULT_SETTINGS } from '../shared/types/ipc';
@@ -54,28 +49,21 @@ function App() {
     });
     const [driverStatus, setDriverStatus] = useState<DriverCheckResult | null>(null);
     const [showDriverWarning, setShowDriverWarning] = useState(false);
-    // videoStream removed - UDP protocol uses pure canvas
-
     const [error, setError] = useState<string | null>(null);
     const [deepLinkCode, setDeepLinkCode] = useState<string | undefined>();
 
-    // Persist settings to localStorage and sync to stream service whenever they change
     useEffect(() => {
         localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-
         try {
             getStreamService().updateSettings(settings);
         } catch (e) {
-            // Service might not be initialized yet, which is fine
+            // Service might not be initialized yet
         }
     }, [settings]);
 
-    // Sync system-level settings with Main process
     useEffect(() => {
-        if (window.electronAPI?.app?.setLaunchOnStartup) {
-            window.electronAPI.app.setLaunchOnStartup(settings.launchOnStartup)
-                .catch(err => console.error('[App] Failed to set launch on startup:', err));
-        }
+        window.electronAPI?.app?.setLaunchOnStartup?.(settings.launchOnStartup)
+            .catch((err: Error) => console.error('[App] Failed to set launch on startup:', err));
     }, [settings.launchOnStartup]);
 
     // Check driver status on mount
@@ -85,18 +73,14 @@ function App() {
                 if (window.electronAPI?.system) {
                     const status = await window.electronAPI.system.checkDrivers();
                     setDriverStatus(status);
-                    if (status.vigembus !== 'installed') {
-                        setShowDriverWarning(true);
-                    }
+                    if (status.vigembus !== 'installed') setShowDriverWarning(true);
                 }
             } catch (err) {
                 console.error('Error checking drivers:', err);
             }
         };
-
         checkDrivers();
 
-        // Keyboard shortcut for controller test page (Ctrl+Shift+C)
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.ctrlKey && e.shiftKey && e.key === 'C') {
                 e.preventDefault();
@@ -107,88 +91,53 @@ function App() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-    // Handle deep links
     useEffect(() => {
-        if (window.electronAPI?.app?.onDeepLink) {
-            const cleanup = window.electronAPI.app.onDeepLink((url) => {
-                console.log('[App] Received deep link:', url);
-                try {
-                    if (url.includes('join?code=')) {
-                        let code = '';
-                        // Sometimes Windows passes the URL format cleanly, sometimes with trailing slashes
-                        const idx = url.indexOf('join?code=');
-                        let queryParam = url.substring(idx + 10);
-                        // Clean up trailing slash from Windows passing uri
-                        if (queryParam.endsWith('/')) {
-                            queryParam = queryParam.slice(0, -1);
-                        }
-                        code = queryParam.split('&')[0];
-
-                        if (code) {
-                            setDeepLinkCode(code);
-                            setCurrentView('client-connect');
-                        }
-                    }
-                } catch (e) {
-                    console.error('Error parsing deep link URL', e);
+        if (!window.electronAPI?.app?.onDeepLink) return;
+        return window.electronAPI.app.onDeepLink((url) => {
+            try {
+                const idx = url.indexOf('join?code=');
+                if (idx === -1) return;
+                let queryParam = url.substring(idx + 10);
+                if (queryParam.endsWith('/')) queryParam = queryParam.slice(0, -1);
+                const code = queryParam.split('&')[0];
+                if (code) {
+                    setDeepLinkCode(code);
+                    setCurrentView('client-connect');
                 }
-            });
-            return cleanup;
-        }
+            } catch (e) {
+                console.error('Error parsing deep link URL', e);
+            }
+        });
     }, []);
 
-    // Handle navigation based on connection state
-    // Only clients go to streaming view - hosts stay on HostLobby
     useEffect(() => {
         if (sessionState.connectionState === 'streaming' && sessionState.role === 'client') {
             setCurrentView('streaming');
         }
     }, [sessionState.connectionState, sessionState.role]);
 
-    // Create UDP stream callbacks
     const createUDPCallbacks = useCallback(() => ({
-        onStateChange: (state: ConnectionState) => {
-            setSessionState(prev => ({ ...prev, connectionState: state }));
-        },
-        onPeerConnected: (peer: PeerInfo) => {
-            setSessionState(prev => ({ ...prev, peerInfo: peer }));
-        },
-        onPeerDisconnected: () => {
-            setSessionState(prev => ({ ...prev, peerInfo: undefined }));
-        },
+        onStateChange: (state: ConnectionState) => setSessionState(prev => ({ ...prev, connectionState: state })),
+        onPeerConnected: (peer: PeerInfo) => setSessionState(prev => ({ ...prev, peerInfo: peer })),
+        onPeerDisconnected: () => setSessionState(prev => ({ ...prev, peerInfo: undefined })),
         onError: (errorMsg: string) => {
             setError(errorMsg);
             console.error('[UDP Protocol] Error:', errorMsg);
         },
-        onLatencyUpdate: (latency: number) => {
-            setSessionState(prev => ({ ...prev, latency }));
-        },
-        // onStreamReceived removed - UDP uses onVideoFrameReceived
-
+        onLatencyUpdate: (latency: number) => setSessionState(prev => ({ ...prev, latency })),
         onInputReceived: (input: GamepadInputState) => {
-            // console.log('[App] Input received', input.timestamp);
-            // Forward input to StreamView for visualization
             window.dispatchEvent(new CustomEvent('titanlink:input', { detail: input }));
-
-            // CRITICAL: Forward input to the main process for virtual controller injection
-            // This is what actually makes the controller work in games!
-            if (window.electronAPI?.controller) {
-                window.electronAPI.controller.sendInput(input);
-            }
+            window.electronAPI?.controller?.sendInput(input);
         },
         onStreamReceived: (stream: MediaStream) => {
-            // Wait for App to wire this up, currently only WebRTC uses this
-            // We can emit it as a custom event for StreamView to catch
             window.dispatchEvent(new CustomEvent('titanlink:webrtc-stream', { detail: stream }));
         },
         onVideoFrameReceived: (frame: unknown) => {
-            // Forward hardware decoded frame to StreamView for WebCodecs
             window.dispatchEvent(new CustomEvent('titanlink:hardware-frame', { detail: frame }));
-        }
+        },
     }), []);
 
     const handleStartHosting = useCallback(async () => {
-        // Check driver before hosting (needed for controller emulation)
         if (driverStatus?.vigembus !== 'installed') {
             setShowDriverWarning(true);
             return;
@@ -208,39 +157,21 @@ function App() {
     const handleHostSession = useCallback(async (displayId: string) => {
         try {
             await window.electronAPI?.controller?.createVirtual();
-
-            // Check if hardware capture is supported (NVENC or software fallback)
             let hwSupported = false;
             if (window.electronAPI?.hardwareCapture) {
                 try {
                     const support = await window.electronAPI.hardwareCapture.isSupported();
                     hwSupported = support.nvenc || support.software;
-                    console.log('[App] Hardware capture support:', support);
                 } catch (e) {
                     console.warn('[App] Failed to check hardware support:', e);
                 }
             }
-
-            // Prioritize hardware capture if supported and enabled in settings
             const useHardware = hwSupported && settings.useHardwareCapture;
-            console.log(`[App] Using hardware capture: ${useHardware} (Supported: ${hwSupported}, Enabled: ${settings.useHardwareCapture})`);
-
             const callbacks = createUDPCallbacks();
             const streamService = await initStreamService();
-
-            // Ensure service has latest settings
             streamService.updateSettings(settings);
-
-            // StreamService will handle hardware capture initialization internally
             const sessionCode = await streamService.startHosting(displayId, callbacks, false, useHardware);
-
-            setSessionState({
-                sessionCode,
-                role: 'host',
-                connectionState: 'waiting-for-peer',
-            });
-
-            console.log('[App] Session created:', sessionCode);
+            setSessionState({ sessionCode, role: 'host', connectionState: 'waiting-for-peer' });
             return sessionCode;
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Failed to start hosting';
@@ -253,16 +184,8 @@ function App() {
         try {
             const callbacks = createUDPCallbacks();
             const streamService = await initStreamService();
-
-            // Ensure service has latest settings (e.g. for audio/decoder config)
             streamService.updateSettings(settings);
-
-            setSessionState({
-                sessionCode,
-                role: 'client',
-                connectionState: 'connecting',
-            });
-
+            setSessionState({ sessionCode, role: 'client', connectionState: 'connecting' });
             await streamService.connectToHost(sessionCode, callbacks);
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Failed to connect';
@@ -272,28 +195,14 @@ function App() {
     }, [createUDPCallbacks, settings]);
 
     const handleBackToLanding = useCallback(async () => {
-        // Cleanup - only disconnect if service was loaded
         try {
             await getStreamService().disconnect();
         } catch (e) {
-            // Not initialized, ignore
+            // Not initialized
         }
-
-        if (window.electronAPI?.controller) {
-            await window.electronAPI.controller.destroyVirtual();
-        }
-
-        if (window.electronAPI?.hardwareCapture) {
-            await window.electronAPI.hardwareCapture.stop();
-        }
-
-        // setVideoStream(null); // Removed
-
-        setSessionState({
-            sessionCode: '',
-            role: null,
-            connectionState: 'disconnected',
-        });
+        await window.electronAPI?.controller?.destroyVirtual();
+        await window.electronAPI?.hardwareCapture?.stop();
+        setSessionState({ sessionCode: '', role: null, connectionState: 'disconnected' });
         setError(null);
         setCurrentView('landing');
     }, []);

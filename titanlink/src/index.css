@@ -57,6 +57,20 @@ body,
   overflow: hidden;
 }
 
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
+.main-content {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 body {
   background-color: var(--bg-dark);
   color: var(--text-main);
