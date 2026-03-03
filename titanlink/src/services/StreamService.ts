@@ -57,9 +57,15 @@ let instance: IStreamService | null = null;
 export async function initStreamService(): Promise<IStreamService> {
     if (!instance) {
         if (isUdpProtocolSupported()) {
-            console.log('[StreamService] Loading UDP service (Windows x64)');
-            const module = await import('./UDPStreamService');
-            instance = module.udpStreamService;
+            try {
+                console.log('[StreamService] Loading UDP service (Windows x64)');
+                const module = await import('./UDPStreamService');
+                instance = module.udpStreamService;
+            } catch (e) {
+                console.warn('[StreamService] UDP service failed to load, falling back to WebRTC:', (e as Error).message);
+                const module = await import('./WebRTCStreamService');
+                instance = module.webrtcService;
+            }
         } else {
             console.log('[StreamService] Loading WebRTC service (Fallback)');
             const module = await import('./WebRTCStreamService');
