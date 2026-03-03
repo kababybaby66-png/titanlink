@@ -13,13 +13,20 @@
       media-src 'self' blob:;
       worker-src 'self' blob:;
       connect-src 'self'
-        http://localhost:3001
-        http://localhost:5000
-        http://129.159.142.124:3001
-        https://stun.l.google.com
-        https://stun1.l.google.com
-        https://stun2.l.google.com
-        turn:openrelay.metered.ca;
+        http://localhost:*
+        ws://localhost:*
+        http://129.159.142.124:*
+        ws://129.159.142.124:*
+        wss://129.159.142.124:*
+        stun:stun.l.google.com:*
+        stun:stun1.l.google.com:*
+        stun:stun2.l.google.com:*
+        stun:stun3.l.google.com:*
+        stun:stun4.l.google.com:*
+        stun:stun.services.mozilla.com:*
+        stun:global.stun.twilio.com:*
+        turn:openrelay.metered.ca:*
+        turns:openrelay.metered.ca:*;
       object-src 'none';
       base-uri 'self';
       form-action 'self';
