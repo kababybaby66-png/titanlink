@@ -50,7 +50,6 @@ function createWindow() {
     // Override CSP at the Electron session level for reliable enforcement (production only)
     // In dev mode, Vite's HMR needs inline scripts/eval, so we rely on the HTML meta tag CSP
     if (!isDev) {
-        const relayIp = process.env.VITE_RELAY_IP || '129.159.142.124';
         const csp = [
             "default-src 'self'",
             "script-src 'self'",
@@ -59,7 +58,7 @@ function createWindow() {
             "img-src 'self' data: blob: https:",
             "media-src 'self' blob:",
             "worker-src 'self' blob:",
-            `connect-src 'self' http://localhost:* ws://localhost:* http://${relayIp}:* ws://${relayIp}:* wss://${relayIp}:* stun: turn: turns:`,
+            "connect-src 'self' http: https: ws: wss:",
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",
