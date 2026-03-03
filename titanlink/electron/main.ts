@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, desktopCapturer, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, desktopCapturer, screen, session } from 'electron';
 import path from 'path';
 import os from 'os';
 import dotenv from 'dotenv';
@@ -46,6 +46,34 @@ function createWindow() {
         },
         icon: path.join(__dirname, '../resources/icon.png'),
     });
+
+    // Override CSP at the Electron session level for reliable enforcement (production only)
+    // In dev mode, Vite's HMR needs inline scripts/eval, so we rely on the HTML meta tag CSP
+    if (!isDev) {
+        const relayIp = process.env.VITE_RELAY_IP || '129.159.142.124';
+        const csp = [
+            "default-src 'self'",
+            "script-src 'self'",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+            "font-src 'self' https://fonts.gstatic.com",
+            "img-src 'self' data: blob: https:",
+            "media-src 'self' blob:",
+            "worker-src 'self' blob:",
+            `connect-src 'self' http://localhost:* ws://localhost:* http://${relayIp}:* ws://${relayIp}:* wss://${relayIp}:* stun: turn: turns:`,
+            "object-src 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+        ].join('; ');
+
+        mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+            callback({
+                responseHeaders: {
+                    ...details.responseHeaders,
+                    'Content-Security-Policy': [csp],
+                },
+            });
+        });
+    }
 
     // Load the app
     if (process.env.VITE_DEV_SERVER_URL) {
