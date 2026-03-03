@@ -27,9 +27,12 @@ let nativeLoadAttempted = false;
  * Currently only Windows x64 is supported
  */
 function isNativeModuleSupported(): boolean {
-    return typeof process !== 'undefined' &&
-        process.platform === 'win32' &&
-        process.arch === 'x64';
+    if (typeof process !== 'undefined' && process.platform && process.arch) {
+        return process.platform === 'win32' && process.arch === 'x64';
+    }
+    // Fallback: detect from navigator (sandboxed Electron renderer)
+    const ua = navigator.userAgent;
+    return ua.includes('Windows') && (ua.includes('x64') || ua.includes('Win64') || ua.includes('WOW64'));
 }
 
 /**

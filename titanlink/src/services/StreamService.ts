@@ -41,9 +41,15 @@ export interface IStreamService {
 }
 
 function isUdpProtocolSupported(): boolean {
-    return typeof process !== 'undefined' &&
-        process.platform === 'win32' &&
-        process.arch === 'x64';
+    // Try Node.js process object (available in Electron dev mode / non-sandboxed)
+    if (typeof process !== 'undefined' && process.platform && process.arch) {
+        return process.platform === 'win32' && process.arch === 'x64';
+    }
+    // Fallback: detect from navigator (works in sandboxed Electron renderer)
+    const ua = navigator.userAgent;
+    const isWindows = ua.includes('Windows');
+    const isX64 = ua.includes('x64') || ua.includes('Win64') || ua.includes('WOW64');
+    return isWindows && isX64;
 }
 
 let instance: IStreamService | null = null;
