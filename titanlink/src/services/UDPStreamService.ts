@@ -9,6 +9,8 @@ import { DEFAULT_SETTINGS } from '../../shared/types/ipc';
 import { CONFIG } from '../config';
 import { WebRTCBridge } from './WebRTCBridge';
 
+import { WebSocketSignalingClient } from './SignalingClient';
+
 const SIGNALING_BASE = CONFIG.RELAY.SIGNALING_HTTP_BASE;
 
 interface UDPServiceCallbacks {
@@ -35,7 +37,7 @@ export class UDPStreamService {
     private role: 'host' | 'client' | null = null;
     private isConnected: boolean = false;
 
-    private pollInterval: NodeJS.Timeout | null = null;
+    private wsClient: WebSocketSignalingClient | null = null;
     private pollSince: number = 0;
     private settings: StreamSettings = DEFAULT_SETTINGS;
     private relayServerIp: string = CONFIG.RELAY.IP;
@@ -154,6 +156,10 @@ export class UDPStreamService {
             }).catch(() => { });
         }
         this.isConnected = false;
+        if (this.wsClient) {
+            this.wsClient.close();
+            this.wsClient = null;
+        }
         this.webrtcBridge?.destroy();
         this.webrtcBridge = null;
         this.callbacks?.onStateChange('disconnected');
@@ -229,36 +235,38 @@ export class UDPStreamService {
     }
 
     /**
-     * Host: poll for client-join events every 2s
+     * Host: Use WebSocket to receive client-join events instantly
      */
     private startPollForClients(): void {
-        this.pollSince = Date.now();
-
-        this.pollInterval = setInterval(async () => {
-            try {
-                const res = await fetch(
-                    `${SIGNALING_BASE}/session/${this.sessionCode}?since=${this.pollSince}`
-                );
-                if (!res.ok) return;
-
-                const data = await res.json() as { events: Array<{ type: string; data: any; timestamp: number }> };
-
-                for (const event of data.events) {
-                    if (event.type === 'peer-joined') {
-                        this.pollSince = Math.max(this.pollSince, event.timestamp);
-                        await this.handleClientJoined(event.data);
-                    }
+        this.wsClient = new WebSocketSignalingClient(SIGNALING_BASE);
+        this.wsClient.onopen = () => {
+            // Register this socket for this session
+            if (this.wsClient) {
+                // Since sending 'create-session' via wsClient does the API call + registers,
+                // and we already did the API call in httpCreateSession, we just send raw register
+                const ws = (this.wsClient as any).ws;
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ action: 'register', sessionCode: this.sessionCode, peerId: this.hostId }));
                 }
-            } catch {
-                // Ignore transient poll failures
             }
-        }, 2000);
+        };
+
+        this.wsClient.onmessage = async (event: any) => {
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'peer-joined') {
+                    await this.handleClientJoined(msg.data);
+                }
+            } catch (e) {
+                console.error('[UDPStreamService] WebSocket parsing error', e);
+            }
+        };
     }
 
     private stopPollForClients(): void {
-        if (this.pollInterval) {
-            clearInterval(this.pollInterval);
-            this.pollInterval = null;
+        if (this.wsClient) {
+            this.wsClient.close();
+            this.wsClient = null;
         }
     }
 
@@ -338,11 +346,19 @@ export class UDPStreamService {
         isKeyframe: boolean;
         data: Buffer;
     }): void {
-        if (!this.connectionManager || !this.isConnected) return;
+        if (!this.connectionManager || !this.isConnected) {
+            if (frame.frameNumber % 120 === 0) {
+                console.log(`[UDPStreamService] Dropping frame #${frame.frameNumber}: cm=${!!this.connectionManager}, connected=${this.isConnected}`);
+            }
+            return;
+        }
         let codecId = 1;
         if (this.settings.codec === 'hevc') codecId = 2;
         if (this.settings.codec === 'av1') codecId = 3;
         try {
+            if (frame.frameNumber <= 5 || frame.frameNumber % 300 === 0) {
+                console.log(`[UDPStreamService] Sending frame #${frame.frameNumber}: keyframe=${frame.isKeyframe}, size=${frame.data.length}, codec=${codecId}`);
+            }
             this.bytesSentInLastSecond += frame.data.length;
             this.connectionManager.sendVideoFrame(frame.frameNumber, codecId, frame.isKeyframe, frame.data);
             if (this.webrtcBridge) {

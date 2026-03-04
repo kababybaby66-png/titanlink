@@ -243,6 +243,18 @@ app.post('/session/:code/join', joinRateLimit, (req, res) => {
     session.clients.push({ clientId, joinedAt: Date.now() });
     console.log('[Session] Client joined:', clientId, '->', sessionCode);
 
+    // Notify host via WS if connected
+    if (session.sockets && session.sockets.has(session.hostId)) {
+        const hostWs = session.sockets.get(session.hostId);
+        if (hostWs.readyState === 1) { // OPEN
+            hostWs.send(JSON.stringify({
+                type: 'peer-joined',
+                data: { peerId: clientId, clientId: clientId },
+                timestamp: Date.now()
+            }));
+        }
+    }
+
     res.json({
         sessionId: session.sessionId,
         hostId: session.hostId,
@@ -315,6 +327,19 @@ app.post('/session/:code/message', (req, res) => {
 
     const msg = { from, to, type, payload, timestamp: Date.now() };
     session.messages.push(msg);
+
+    // Push via WS if connected
+    if (session.sockets && session.sockets.has(to)) {
+        const targetWs = session.sockets.get(to);
+        if (targetWs.readyState === 1) { // OPEN
+            targetWs.send(JSON.stringify({
+                type: 'webrtc-message',
+                data: msg,
+                timestamp: msg.timestamp
+            }));
+        }
+    }
+
     res.json({ ok: true });
 });
 
@@ -368,8 +393,83 @@ app.delete('/session/:code', (req, res) => {
 
 // ─── Server ───────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-    console.log(`TitanLink Signaling Server (HTTP) running on port ${PORT}`);
+const http = require('http');
+const WebSocket = require('ws');
+
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
+// Support WebSocket signaling alongside REST
+wss.on('connection', (ws, req) => {
+    let currentSessionCode = null;
+    let currentPeerId = null;
+
+    ws.on('message', (message) => {
+        try {
+            const data = JSON.parse(message);
+
+            if (data.action === 'register') {
+                const { sessionCode, peerId } = data;
+                if (!sessionCode || !peerId || !sessions.has(sessionCode)) {
+                    return ws.send(JSON.stringify({ error: 'Invalid session or peerId' }));
+                }
+
+                currentSessionCode = sessionCode;
+                currentPeerId = peerId;
+
+                const session = sessions.get(sessionCode);
+                if (!session.sockets) session.sockets = new Map();
+                session.sockets.set(peerId, ws);
+
+                // console.log(`[WebSocket] Connected: ${peerId} to session ${sessionCode}`);
+                ws.send(JSON.stringify({ type: 'registered', peerId }));
+            }
+            else if (data.action === 'signal') {
+                if (!currentSessionCode || !currentPeerId) return;
+
+                const session = sessions.get(currentSessionCode);
+                if (!session) return;
+
+                const { to, type, payload } = data;
+                const targetSocket = session.sockets?.get(to);
+
+                // Store in history for fallback polling
+                const msg = { from: currentPeerId, to, type, payload, timestamp: Date.now() };
+                if (session.messages.length < MAX_MESSAGES_PER_SESSION) {
+                    session.messages.push(msg);
+                }
+
+                // Push real-time via WebSocket if connected
+                if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
+                    targetSocket.send(JSON.stringify({
+                        type: 'webrtc-message',
+                        data: msg,
+                        timestamp: msg.timestamp
+                    }));
+                }
+            }
+        } catch (e) {
+            // Ignore parse errors
+        }
+    });
+
+    ws.on('close', () => {
+        if (currentSessionCode && currentPeerId) {
+            const session = sessions.get(currentSessionCode);
+            if (session && session.sockets) {
+                session.sockets.delete(currentPeerId);
+            }
+        }
+    });
+});
+
+// Patch the endpoints to push to WebSockets
+const originalAppPostSessionJoin = app._router.stack.find(l => l.route && l.route.path === '/session/:code/join');
+// This is a bit hacky to patch Express mid-flight, so we instead modify the join route internally
+// Actually, I'll just rewrite the REST endpoints to push to WS directly later, or right now where they exist.
+
+server.listen(PORT, () => {
+    console.log(`TitanLink Signaling Server running on port ${PORT} (HTTP + WebSocket)`);
     console.log(`API base: http://localhost:${PORT}`);
     if (!process.env.ALLOWED_ORIGINS) {
         console.warn('[Security] ALLOWED_ORIGINS not set — running in dev mode (all origins allowed)');

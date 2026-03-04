@@ -18,6 +18,7 @@
 
 import { CONFIG } from '../config';
 import { decodeGamepadInput, GAMEPAD_PACKET_SIZE } from '../../shared/types/ipc';
+import { WebSocketSignalingClient } from './SignalingClient';
 
 const SIGNALING_BASE = CONFIG.RELAY.SIGNALING_HTTP_BASE;
 
@@ -46,8 +47,7 @@ export class WebRTCBridge {
     private sessionCode: string;
     private hostId: string;
     private clientPeerId: string = '';
-    private signalPollInterval: NodeJS.Timeout | null = null;
-    private lastPollTime: number = 0;
+    private wsClient: WebSocketSignalingClient | null = null;
     private isActive: boolean = false;
     private settings: BridgeSettings;
 
@@ -273,35 +273,27 @@ export class WebRTCBridge {
     }
 
     /**
-     * Poll for signaling messages from the client
+     * Listen for signaling messages from the client via WebSocket
      */
     private startSignalPoll(): void {
-        this.lastPollTime = 0;
-
-        this.signalPollInterval = setInterval(async () => {
-            if (!this.isActive) return;
-
-            try {
-                const res = await fetch(
-                    `${SIGNALING_BASE}/session/${this.sessionCode}/messages/${this.hostId}?since=${this.lastPollTime}`
-                );
-                if (!res.ok) return;
-
-                const data = await res.json() as { messages?: Array<any> };
-                if (data.messages && data.messages.length > 0) {
-                    this.lastPollTime = Math.max(
-                        ...data.messages.map((m: any) => m.timestamp),
-                        this.lastPollTime
-                    );
-
-                    for (const msg of data.messages) {
-                        await this.handleSignalingMessage(msg);
-                    }
-                }
-            } catch {
-                // Ignore transient poll failures
+        this.wsClient = new WebSocketSignalingClient(SIGNALING_BASE);
+        this.wsClient.onopen = () => {
+            const ws = (this.wsClient as any).ws;
+            if (ws && ws.readyState === 1) { // OPEN
+                ws.send(JSON.stringify({ action: 'register', sessionCode: this.sessionCode, peerId: this.hostId }));
             }
-        }, 1000);
+        };
+        this.wsClient.onmessage = async (event: any) => {
+            if (!this.isActive) return;
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'signal') {
+                    await this.handleSignalingMessage(msg.data);
+                }
+            } catch (e) {
+                // Ignore parsing errors
+            }
+        };
     }
 
     /**
@@ -343,15 +335,17 @@ export class WebRTCBridge {
     }
 
     /**
-     * Send signaling message to client via REST
+     * Send signaling message to client via WebSocket
      */
     private async sendSignalingMessage(msg: any): Promise<void> {
+        if (!this.isActive || !this.wsClient) return;
         try {
-            await fetch(`${SIGNALING_BASE}/session/${this.sessionCode}/message`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(msg),
-            });
+            this.wsClient.send(JSON.stringify({
+                type: 'signal',
+                sessionCode: this.sessionCode,
+                to: msg.to,
+                payload: { ...msg.payload, type: msg.type }
+            }));
         } catch (e) {
             console.error('[WebRTCBridge] Failed to send signaling message:', e);
         }
@@ -363,9 +357,9 @@ export class WebRTCBridge {
     destroy(): void {
         this.isActive = false;
 
-        if (this.signalPollInterval) {
-            clearInterval(this.signalPollInterval);
-            this.signalPollInterval = null;
+        if (this.wsClient) {
+            this.wsClient.close();
+            this.wsClient = null;
         }
 
         if (this.inputChannel) {

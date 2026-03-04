@@ -36,6 +36,7 @@ interface IncomingSignal {
 
 // Signaling server configuration
 import { CONFIG } from '../config';
+import { WebSocketSignalingClient } from './SignalingClient';
 
 // Supports both public server and direct IP connection modes
 const PUBLIC_SIGNALING_SERVER = CONFIG.RELAY.SIGNALING_HTTP_BASE;
@@ -132,145 +133,7 @@ export interface ConnectionQuality {
     targetBitrate: number;  // Original target bitrate in Mbps
 }
 
-// REST Signaling Client to simulate WebSocket over HTTP REST
-class RESTSignalingClient extends EventTarget {
-    private url: string;
-    private sessionCode: string = '';
-    private peerId: string = '';
-    private role: 'host' | 'client' = 'client';
-    private pollInterval: ReturnType<typeof setInterval> | null = null;
-    private lastPollTime: number = 0;
 
-    public readyState: number = 0; // WebSocket.CONNECTING
-    public onopen: (() => void) | null = null;
-    public onclose: (() => void) | null = null;
-    public onerror: ((ev: any) => void) | null = null;
-    public onmessage: ((ev: { data: string }) => void) | null = null;
-
-    constructor(url: string) {
-        super();
-        this.url = url;
-        // The service connects instantly in REST model
-        setTimeout(() => {
-            this.readyState = 1; // WebSocket.OPEN
-            if (this.onopen) this.onopen();
-        }, 100);
-    }
-
-    setCredentials(sessionCode: string, peerId: string, role: 'host' | 'client') {
-        this.sessionCode = sessionCode;
-        this.peerId = peerId;
-        this.role = role;
-
-        if (this.pollInterval) clearInterval(this.pollInterval);
-        this.lastPollTime = 0; // fetch all events initially
-        this.pollInterval = setInterval(() => this.poll(), 1000);
-    }
-
-    private async poll() {
-        if (!this.sessionCode || !this.peerId) return;
-
-        try {
-            if (this.role === 'host') {
-                const res = await fetch(`${this.url}/session/${this.sessionCode}?since=${this.lastPollTime}`);
-                if (!res.ok) return;
-                const data = await res.json();
-
-                if (data.events && data.events.length > 0) {
-                    // Update lastPollTime to newest
-                    this.lastPollTime = Math.max(...data.events.map((e: any) => e.timestamp), this.lastPollTime);
-
-                    for (const ev of data.events) {
-                        if (ev.type === 'peer-joined') {
-                            this.emitMessage({ type: 'session-joined', data: { hostId: this.peerId } }); // to unlock host's await
-                            this.emitMessage({ type: 'peer-joined', data: { peerId: ev.data.clientId } });
-                        } else if (ev.type === 'webrtc-message') {
-                            this.emitMessage({ type: 'signal', data: ev.data });
-                        }
-                    }
-                }
-            } else {
-                const res = await fetch(`${this.url}/session/${this.sessionCode}/messages/${this.peerId}?since=${this.lastPollTime}`);
-                if (!res.ok) return;
-                const data = await res.json();
-
-                if (data.messages && data.messages.length > 0) {
-                    this.lastPollTime = Math.max(...data.messages.map((m: any) => m.timestamp), this.lastPollTime);
-                    for (const msg of data.messages) {
-                        this.emitMessage({ type: 'signal', data: msg });
-                    }
-                }
-            }
-        } catch (e) {
-            // silent fail on poll
-        }
-    }
-
-    private emitMessage(msg: any) {
-        const ev = { data: JSON.stringify(msg) };
-        if (this.onmessage) this.onmessage(ev as any);
-        // Dispatch to addEventListener('message')
-        this.dispatchEvent(new MessageEvent('message', ev));
-    }
-
-    async send(dataStr: string) {
-        try {
-            const data = JSON.parse(dataStr);
-            if (data.type === 'create-session') {
-                this.setCredentials(data.sessionCode, data.hostId, 'host');
-                const res = await fetch(`${this.url}/session`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sessionCode: data.sessionCode, sessionId: this.peerId, hostId: data.hostId })
-                });
-                if (res.ok) {
-                    this.emitMessage({ type: 'session-created' });
-                } else {
-                    const err = await res.json();
-                    this.emitMessage({ type: 'error', data: err.error });
-                }
-            } else if (data.type === 'join-session') {
-                this.setCredentials(data.sessionCode, data.clientId, 'client');
-                const res = await fetch(`${this.url}/session/${data.sessionCode}/join`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ clientId: data.clientId })
-                });
-                if (res.ok) {
-                    const result = await res.json();
-                    this.emitMessage({ type: 'session-joined', data: { hostId: result.hostId } });
-                } else {
-                    this.emitMessage({ type: 'session-not-found' });
-                }
-            } else if (data.type === 'leave-session') {
-                if (this.role === 'host') {
-                    await fetch(`${this.url}/session/${data.sessionCode}`, { method: 'DELETE' }).catch(() => { });
-                }
-            } else if (data.type === 'signal') {
-                // Forward via message endpoint. Fix: We map the signal payload back as webrtc-message payload
-                const sessionCode = data.sessionCode || this.sessionCode;
-                await fetch(`${this.url}/session/${sessionCode}/message`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        from: this.peerId,
-                        to: data.to,
-                        type: data.payload.type || 'ice',
-                        payload: data.payload
-                    })
-                });
-            }
-        } catch (e) {
-            console.error('[REST Signaler Error]', e);
-        }
-    }
-
-    close() {
-        if (this.pollInterval) clearInterval(this.pollInterval);
-        this.readyState = 3; // WebSocket.CLOSED
-        if (this.onclose) this.onclose();
-    }
-}
 
 class WebRTCService {
     private ws: WebSocket | null = null;
@@ -708,9 +571,9 @@ class WebRTCService {
                 }
             }, connectionTimeout);
 
-            console.log(`Connecting to REST signaling server (attempt ${retryCount + 1}/${maxRetries + 1})...`);
+            console.log(`Connecting to WebSocket signaling server (attempt ${retryCount + 1}/${maxRetries + 1})...`);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            this.ws = new RESTSignalingClient(serverUrl) as any;
+            this.ws = new WebSocketSignalingClient(serverUrl) as any;
 
             this.ws!.onopen = () => {
                 clearTimeout(timeout);
