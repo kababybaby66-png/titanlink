@@ -272,7 +272,7 @@ app.get('/session/:code', (req, res) => {
     }))];
 
     if (session.messages) {
-        const newMessages = session.messages.filter(m => m.timestamp > since && m.to === 'host');
+        const newMessages = session.messages.filter(m => m.timestamp > since && m.to === session.hostId);
         events.push(...newMessages.map(m => ({
             type: 'webrtc-message',
             data: m,

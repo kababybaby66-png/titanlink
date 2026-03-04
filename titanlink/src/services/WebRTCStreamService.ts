@@ -279,6 +279,7 @@ class WebRTCService {
     private videoChannel: RTCDataChannel | null = null;
     private sessionCode: string = '';
     private peerId: string = '';
+    private remotePeerId: string = '';
     private role: 'host' | 'client' | null = null;
     private callbacks: WebRTCServiceCallbacks | null = null;
     private mediaStream: MediaStream | null = null;
@@ -473,6 +474,7 @@ class WebRTCService {
 
         this.role = null;
         this.sessionCode = '';
+        this.remotePeerId = '';
         this.callbacks?.onStateChange('disconnected');
     }
 
@@ -742,6 +744,9 @@ class WebRTCService {
                     } else if (message.type === 'session-joined') {
                         clearTimeout(timeout);
                         console.log('Joined session, host:', message.data?.hostId);
+                        if (this.role === 'client' && message.data?.hostId) {
+                            this.remotePeerId = message.data.hostId;
+                        }
                         this.callbacks?.onPeerConnected({
                             peerId: message.data?.hostId,
                             username: 'Host',
@@ -927,6 +932,7 @@ class WebRTCService {
                     type: 'signal',
                     sessionCode: this.sessionCode,
                     from: this.peerId,
+                    to: this.remotePeerId,
                     payload: event.candidate.toJSON(),
                 });
             } else {
@@ -1159,6 +1165,7 @@ class WebRTCService {
 
     private async handlePeerJoined(peerId: string): Promise<void> {
         if (!this.peerConnection) return;
+        this.remotePeerId = peerId;
 
         const peer: PeerInfo = {
             peerId,
@@ -1213,6 +1220,7 @@ class WebRTCService {
             // Check if this is an offer (SDP with type 'offer')
             else if (payload.type === 'offer' && payload.sdp) {
                 console.log('[WebRTC] Received offer, creating answer');
+                if (message.from) this.remotePeerId = message.from;
                 await this.peerConnection.setRemoteDescription(
                     new RTCSessionDescription(payload)
                 );
@@ -1654,6 +1662,7 @@ class WebRTCService {
                 type: 'signal',
                 sessionCode: this.sessionCode,
                 from: this.peerId,
+                to: this.remotePeerId,
                 payload: offer,
             });
 
