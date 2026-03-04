@@ -28,7 +28,7 @@ app.use(express.json({ limit: '16kb' }));
 // [SECURITY] Sliding-window IP-based rate limiter — no external dependency.
 const rateLimitWindows = new Map(); // ip -> { count, windowStart }
 const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
-const RATE_LIMIT_MAX = 60;     // max requests per window per IP
+const RATE_LIMIT_MAX = 300;    // max requests per window per IP (polling-based signaling needs headroom)
 
 function rateLimit(req, res, next) {
     const ip = req.ip || req.connection.remoteAddress || 'unknown';
