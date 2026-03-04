@@ -154,7 +154,11 @@ const electronAPI = {
 
 export type ElectronAPI = typeof electronAPI;
 
-contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+if (process.contextIsolated) {
+    contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+} else {
+    window.electronAPI = electronAPI;
+}
 
 declare global {
     interface Window {
