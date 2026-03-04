@@ -88,21 +88,30 @@ export function StreamView({ sessionState, onDisconnect }: StreamViewProps) {
     useEffect(() => {
         if (sessionState.role !== 'client' || !canvasRef.current) return;
 
+        console.log('[StreamView] Setting up hardware frame handler, canvas:', canvasRef.current?.width, 'x', canvasRef.current?.height);
+
         // Initialize decoder if not already done
         if (!decoderRef.current && canvasRef.current) {
+            console.log('[StreamView] Creating WebCodecsDecoder');
             decoderRef.current = new WebCodecsDecoder(canvasRef.current, (fps) => {
                 setHwFps(fps);
             });
         }
 
         let hardwareModeSet = false;
+        let frameCount = 0;
         const handleHardwareFrame = (e: Event) => {
             const customEvent = e as CustomEvent<unknown>;
+            frameCount++;
+            const frame = customEvent.detail as { frameNumber: number; timestampUs: bigint; isKeyframe: boolean; data: Uint8Array; };
+            if (frameCount <= 5 || frameCount % 60 === 0) {
+                console.log(`[StreamView] Frame #${frameCount}: num=${frame.frameNumber}, keyframe=${frame.isKeyframe}, size=${frame.data?.length ?? 0}, dataType=${frame.data?.constructor?.name}`);
+            }
             if (!hardwareModeSet) {
                 hardwareModeSet = true;
                 setIsHardwareMode(true);
             }
-            decoderRef.current?.decode(customEvent.detail as { frameNumber: number; timestampUs: bigint; isKeyframe: boolean; data: Uint8Array; });
+            decoderRef.current?.decode(frame);
         };
 
         window.addEventListener('titanlink:hardware-frame', handleHardwareFrame);

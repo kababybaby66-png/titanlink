@@ -134,6 +134,7 @@ export class WebCodecsDecoder {
 
     private renderFrame(frame: VideoFrame): void {
         if (!this.ctx || !this.canvas) {
+            console.warn('[WebCodecs] renderFrame: no ctx or canvas, dropping frame');
             frame.close();
             return;
         }
@@ -141,6 +142,9 @@ export class WebCodecsDecoder {
         this.updateCanvasSize(frame);
         this.ctx.drawImage(frame, 0, 0, this.canvas.width, this.canvas.height);
         this.updateFpsCounter();
+        if (this.frameCount <= 3) {
+            console.log(`[WebCodecs] Rendered frame: ${frame.displayWidth}x${frame.displayHeight}, canvas: ${this.canvas.width}x${this.canvas.height}`);
+        }
         frame.close();
     }
 

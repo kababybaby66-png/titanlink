@@ -120,7 +120,12 @@ export class UDPStreamService {
 
         await this.httpJoinSession();
         this.connectionManager = new SmartConnectionManager();
+        let clientFrameCount = 0;
         this.connectionManager.onFrame((frame) => {
+            clientFrameCount++;
+            if (clientFrameCount <= 5 || clientFrameCount % 60 === 0) {
+                console.log(`[UDPStreamService CLIENT] Received frame #${clientFrameCount}: keyframe=${frame.isKeyframe}, size=${frame.data?.length}`);
+            }
             this.callbacks?.onVideoFrameReceived?.(frame);
         });
         await this.connectionManager.connect({
@@ -198,9 +203,19 @@ export class UDPStreamService {
     }
 
     private generateSessionId(): string {
-        const bytes = new Uint8Array(16);
+        // Must be a numeric string parseable as u64 by the native Rust module
+        // u64 max = 18446744073709551615 (20 digits)
+        // Generate a random 18-digit number to stay safely within u64 range
+        const bytes = new Uint8Array(8);
         crypto.getRandomValues(bytes);
-        return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        // Use first 7 bytes (56 bits) to build a large numeric value
+        let n = BigInt(0);
+        for (let i = 0; i < 7; i++) {
+            n = (n << BigInt(8)) | BigInt(bytes[i]);
+        }
+        // Ensure it's always at least 10 digits (add a base offset)
+        n = n + BigInt(1_000_000_000);
+        return n.toString();
     }
 
     private async httpCreateSession(): Promise<void> {
@@ -347,8 +362,8 @@ export class UDPStreamService {
         data: Buffer;
     }): void {
         if (!this.connectionManager || !this.isConnected) {
-            if (frame.frameNumber % 120 === 0) {
-                console.log(`[UDPStreamService] Dropping frame #${frame.frameNumber}: cm=${!!this.connectionManager}, connected=${this.isConnected}`);
+            if (frame.frameNumber % 30 === 0) {
+                console.log(`[UDPStreamService HOST] Dropping frame #${frame.frameNumber}: cm=${!!this.connectionManager}, connected=${this.isConnected}`);
             }
             return;
         }
