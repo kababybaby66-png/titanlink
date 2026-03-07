@@ -205,10 +205,11 @@ export class SmartConnectionManager {
         const relayClient = new NetworkClientClass();
         this.relayClient = relayClient;
         relayClient.startListening(this.handlePacket.bind(this));
+        console.log(`[SmartConnection] Connecting to relay at ${config.relayIp}:${relayPort} with sessionId=${config.sessionId}`);
         await relayClient.connect(config.relayIp, relayPort, config.sessionId);
         await relayClient.sendHandshake();
 
-        console.log('[SmartConnection] Relay connection established (Priority 1)');
+        console.log('[SmartConnection] Relay connection established + handshake sent (Priority 1)');
 
         // If peer IP provided, attempt P2P in background but prioritize RELAY
         if (config.peerIp) {
@@ -381,7 +382,15 @@ export class SmartConnectionManager {
         this.onInputCallback = callback;
     }
 
+    private packetCount = 0;
+
     private handlePacket(data: Buffer): void {
+        this.packetCount++;
+        // Log first 10 packets and then every 100th to confirm relay is forwarding
+        if (this.packetCount <= 10 || this.packetCount % 100 === 0) {
+            console.log(`[SmartConnection] Packet #${this.packetCount} received, size=${data.length}`);
+        }
+
         // Basic Packet Parsing
         // Header is 24 bytes
         if (data.length < 24) return;

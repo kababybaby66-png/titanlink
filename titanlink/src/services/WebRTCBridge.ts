@@ -277,6 +277,12 @@ export class WebRTCBridge {
      */
     private startSignalPoll(): void {
         this.wsClient = new WebSocketSignalingClient(SIGNALING_BASE);
+
+        // Set peerId and sessionCode on the SignalingClient so HTTP fallback
+        // and WS signal paths include correct `from`/`sessionCode` fields.
+        (this.wsClient as any).peerId = this.hostId;
+        (this.wsClient as any).sessionCode = this.sessionCode;
+
         this.wsClient.onopen = () => {
             const ws = (this.wsClient as any).ws;
             if (ws && ws.readyState === 1) { // OPEN

@@ -77,6 +77,7 @@ export async function initStreamService(): Promise<IStreamService> {
             instance = module.webrtcService;
         }
     }
+    console.log(`[StreamService] ✓ Initialized: ${instance.constructor.name || 'StreamService'}`);
     return instance as IStreamService;
 }
 
