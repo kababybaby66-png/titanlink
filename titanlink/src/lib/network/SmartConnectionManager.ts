@@ -73,21 +73,53 @@ function getNativeNetworkClient(): NativeEngine {
 
         const electronRequire = (window as any).require;
         const path = electronRequire('path');
+        const fs = electronRequire('fs');
         const electronProcess = electronRequire('process');
+        const binaryName = 'titanlink-nvenc-cpp.node';
 
         const possiblePaths: string[] = [];
 
+        // 1. Packaged app: resourcesPath
         if (electronProcess.resourcesPath) {
-            possiblePaths.push(path.join(electronProcess.resourcesPath, 'native-cpp', 'build', 'Release', 'titanlink-nvenc-cpp.node'));
-            // Sometimes it's packaged in app.asar.unpacked
-            possiblePaths.push(path.join(electronProcess.resourcesPath, 'app.asar.unpacked', 'native-cpp', 'build', 'Release', 'titanlink-nvenc-cpp.node'));
+            possiblePaths.push(path.join(electronProcess.resourcesPath, 'native-cpp', 'build', 'Release', binaryName));
+            possiblePaths.push(path.join(electronProcess.resourcesPath, 'app.asar.unpacked', 'native-cpp', 'build', 'Release', binaryName));
         }
 
+        // 2. Dev mode: CWD (where npm run dev was executed)
         if (electronProcess.cwd) {
-            possiblePaths.push(path.join(electronProcess.cwd(), 'native-cpp', 'build', 'Release', 'titanlink-nvenc-cpp.node'));
+            possiblePaths.push(path.join(electronProcess.cwd(), 'native-cpp', 'build', 'Release', binaryName));
         }
 
-        for (const nativePath of possiblePaths) {
+        // 3. Electron app path via remote
+        try {
+            const { app } = electronRequire('@electron/remote') || {};
+            if (app) {
+                possiblePaths.push(path.join(app.getAppPath(), 'native-cpp', 'build', 'Release', binaryName));
+            }
+        } catch (_) { /* remote not available */ }
+
+        // 4. Resolve relative to electron main entry point (argv[1])
+        if (electronProcess.argv && electronProcess.argv[1]) {
+            const mainScript = electronProcess.argv[1];
+            const mainDir = path.dirname(path.resolve(mainScript));
+            possiblePaths.push(path.join(mainDir, '..', 'native-cpp', 'build', 'Release', binaryName));
+            possiblePaths.push(path.join(mainDir, 'native-cpp', 'build', 'Release', binaryName));
+        }
+
+        // 5. Fallback: try common absolute dev paths
+        if (electronProcess.env && electronProcess.env.INIT_CWD) {
+            possiblePaths.push(path.join(electronProcess.env.INIT_CWD, 'native-cpp', 'build', 'Release', binaryName));
+        }
+
+        // Deduplicate
+        const uniquePaths = [...new Set(possiblePaths)];
+
+        console.log(`[SmartConnection] Searching ${uniquePaths.length} paths for native module...`);
+        for (const nativePath of uniquePaths) {
+            const exists = fs.existsSync(nativePath);
+            console.log(`[SmartConnection]  ${exists ? '✓' : '✗'} ${nativePath}`);
+            if (!exists) continue;
+
             try {
                 const native = electronRequire(nativePath);
                 if (native && native.startNetwork) {
@@ -95,12 +127,13 @@ function getNativeNetworkClient(): NativeEngine {
                     console.log('[SmartConnection] Native C++ Engine loaded from:', nativePath);
                     return NativeNetworkClient as any;
                 }
+                console.warn('[SmartConnection] Module loaded but missing startNetwork:', nativePath);
             } catch (e) {
-                console.debug('[SmartConnection] Path failed:', nativePath, (e as Error).message);
+                console.warn('[SmartConnection] Module exists but failed to load:', nativePath, (e as Error).message);
             }
         }
 
-        throw new Error('TitanLink C++ Engine not found in any native module path');
+        throw new Error(`TitanLink C++ Engine not found. Tried ${uniquePaths.length} paths.`);
     } catch (error) {
         nativeLoadError = error as Error;
         console.error('[SmartConnection] Failed to load native module:', (error as Error).message);
