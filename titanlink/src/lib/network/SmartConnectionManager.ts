@@ -73,19 +73,18 @@ function getNativeNetworkClient(): NativeEngine {
 
         const electronRequire = (window as any).require;
         const path = electronRequire('path');
+        const electronProcess = electronRequire('process');
 
         const possiblePaths: string[] = [];
 
-        if (typeof process !== 'undefined' && (process as any).resourcesPath) {
-            possiblePaths.push(path.join((process as any).resourcesPath, 'native-cpp', 'build', 'Release', 'titanlink-nvenc-cpp.node'));
+        if (electronProcess.resourcesPath) {
+            possiblePaths.push(path.join(electronProcess.resourcesPath, 'native-cpp', 'build', 'Release', 'titanlink-nvenc-cpp.node'));
+            // Sometimes it's packaged in app.asar.unpacked
+            possiblePaths.push(path.join(electronProcess.resourcesPath, 'app.asar.unpacked', 'native-cpp', 'build', 'Release', 'titanlink-nvenc-cpp.node'));
         }
 
-        if (typeof process !== 'undefined' && process.cwd) {
-            possiblePaths.push(path.join(process.cwd(), 'native-cpp', 'build', 'Release', 'titanlink-nvenc-cpp.node'));
-        }
-
-        if (typeof __dirname !== 'undefined') {
-            possiblePaths.push(path.join(__dirname, '..', '..', '..', 'native-cpp', 'build', 'Release', 'titanlink-nvenc-cpp.node'));
+        if (electronProcess.cwd) {
+            possiblePaths.push(path.join(electronProcess.cwd(), 'native-cpp', 'build', 'Release', 'titanlink-nvenc-cpp.node'));
         }
 
         for (const nativePath of possiblePaths) {
