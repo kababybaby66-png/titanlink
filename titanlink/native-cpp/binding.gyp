@@ -16,7 +16,8 @@
             "src/DxgiCapturer.cpp",
             "src/NvencEngine.cpp",
             "src/MfH264Encoder.cpp",
-            "src/WasapiCapture.cpp"
+            "src/WasapiCapture.cpp",
+            "src/UdpTransport.cpp"
           ],
           "libraries": [
             "-ld3d11",
@@ -28,7 +29,8 @@
             "-lmfuuid",
             "-lmf",
             "-lstrmiids",
-            "-lwmcodecdspuuid"
+            "-lwmcodecdspuuid",
+            "-lws2_32"
           ]
         }],
         ["OS=='mac'", {
@@ -59,7 +61,7 @@
           "ExceptionHandling": 1
         }
       },
-      "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ]
+      "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS", "WIN32_LEAN_AND_MEAN" ]
     }
   ]
 }

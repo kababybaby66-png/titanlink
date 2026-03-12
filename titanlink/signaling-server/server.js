@@ -401,6 +401,7 @@ const wss = new WebSocket.Server({ server });
 
 // Support WebSocket signaling alongside REST
 wss.on('connection', (ws, req) => {
+    ws.on('error', (err) => console.error('[WebSocket TCP Error]', err));
     let currentSessionCode = null;
     let currentPeerId = null;
 
@@ -468,9 +469,13 @@ const originalAppPostSessionJoin = app._router.stack.find(l => l.route && l.rout
 // This is a bit hacky to patch Express mid-flight, so we instead modify the join route internally
 // Actually, I'll just rewrite the REST endpoints to push to WS directly later, or right now where they exist.
 
-server.listen(PORT, () => {
+server.on('error', (err) => {
+    console.error('[Signaling Server TCP Error]', err);
+});
+
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`TitanLink Signaling Server running on port ${PORT} (HTTP + WebSocket)`);
-    console.log(`API base: http://localhost:${PORT}`);
+    console.log(`API base: http://0.0.0.0:${PORT}`);
     if (!process.env.ALLOWED_ORIGINS) {
         console.warn('[Security] ALLOWED_ORIGINS not set — running in dev mode (all origins allowed)');
     }

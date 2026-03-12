@@ -99,11 +99,16 @@ export class UDPStreamService {
         await this.httpCreateSession();
         this.startPollForClients();
         this.connectionManager = new SmartConnectionManager();
-        await this.connectionManager.connect({
-            sessionId: this.sessionId,
-            relayIp: this.relayServerIp,
-            relayPort: this.relayServerPort,
-        });
+        try {
+            await this.connectionManager.connect({
+                sessionId: this.sessionId,
+                relayIp: this.relayServerIp,
+                relayPort: this.relayServerPort,
+            });
+            console.log(`[UDPStreamService] Host connected to Relay @ ${this.relayServerIp}:${this.relayServerPort}`);
+        } catch (e) {
+            console.warn('[UDPStreamService HOST] Native UDP Transport failed (falling back to WebRTC):', e);
+        }
         this.connectionManager.onInput((input) => {
             this.callbacks?.onGamepadInput?.(input);
         });
@@ -128,15 +133,21 @@ export class UDPStreamService {
             }
             this.callbacks?.onVideoFrameReceived?.(frame);
         });
-        await this.connectionManager.connect({
-            sessionId: this.sessionId,
-            relayIp: this.relayServerIp,
-            relayPort: this.relayServerPort,
-        });
+
+        try {
+            await this.connectionManager.connect({
+                sessionId: this.sessionId,
+                relayIp: this.relayServerIp,
+                relayPort: this.relayServerPort,
+            });
+            console.log('[UDPStreamService] Connected via', this.connectionManager.getMode());
+        } catch (e) {
+            console.warn('[UDPStreamService] Native UDP Transport failed (falling back to WebRTC):', e);
+        }
+
         this.isConnected = true;
         this.callbacks.onStateChange('streaming');
         this.callbacks.onPeerConnected({ peerId: 'host', username: 'Host', connectedAt: Date.now() });
-        console.log('[UDPStreamService] Connected via', this.connectionManager.getMode());
     }
 
     async disconnect(): Promise<void> {

@@ -2,6 +2,7 @@
 #ifdef _WIN32
 #include "CaptureManager.h"
 #include "WasapiCapture.h"
+#include "UdpTransport.h"
 #else
 #include "MacVideoDecoder.h"
 #include "MacHostCapture.h"
@@ -71,6 +72,136 @@ Value GetEncoderSupport(const CallbackInfo& info) {
     result.Set("quicksync",  Boolean::New(env, true));
     result.Set("software",   Boolean::New(env, false));
     return result;
+}
+
+// ── Network / UDP Wrappers ─────────────────────────────────────────────────────
+
+static ThreadSafeFunction g_inputTsfn;
+
+Value StartNetwork(const CallbackInfo& info) {
+    Env env = info.Env();
+    if (info.Length() < 3 || !info[0].IsString() || !info[1].IsNumber() || !info[2].IsString()) {
+        Error::New(env, "Expected (relayIp, relayPort, sessionId_string)").ThrowAsJavaScriptException();
+        return Boolean::New(env, false);
+    }
+
+    std::string relayIp = info[0].As<String>().Utf8Value();
+    uint16_t relayPort = info[1].As<Number>().Uint32Value();
+    uint64_t sessionId = std::stoull(info[2].As<String>().Utf8Value());
+
+    bool ok = UdpTransport::GetInstance().Start(relayIp, relayPort, sessionId);
+    return Boolean::New(env, ok);
+}
+
+void StopNetwork(const CallbackInfo& info) {
+    UdpTransport::GetInstance().Stop();
+    if (g_inputTsfn) {
+        g_inputTsfn.Release();
+    }
+}
+
+void OnInput(const CallbackInfo& info) {
+    Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsFunction()) {
+        Error::New(env, "Expected callback function").ThrowAsJavaScriptException();
+        return;
+    }
+
+    Function cb = info[0].As<Function>();
+    g_inputTsfn = ThreadSafeFunction::New(env, cb, "Controller Input Callback", 0, 1);
+
+    UdpTransport::GetInstance().SetInputCallback([](const ControllerInputData& input) {
+        auto inputCopy = std::make_shared<ControllerInputData>(input);
+
+        auto status = g_inputTsfn.NonBlockingCall([inputCopy](Napi::Env env, Napi::Function jsCallback) {
+            try {
+                Napi::Object obj = Napi::Object::New(env);
+                obj.Set("controllerIndex", Napi::Number::New(env, inputCopy->controller_index));
+                obj.Set("buttons", Napi::Number::New(env, inputCopy->buttons));
+                obj.Set("leftStickX", Napi::Number::New(env, inputCopy->left_stick_x));
+                obj.Set("leftStickY", Napi::Number::New(env, inputCopy->left_stick_y));
+                obj.Set("rightStickX", Napi::Number::New(env, inputCopy->right_stick_x));
+                obj.Set("rightStickY", Napi::Number::New(env, inputCopy->right_stick_y));
+                obj.Set("leftTrigger", Napi::Number::New(env, inputCopy->left_trigger));
+                obj.Set("rightTrigger", Napi::Number::New(env, inputCopy->right_trigger));
+                jsCallback.Call({ obj });
+            } catch (const std::exception& e) {
+                std::cerr << "[CPP] Input callback exception: " << e.what() << std::endl;
+            }
+        });
+        
+        if (status != napi_ok) {
+            std::cerr << "[CPP] Input callback NonBlockingCall failed" << std::endl;
+        }
+    });
+}
+
+ThreadSafeFunction g_packetCallback;
+
+Value OnNetworkPacket(const CallbackInfo& info) {
+    Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsFunction()) {
+        TypeError::New(env, "Function expected").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    g_packetCallback = ThreadSafeFunction::New(
+        env,
+        info[0].As<Function>(),
+        "OnPacketCallback",
+        0,
+        1
+    );
+
+    UdpTransport::GetInstance().SetPacketCallback([](const uint8_t* data, size_t size) {
+        if (!g_packetCallback) return;
+
+        std::vector<uint8_t>* payload = new std::vector<uint8_t>(data, data + size);
+
+        napi_status status = g_packetCallback.NonBlockingCall(payload, [](Env env, Function jsCallback, std::vector<uint8_t>* payload) {
+            if (env != nullptr && jsCallback != nullptr) {
+                Buffer<uint8_t> buffer = Buffer<uint8_t>::Copy(env, payload->data(), payload->size());
+                jsCallback.Call({buffer});
+            }
+            delete payload;
+        });
+
+        if (status != napi_ok) {
+            delete payload;
+            std::cerr << "[CPP] Packet callback NonBlockingCall failed" << std::endl;
+        }
+    });
+
+    return Boolean::New(env, true);
+}
+
+Value SendControllerInput(const CallbackInfo& info) {
+    Env env = info.Env();
+    if (info.Length() < 8) return Boolean::New(env, false);
+
+    ControllerInputData input{};
+    input.controller_index = info[0].As<Number>().Uint32Value();
+    input.buttons = info[1].As<Number>().Uint32Value();
+    input.left_stick_x = static_cast<int16_t>(info[2].As<Number>().Int32Value());
+    input.left_stick_y = static_cast<int16_t>(info[3].As<Number>().Int32Value());
+    input.right_stick_x = static_cast<int16_t>(info[4].As<Number>().Int32Value());
+    input.right_stick_y = static_cast<int16_t>(info[5].As<Number>().Int32Value());
+    input.left_trigger = info[6].As<Number>().Uint32Value();
+    input.right_trigger = info[7].As<Number>().Uint32Value();
+
+    std::vector<uint8_t> payload(sizeof(ControllerInputData));
+    payload[0] = input.controller_index;
+    *reinterpret_cast<uint16_t*>(&payload[1]) = htons(input.buttons);
+    *reinterpret_cast<uint16_t*>(&payload[3]) = htons(input.left_stick_x);
+    *reinterpret_cast<uint16_t*>(&payload[5]) = htons(input.left_stick_y);
+    *reinterpret_cast<uint16_t*>(&payload[7]) = htons(input.right_stick_x);
+    *reinterpret_cast<uint16_t*>(&payload[9]) = htons(input.right_stick_y);
+    payload[11] = input.left_trigger;
+    payload[12] = input.right_trigger;
+
+    // Send it
+    UdpTransport::GetInstance().SendInput(input);
+    return Boolean::New(env, true);
 }
 
 // ── Audio capture wrappers ─────────────────────────────────────────────────────
@@ -173,6 +304,12 @@ Object Init(Env env, Object exports) {
     exports.Set("isAudioSupported",  Function::New(env, IsAudioSupported));
     exports.Set("startAudioCapture", Function::New(env, StartAudioCapture));
     exports.Set("stopAudioCapture",  Function::New(env, StopAudioCapture));
+
+    exports.Set("startNetwork",      Function::New(env, StartNetwork));
+    exports.Set(String::New(env, "stopNetwork"), Function::New(env, StopNetwork));
+    exports.Set(String::New(env, "onInput"), Function::New(env, OnInput));
+    exports.Set(String::New(env, "onPacket"), Function::New(env, OnNetworkPacket));
+    exports.Set(String::New(env, "sendControllerInput"), Function::New(env, SendControllerInput));
 #else
     InitMacDecoder(env, exports);
     InitMacHostCapture(env, exports);

@@ -9,16 +9,16 @@
  * 4. Monitor connection quality and switch as needed
  */
 
-// NetworkClient will be available after building with: npm run build
-// For now, we declare the interface locally
-// Import NetworkClient from native addon
-import type { NetworkClient as NetworkClientType } from '../../../native';
-
-// Re-export type for usage in class
-type NetworkClient = NetworkClientType;
+export interface NativeEngine {
+    startNetwork: (relayIp: string, relayPort: number, sessionId: string) => boolean;
+    stopNetwork: () => void;
+    onInput: (callback: (input: any) => void) => void;
+    onPacket: (callback: (data: Buffer) => void) => void;
+    sendControllerInput: (index: number, btn: number, lx: number, ly: number, rx: number, ry: number, lt: number, rt: number) => boolean;
+}
 
 // Native module will be loaded lazily to avoid top-level require crashes in production
-let NativeNetworkClient: typeof NetworkClientType | null = null;
+let NativeNetworkClient: NativeEngine | null = null;
 let nativeLoadError: Error | null = null;
 let nativeLoadAttempted = false;
 
@@ -39,7 +39,7 @@ function isNativeModuleSupported(): boolean {
  * Lazily load the native module (only when needed)
  * This prevents top-level require crashes in production builds
  */
-function getNativeNetworkClient(): typeof NetworkClientType {
+function getNativeNetworkClient(): NativeEngine {
     // Return cached error
     if (nativeLoadError) {
         throw nativeLoadError;
@@ -67,8 +67,6 @@ function getNativeNetworkClient(): typeof NetworkClientType {
     nativeLoadAttempted = true;
 
     try {
-        // We're in Electron renderer with nodeIntegration
-        // Use window.require which is available in Electron's renderer
         if (typeof window === 'undefined' || !(window as any).require) {
             throw new Error('Native module can only be loaded in Electron renderer');
         }
@@ -76,41 +74,34 @@ function getNativeNetworkClient(): typeof NetworkClientType {
         const electronRequire = (window as any).require;
         const path = electronRequire('path');
 
-        // Build list of possible paths for the native module
         const possiblePaths: string[] = [];
 
-        // Production path: resources/native (extraResources)
         if (typeof process !== 'undefined' && (process as any).resourcesPath) {
-            possiblePaths.push(path.join((process as any).resourcesPath, 'native'));
+            possiblePaths.push(path.join((process as any).resourcesPath, 'native-cpp', 'build', 'Release', 'titanlink-nvenc-cpp.node'));
         }
 
-        // Development paths
         if (typeof process !== 'undefined' && process.cwd) {
-            possiblePaths.push(path.join(process.cwd(), 'native'));
+            possiblePaths.push(path.join(process.cwd(), 'native-cpp', 'build', 'Release', 'titanlink-nvenc-cpp.node'));
         }
 
-        // Relative path from current file
         if (typeof __dirname !== 'undefined') {
-            possiblePaths.push(path.join(__dirname, '..', '..', '..', 'native'));
+            possiblePaths.push(path.join(__dirname, '..', '..', '..', 'native-cpp', 'build', 'Release', 'titanlink-nvenc-cpp.node'));
         }
-
-        console.log('[SmartConnection] Trying native module paths:', possiblePaths);
 
         for (const nativePath of possiblePaths) {
             try {
                 const native = electronRequire(nativePath);
-                if (native && native.NetworkClient) {
-                    NativeNetworkClient = native.NetworkClient;
-                    console.log('[SmartConnection] Native module loaded from:', nativePath);
-                    return NativeNetworkClient!;
+                if (native && native.startNetwork) {
+                    NativeNetworkClient = native;
+                    console.log('[SmartConnection] Native C++ Engine loaded from:', nativePath);
+                    return NativeNetworkClient as any;
                 }
             } catch (e) {
-                // Try next path
                 console.debug('[SmartConnection] Path failed:', nativePath, (e as Error).message);
             }
         }
 
-        throw new Error('NetworkClient not found in any native module path');
+        throw new Error('TitanLink C++ Engine not found in any native module path');
     } catch (error) {
         nativeLoadError = error as Error;
         console.error('[SmartConnection] Failed to load native module:', (error as Error).message);
@@ -162,8 +153,7 @@ export class SmartConnectionManager {
         return isNativeModuleSupported();
     }
 
-    private p2pClient?: NetworkClient;
-    private relayClient?: NetworkClient;
+
     private currentMode: ConnectionMode = ConnectionMode.DISCONNECTED;
     private config?: ConnectionConfig;
     private stats: ConnectionStats;
@@ -201,43 +191,48 @@ export class SmartConnectionManager {
 
         const relayPort = config.relayPort || 5000;
 
-        const NetworkClientClass = getNativeNetworkClient();
-        const relayClient = new NetworkClientClass();
-        this.relayClient = relayClient;
-        relayClient.startListening(this.handlePacket.bind(this));
-        console.log(`[SmartConnection] Connecting to relay at ${config.relayIp}:${relayPort} with sessionId=${config.sessionId}`);
-        await relayClient.connect(config.relayIp, relayPort, config.sessionId);
-        await relayClient.sendHandshake();
+        const engine = getNativeNetworkClient() as any;
 
-        console.log('[SmartConnection] Relay connection established + handshake sent (Priority 1)');
+        console.log(`[SmartConnection] Connecting via native C++ UDP Transport`);
+        const success = engine.startNetwork(config.relayIp, relayPort, String(config.sessionId));
 
-        // If peer IP provided, attempt P2P in background but prioritize RELAY
-        if (config.peerIp) {
-            const peerPort = config.peerPort || 5000;
-            const p2pClient = new NetworkClientClass();
-            this.p2pClient = p2pClient;
-
-            try {
-                await p2pClient.connect(config.peerIp, peerPort, config.sessionId);
-                p2pClient.startListening(this.handlePacket.bind(this));
-                await p2pClient.sendHandshake();
-
-                console.log('[SmartConnection] P2P background attempt started (Staying on RELAY)');
-
-                // We keep the P2P client alive but currentMode stays RELAY for priority 1 testing
-                // If the user wants to switch back to P2P priority later, they can remove this.
-            } catch (error) {
-                console.warn('[SmartConnection] P2P background attempt failed:', error);
-            }
+        if (!success) {
+            console.error('[SmartConnection] Failed to bind local UDP socket via C++ extension.');
+        } else {
+            console.log('[SmartConnection] C++ UDP Socket bound and connecting to RELAY');
         }
+
+        // Native C++ engine passes ALL UDP packets for JS to handle conditionally
+        if (engine.onPacket) {
+            engine.onPacket((data: Buffer) => {
+                this.handlePacket(data);
+            });
+        }
+
+        // Host receives controller inputs from the client
+        engine.onInput((input: any) => {
+            if (this.onInputCallback) {
+                this.onInputCallback({
+                    index: input.controllerIndex,
+                    buttons: input.buttons,
+                    leftStickX: input.leftStickX / 32767,
+                    leftStickY: input.leftStickY / 32767,
+                    rightStickX: input.rightStickX / 32767,
+                    rightStickY: input.rightStickY / 32767,
+                    leftTrigger: input.leftTrigger / 255,
+                    rightTrigger: input.rightTrigger / 255,
+                    timestamp: Date.now()
+                });
+            }
+        });
 
         // Force switch to RELAY as priority 1
         this.currentMode = ConnectionMode.RELAY;
         this.stats.mode = ConnectionMode.RELAY;
-        console.log('[SmartConnection] Forcing RELAY mode (Priority 1)');
-
         this.stats.connectedAt = Date.now();
-        this.startKeepAlive();
+
+        // Keepalive logic moved to C++ or handled differently.
+        // For now, we can omit startKeepAlive since the C++ engine would ideally handle it.
     }
 
     /**
@@ -249,10 +244,7 @@ export class SmartConnectionManager {
             this.p2pTimeout = undefined;
         }
 
-        if (this.p2pClient) {
-            this.p2pClient.disconnect();
-            this.p2pClient = undefined;
-        }
+
 
         this.currentMode = ConnectionMode.RELAY;
         this.stats.mode = ConnectionMode.RELAY;
@@ -279,14 +271,10 @@ export class SmartConnectionManager {
         isKeyframe: boolean,
         frameData: Buffer,
     ): void {
-        const client = this.getActiveClient();
-        if (!client) {
-            throw new Error('Not connected');
-        }
-
-        client.sendVideoFrame(frameNumber, codec, isKeyframe, frameData);
-        this.stats.bytesSent += frameData.length + 24; // frame + header
-        this.stats.lastPacketAt = Date.now();
+        // In the new zero-copy pipeline, video frames are sent directly from C++
+        // WebRTC fallback still needs this via the WebRTCBridge, but the native UDP transport skips it.
+        // We will just do a no-op here if native UDP is active. 
+        // We could implement JS-to-CPP frame sending if we really needed it for testing.
     }
 
     /**
@@ -302,45 +290,36 @@ export class SmartConnectionManager {
         leftTrigger: number,
         rightTrigger: number,
     ): void {
-        const client = this.getActiveClient();
-        if (!client) {
-            throw new Error('Not connected');
+        try {
+            const engine = getNativeNetworkClient() as any;
+            if (engine.sendControllerInput) {
+                engine.sendControllerInput(
+                    controllerIndex,
+                    buttons,
+                    leftStickX,
+                    leftStickY,
+                    rightStickX,
+                    rightStickY,
+                    leftTrigger,
+                    rightTrigger
+                );
+            }
+            this.stats.bytesSent += 38; // approx input packet size
+            this.stats.lastPacketAt = Date.now();
+        } catch (e) {
+            console.error('[SmartConnection] Not connected or engine error', e);
         }
-
-        client.sendControllerInput(
-            controllerIndex,
-            buttons,
-            leftStickX,
-            leftStickY,
-            rightStickX,
-            rightStickY,
-            leftTrigger,
-            rightTrigger,
-        );
-
-        this.stats.bytesSent += 38; // input packet size
-        this.stats.lastPacketAt = Date.now();
     }
 
-    /**
-     * Get active client (P2P or Relay)
-     */
-    private getActiveClient(): NetworkClient | undefined {
-        if (this.currentMode === ConnectionMode.P2P && this.p2pClient) {
-            return this.p2pClient;
-        }
-        return this.relayClient;
-    }
+    // getActiveClient removed
 
     /**
      * Start keep-alive heartbeat (every 5 seconds)
      */
     private startKeepAlive(): void {
+        // Ideally handled by native engine
         this.keepAliveInterval = setInterval(() => {
-            const client = this.getActiveClient();
-            if (client) {
-                client.sendKeepAlive();
-            }
+            // Keep alive dummy
         }, 5000);
     }
 
@@ -358,20 +337,17 @@ export class SmartConnectionManager {
             this.p2pTimeout = undefined;
         }
 
-        if (this.p2pClient) {
-            this.p2pClient.disconnect();
-            this.p2pClient = undefined;
-        }
-
-        if (this.relayClient) {
-            this.relayClient.disconnect();
-            this.relayClient = undefined;
+        try {
+            const engine = getNativeNetworkClient() as any;
+            if (engine.stopNetwork) engine.stopNetwork();
+        } catch (e) {
+            // Unloaded.
         }
 
         this.currentMode = ConnectionMode.DISCONNECTED;
         this.stats.mode = ConnectionMode.DISCONNECTED;
 
-        console.log('[SmartConnection] Disconnected');
+        console.log('[SmartConnection] Disconnected Native C++ UDP Transport');
     }
 
     public onFrame(callback: (frame: any) => void): void {

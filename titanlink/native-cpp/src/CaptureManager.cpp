@@ -2,6 +2,7 @@
 #include <iostream>
 #include <chrono>
 #include "MfH264Encoder.h"
+#include "UdpTransport.h"
 void CaptureManager::InitD3D11() {
     if (m_device) return;
 
@@ -94,28 +95,37 @@ void CaptureManager::CaptureLoop(EncoderSettings settings, uint32_t displayIndex
                 }
 
                 if (encodeSuccess) {
-                    // Send to JS
-                    // Use NonBlockingCall to avoid hanging the capture thread if JS is slow
-                    auto status = m_callback.NonBlockingCall([packet, frameCount](Napi::Env env, Napi::Function jsCallback) {
-                        try {
-                            // Create JS object: { frameNumber, timestampUs, isKeyframe, data }
-                            Napi::Object obj = Napi::Object::New(env);
-                            obj.Set("frameNumber", Napi::Number::New(env, (double)frameCount));
-                            obj.Set("timestampUs", Napi::BigInt::New(env, (uint64_t)packet.timestamp));
-                            obj.Set("isKeyframe", Napi::Boolean::New(env, packet.isKeyFrame));
-                            
-                            // Buffer - Copying is necessary as 'packet' is local to this lambda
-                            Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::Copy(env, packet.data.data(), packet.data.size());
-                            obj.Set("data", buffer);
-                            
-                            jsCallback.Call({ obj });
-                        } catch (const std::exception& e) {
-                            std::cerr << "[CPP] Exception in JS callback: " << e.what() << std::endl;
+                    // ZERO-COPY UDP PATH
+                    if (UdpTransport::GetInstance().IsConnected()) {
+                        uint8_t codecId = usingNvenc ? 1 : (usingMf ? 1 : 1); // Default to H264 (codec=1)
+                        UdpTransport::GetInstance().SendVideoFrame(
+                            (uint32_t)frameCount, 
+                            packet.isKeyFrame, 
+                            codecId, 
+                            packet.data.data(), 
+                            packet.data.size()
+                        );
+                    } else if (m_callback) {
+                        // LEGACY JS PATH (if UDP not started yet)
+                        auto status = m_callback.NonBlockingCall([packet, frameCount](Napi::Env env, Napi::Function jsCallback) {
+                            try {
+                                Napi::Object obj = Napi::Object::New(env);
+                                obj.Set("frameNumber", Napi::Number::New(env, (double)frameCount));
+                                obj.Set("timestampUs", Napi::Number::New(env, (double)packet.timestamp));
+                                obj.Set("isKeyframe", Napi::Boolean::New(env, packet.isKeyFrame));
+                                
+                                Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::Copy(env, packet.data.data(), packet.data.size());
+                                obj.Set("data", buffer);
+                                
+                                jsCallback.Call({ obj });
+                            } catch (const std::exception& e) {
+                                std::cerr << "[CPP] Exception in JS callback: " << e.what() << std::endl;
+                            }
+                        });
+                        
+                        if (status != napi_ok) {
+                            std::cerr << "[CPP] JS Callback Failed" << std::endl;
                         }
-                    });
-                    
-                    if (status != napi_ok) {
-                        // TS function might be closed
                     }
                     frameCount++;
                 } else {

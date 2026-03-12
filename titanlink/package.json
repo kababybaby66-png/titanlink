@@ -20,7 +20,7 @@
         "test": "vitest",
         "test:ui": "vitest --ui",
         "test:coverage": "vitest --coverage",
-        "build:native": "cd native && npm install && npm run build",
+        "build:native": "cd native-cpp && npm install && npm run build",
         "postinstall": "npm run build:native"
     },
     "dependencies": {
@@ -106,13 +106,10 @@
                 ]
             },
             {
-                "from": "native/",
-                "to": "native/",
+                "from": "native-cpp/build/Release/",
+                "to": "native-cpp/build/Release/",
                 "filter": [
-                    "index.js",
-                    "index.d.ts",
-                    "*.node",
-                    "package.json"
+                    "*.node"
                 ]
             }
         ],
