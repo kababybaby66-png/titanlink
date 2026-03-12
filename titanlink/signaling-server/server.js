@@ -86,20 +86,20 @@ app.use((req, res, next) => {
     if (!origin) {
         // Electron renderer sends requests without an Origin header — allow
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-host-token');
         return next();
     }
 
     if (ALLOWED_ORIGINS && ALLOWED_ORIGINS.includes(origin)) {
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-host-token');
         res.setHeader('Vary', 'Origin');
     } else if (!ALLOWED_ORIGINS) {
         // Dev mode: allow all (ALLOWED_ORIGINS not set)
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-host-token');
     } else {
         // Origin not in whitelist — reject
         return res.status(403).json({ error: 'Forbidden origin' });
