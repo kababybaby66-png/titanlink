@@ -307,10 +307,14 @@ export class SmartConnectionManager {
         isKeyframe: boolean,
         frameData: Buffer,
     ): void {
-        // In the new zero-copy pipeline, video frames are sent directly from C++
-        // WebRTC fallback still needs this via the WebRTCBridge, but the native UDP transport skips it.
-        // We will just do a no-op here if native UDP is active. 
-        // We could implement JS-to-CPP frame sending if we really needed it for testing.
+        try {
+            const engine = getNativeNetworkClient() as any;
+            if (engine?.sendVideoFrame) {
+                engine.sendVideoFrame(frameNumber, codec, isKeyframe, frameData);
+            }
+        } catch (_) {
+            // Native engine not available — frame will be dropped
+        }
     }
 
     /**

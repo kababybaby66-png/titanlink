@@ -204,6 +204,37 @@ Value SendControllerInput(const CallbackInfo& info) {
     return Boolean::New(env, true);
 }
 
+Value SendVideoFrameJS(const CallbackInfo& info) {
+    Env env = info.Env();
+    if (info.Length() < 4) {
+        Error::New(env, "Expected (frameNumber, codec, isKeyframe, buffer)").ThrowAsJavaScriptException();
+        return Boolean::New(env, false);
+    }
+
+    uint32_t frameNumber = info[0].As<Number>().Uint32Value();
+    uint8_t codec = static_cast<uint8_t>(info[1].As<Number>().Uint32Value());
+    bool isKeyframe = info[2].As<Boolean>().Value();
+
+    // Accept Buffer or Uint8Array
+    uint8_t* data = nullptr;
+    size_t length = 0;
+    if (info[3].IsBuffer()) {
+        auto buf = info[3].As<Buffer<uint8_t>>();
+        data = buf.Data();
+        length = buf.Length();
+    } else if (info[3].IsTypedArray()) {
+        auto arr = info[3].As<TypedArray>();
+        data = static_cast<uint8_t*>(arr.ArrayBuffer().Data()) + arr.ByteOffset();
+        length = arr.ByteLength();
+    } else {
+        Error::New(env, "Fourth argument must be a Buffer or TypedArray").ThrowAsJavaScriptException();
+        return Boolean::New(env, false);
+    }
+
+    UdpTransport::GetInstance().SendVideoFrame(frameNumber, isKeyframe, codec, data, length);
+    return Boolean::New(env, true);
+}
+
 // ── Audio capture wrappers ─────────────────────────────────────────────────────
 
 Value IsAudioSupported(const CallbackInfo& info) {
@@ -310,6 +341,7 @@ Object Init(Env env, Object exports) {
     exports.Set(String::New(env, "onInput"), Function::New(env, OnInput));
     exports.Set(String::New(env, "onPacket"), Function::New(env, OnNetworkPacket));
     exports.Set(String::New(env, "sendControllerInput"), Function::New(env, SendControllerInput));
+    exports.Set(String::New(env, "sendVideoFrame"), Function::New(env, SendVideoFrameJS));
 #else
     InitMacDecoder(env, exports);
     InitMacHostCapture(env, exports);
