@@ -408,25 +408,28 @@ export class SmartConnectionManager {
         }
 
         // Basic Packet Parsing
-        // Header is 24 bytes
+        // PacketHeader: session_id(8) + magic(4) + packet_type(1) + sequence(4) + timestamp_us(4) + flags(1) + payload_len(2) = 24 bytes
         if (data.length < 24) return;
 
         const magic = data.readUInt32BE(8);
-        if (magic !== 0xCAFEBABE) return;
+        if (magic !== 0x54544E4B) return; // "TTNK" magic from Protocol.h
 
         const type = data[12];
         const payload = data.subarray(24);
 
+        // Protocol.h packet types:
+        // VideoFrame = 0x10, VideoFragment = 0x11
+        // ControllerInput = 0x20
+        // KeepAlive = 0x50
         switch (type) {
-            case 3: // VideoFrame (Single)
-            case 4: // VideoFragment
+            case 0x10: // VideoFrame (Single)
+            case 0x11: // VideoFragment
                 this.handleVideoPacket(payload);
                 break;
-            case 5: // ControllerInput
+            case 0x20: // ControllerInput
                 this.handleInputPacket(payload);
                 break;
-            case 6: // KeepAlive
-                // Update stats
+            case 0x50: // KeepAlive
                 this.stats.lastPacketAt = Date.now();
                 break;
         }
