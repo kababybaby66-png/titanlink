@@ -105,9 +105,12 @@ export class UDPStreamService {
                 relayIp: this.relayServerIp,
                 relayPort: this.relayServerPort,
             });
-            console.log(`[UDPStreamService] Host connected to Relay @ ${this.relayServerIp}:${this.relayServerPort}`);
+            // Host is connected to relay — start sending frames immediately.
+            // The relay will forward to any clients with the same session ID.
+            this.isConnected = true;
+            console.log(`[UDPStreamService] Host connected to Relay @ ${this.relayServerIp}:${this.relayServerPort} — ready to send frames`);
         } catch (e) {
-            console.warn('[UDPStreamService HOST] Native UDP Transport failed (falling back to WebRTC):', e);
+            console.warn('[UDPStreamService HOST] Native UDP Transport failed:', e);
         }
         this.connectionManager.onInput((input) => {
             this.callbacks?.onGamepadInput?.(input);
@@ -301,24 +304,10 @@ export class UDPStreamService {
         if (!this.connectionManager) return;
         this.isConnected = true;
         const clientId = clientInfo.peerId || clientInfo.clientId || 'client';
-        try {
-            if (!this.webrtcBridge) {
-                this.webrtcBridge = new WebRTCBridge(this.sessionCode, this.hostId, {
-                    fps: this.settings.fps,
-                    bitrate: this.settings.bitrate,
-                    resolution: this.settings.resolution,
-                });
-                await this.webrtcBridge.start(
-                    clientId,
-                    this.currentDisplayId,
-                    (input: GamepadInputState) => this.callbacks?.onGamepadInput?.(input),
-                );
-            }
-        } catch (e) {
-            console.warn('[UDPStreamService] WebRTC bridge failed (client may be using UDP):', e);
-        }
+        // No WebRTC bridge needed — native UDP relay handles all transport.
+        // This avoids STUN binding timeouts and unnecessary P2P negotiation.
         this.callbacks?.onPeerConnected({ peerId: clientId, username: 'Client', connectedAt: Date.now() });
-        console.log('[UDPStreamService] Host now active via', this.connectionManager.getMode());
+        console.log('[UDPStreamService] Client joined:', clientId, '— sending frames via', this.connectionManager.getMode());
     }
 
     private async startHardwareCapture(displayId: string): Promise<void> {
@@ -387,14 +376,6 @@ export class UDPStreamService {
             }
             this.bytesSentInLastSecond += frame.data.length;
             this.connectionManager.sendVideoFrame(frame.frameNumber, codecId, frame.isKeyframe, frame.data);
-            if (this.webrtcBridge) {
-                this.webrtcBridge.sendVideoFrame({
-                    frameNumber: frame.frameNumber,
-                    timestampUs: frame.timestampUs,
-                    isKeyframe: frame.isKeyframe,
-                    data: frame.data,
-                });
-            }
         } catch (error) {
             console.error('[UDPStreamService] Failed to send video frame:', error);
         }
