@@ -72,99 +72,75 @@ function getNativeNetworkClient(): NativeEngine {
         }
 
         const electronRequire = (window as any).require;
+        const nativeModule = 'titanlink-nvenc-cpp.node';
+        const relPath = `native-cpp/build/Release/${nativeModule}`;
+
+        // Simple ordered list of base directories to try
+        const baseDirs: string[] = [];
+
+        // Get real process from Node (not Vite's shimmed version)
+        let nodeProcess: any = null;
+        try { nodeProcess = electronRequire('process'); } catch (_) {}
+
+        // Strategy 1: process.cwd() — most reliable in dev mode
+        try { if (nodeProcess?.cwd) baseDirs.push(nodeProcess.cwd()); } catch (_) {}
+
+        // Strategy 2: Electron's resourcesPath — for packaged apps
+        try { if (nodeProcess?.resourcesPath) baseDirs.push(nodeProcess.resourcesPath); } catch (_) {}
+
+        // Strategy 3: argv[1] parent dir — electron main script location
+        try {
+            if (nodeProcess?.argv?.[1]) {
+                const path = electronRequire('path');
+                baseDirs.push(path.dirname(path.resolve(nodeProcess.argv[1])));
+                baseDirs.push(path.resolve(path.dirname(nodeProcess.argv[1]), '..'));
+            }
+        } catch (_) {}
+
+        // Strategy 4: INIT_CWD from npm
+        try { if (nodeProcess?.env?.INIT_CWD) baseDirs.push(nodeProcess.env.INIT_CWD); } catch (_) {}
+
+        // Build all candidate paths
         const path = electronRequire('path');
         const fs = electronRequire('fs');
-        const binaryName = 'titanlink-nvenc-cpp.node';
-        const relSubPath = path.join('native-cpp', 'build', 'Release', binaryName);
+        const candidates = baseDirs.map((dir: string) => path.resolve(path.join(dir, relPath)));
 
-        const possiblePaths: string[] = [];
+        // Also try asar.unpacked variant for packaged apps
+        if (nodeProcess?.resourcesPath) {
+            candidates.push(path.resolve(path.join(nodeProcess.resourcesPath, 'app.asar.unpacked', relPath)));
+        }
 
-        // Each strategy in its own try/catch so one failure can't kill the rest
-
-        // 1. Packaged app: resourcesPath
-        try {
-            const ep = electronRequire('process');
-            if (ep.resourcesPath) {
-                possiblePaths.push(path.join(ep.resourcesPath, relSubPath));
-                possiblePaths.push(path.join(ep.resourcesPath, 'app.asar.unpacked', relSubPath));
-            }
-        } catch (e) { console.debug('[SmartConnection] resourcesPath strategy failed:', (e as Error).message); }
-
-        // 2. Dev mode: CWD
-        try {
-            const ep = electronRequire('process');
-            const cwd = ep.cwd();
-            possiblePaths.push(path.join(cwd, relSubPath));
-        } catch (e) { console.debug('[SmartConnection] cwd strategy failed:', (e as Error).message); }
-
-        // 3. Electron argv[1] (the main script path)
-        try {
-            const ep = electronRequire('process');
-            if (ep.argv && ep.argv[1]) {
-                const mainDir = path.dirname(path.resolve(ep.argv[1]));
-                possiblePaths.push(path.join(mainDir, '..', relSubPath));
-                possiblePaths.push(path.join(mainDir, relSubPath));
-            }
-        } catch (e) { console.debug('[SmartConnection] argv strategy failed:', (e as Error).message); }
-
-        // 4. INIT_CWD env var (set by npm)
-        try {
-            const ep = electronRequire('process');
-            if (ep.env?.INIT_CWD) {
-                possiblePaths.push(path.join(ep.env.INIT_CWD, relSubPath));
-            }
-        } catch (e) { console.debug('[SmartConnection] INIT_CWD strategy failed:', (e as Error).message); }
-
-        // 5. Derive from Electron's __dirname (the electron main entry)
-        try {
-            const ep = electronRequire('process');
-            // In dev, electron main is at electron/main.ts -> compiled to .js
-            // __dirname in main process = <project>/electron 
-            // But we're in renderer, so use execPath instead
-            const execDir = path.dirname(ep.execPath);
-            possiblePaths.push(path.join(execDir, relSubPath));
-        } catch (e) { console.debug('[SmartConnection] execPath strategy failed:', (e as Error).message); }
-
-        // 6. Use Electron app module (available in renderer with nodeIntegration)
-        try {
-            const { app } = electronRequire('electron');
-            if (app && app.getAppPath) {
-                const appPath = app.getAppPath();
-                possiblePaths.push(path.join(appPath, relSubPath));
-                possiblePaths.push(path.join(appPath, '..', relSubPath));
-            }
-        } catch (e) { console.debug('[SmartConnection] electron.app strategy failed:', (e as Error).message); }
-
-        // 7. Hardcoded common dev path as absolute last resort
-        possiblePaths.push(path.join('C:', 'Users', 'yoavl', 'Desktop', 'Parsec clone', 'titanlink', relSubPath));
+        // Hardcoded absolute fallback — will always work on the dev machine
+        candidates.push('C:\\Users\\yoavl\\Desktop\\Parsec clone\\titanlink\\native-cpp\\build\\Release\\titanlink-nvenc-cpp.node');
 
         // Deduplicate
-        const uniquePaths = [...new Set(possiblePaths.map((p: string) => path.resolve(p)))];
+        const unique = [...new Set(candidates)];
 
-        console.log(`[SmartConnection] Searching ${uniquePaths.length} paths for native module:`);
-        for (const nativePath of uniquePaths) {
+        console.log(`[SmartConnection] Looking for native module in ${unique.length} locations:`);
+        for (const p of unique) {
             let exists = false;
-            try { exists = fs.existsSync(nativePath); } catch (_) {}
-            console.log(`[SmartConnection]  ${exists ? '✓ EXISTS' : '✗'} ${nativePath}`);
-            if (!exists) continue;
+            try { exists = fs.existsSync(p); } catch (_) {}
+            console.log(`[SmartConnection]  ${exists ? '✓' : '✗'} ${p}`);
 
-            try {
-                const native = electronRequire(nativePath);
-                if (native && native.startNetwork) {
-                    NativeNetworkClient = native;
-                    console.log('[SmartConnection] ✅ Native C++ Engine loaded from:', nativePath);
-                    return NativeNetworkClient as any;
+            if (exists) {
+                try {
+                    const mod = electronRequire(p);
+                    if (mod?.startNetwork) {
+                        NativeNetworkClient = mod;
+                        console.log('[SmartConnection] ✅ Loaded native engine from:', p);
+                        return mod;
+                    }
+                    console.warn('[SmartConnection] Loaded but no startNetwork:', p);
+                } catch (e) {
+                    console.error('[SmartConnection] Found but load error:', p, (e as Error).message);
                 }
-                console.warn('[SmartConnection] Module loaded but missing startNetwork:', nativePath);
-            } catch (e) {
-                console.warn('[SmartConnection] Module found but failed to load:', nativePath, (e as Error).message);
             }
         }
 
-        throw new Error(`TitanLink C++ Engine not found. Tried ${uniquePaths.length} paths. See logs above.`);
+        throw new Error(`Native engine not found in ${unique.length} paths`);
     } catch (error) {
         nativeLoadError = error as Error;
-        console.error('[SmartConnection] Failed to load native module:', (error as Error).message);
+        console.error('[SmartConnection] ❌ Failed:', (error as Error).message);
         throw error;
     }
 }
